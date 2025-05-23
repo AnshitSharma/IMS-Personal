@@ -51,20 +51,34 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $lastname = trim($_POST["lastname"]);
     }
     
-    $hashed_password = password_hash($password, PASSWORD_DEFAULT);
+    // If no errors, proceed with registration
+    if (empty($errors)) {
+        try {
+            $hashed_password = password_hash($password, PASSWORD_DEFAULT);
 
-    // Insert query with prepared statement
-    $stmt = $mysqli->prepare("INSERT INTO users (firstname, lastname, username, email, password) VALUES (?, ?, ?, ?, ?)");
-    $stmt->bind_param("sssss", $firstname, $lastname, $username, $email, $hashed_password);
+            // PDO prepared statement
+            $stmt = $pdo->prepare("INSERT INTO users (firstname, lastname, username, email, password) VALUES (:firstname, :lastname, :username, :email, :password)");
+            
+            $stmt->bindParam(':firstname', $firstname, PDO::PARAM_STR);
+            $stmt->bindParam(':lastname', $lastname, PDO::PARAM_STR);
+            $stmt->bindParam(':username', $username, PDO::PARAM_STR);
+            $stmt->bindParam(':email', $email, PDO::PARAM_STR);
+            $stmt->bindParam(':password', $hashed_password, PDO::PARAM_STR);
 
-    if ($stmt->execute()) {
-        echo "User registered successfully!";
-    } else {
-        echo "Error: " . $stmt->error;
+            if ($stmt->execute()) {
+                $success_message = "User registered successfully!";
+                // Clear form fields after successful submission
+                $username = $email = $password = $firstname = $lastname = "";
+            }
+        } catch (PDOException $e) {
+            if ($e->getCode() == 23000) { // Duplicate entry error
+                $errors["general"] = "Username or email already exists";
+            } else {
+                $errors["general"] = "Registration failed. Please try again.";
+                error_log("Signup error: " . $e->getMessage());
+            }
+        }
     }
-    
-    // Clear form fields after successful submission
-    $username = $email = $password = $firstname = $lastname = "";
 }
 ?>
 
@@ -142,6 +156,14 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 <body>
     <div class="container">
         <h1>Sign Up</h1>
+        
+        <?php if (!empty($success_message)): ?>
+            <div class="success"><?php echo $success_message; ?></div>
+        <?php endif; ?>
+        
+        <?php if (!empty($errors["general"])): ?>
+            <div class="error"><?php echo $errors["general"]; ?></div>
+        <?php endif; ?>
         
         <form method="POST" action="<?php echo htmlspecialchars($_SERVER["PHP_SELF"]); ?>">
             <div class="form-group">

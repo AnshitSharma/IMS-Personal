@@ -13,20 +13,18 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     if (empty($username) || empty($password)) {
         $error_message = "Please enter both username and password";
     } else {
-        $stmt = $mysqli->prepare("SELECT * FROM users WHERE username = ?");
-        $stmt->bind_param("s", $username);
-        $stmt->execute();
-        $result = $stmt->get_result();
-        
-        // Check if user exists
-        if ($result->num_rows == 1) {
-            $user = $result->fetch_assoc();
-            $hash_user_password = $user['password'];
-            if (isset($_POST['password'])) {
-                if (password_verify($password, $hash_user_password)){
-
-                    setcookie($_COOKIE['PHPSESSID'], "test", time() + (86400 * 30), '/');
-                    // print_r();
+        try {
+            // PDO prepared statement
+            $stmt = $pdo->prepare("SELECT * FROM users WHERE username = :username");
+            $stmt->bindParam(':username', $username, PDO::PARAM_STR);
+            $stmt->execute();
+            
+            // Check if user exists
+            if ($stmt->rowCount() == 1) {
+                $user = $stmt->fetch();
+                $hash_user_password = $user['password'];
+                
+                if (password_verify($password, $hash_user_password)) {
                     
                     $_SESSION["loggedin"] = true;
                     $_SESSION["id"] = $user["id"];
@@ -39,15 +37,14 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                     $error_message = "Invalid username or password";
                 }
             } else {
-                $error_message = "Invalid username or password";
+                $error_message = "User Not Found";
             }
-        } else {
-            $error_message = "User Not Found";
+        } catch (PDOException $e) {
+            $error_message = "Database error occurred";
+            error_log("Login error: " . $e->getMessage());
         }
     }
 }
-
-$mysqli->close();
 ?>
 
 <!DOCTYPE html>
