@@ -1,5 +1,5 @@
 <?php
-// Start the session (if not already started)
+// Start the session
 session_start();
 
 // Unset all session variables
@@ -22,7 +22,12 @@ if (ini_get("session.use_cookies")) {
 // Finally, destroy the session
 session_destroy();
 
-// Redirect to another page (optional)
-header("Location: login.php");
+// Clear any output buffers
+if (ob_get_level()) {
+    ob_end_clean();
+}
+
+// Redirect to login page
+header("Location: /bdc_ims/api/login/login.php");
 exit();
 ?>
