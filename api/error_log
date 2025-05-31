@@ -1,0 +1,68 @@
+[29-May-2025 14:44:40 UTC] API error: SQLSTATE[HY093]: Invalid parameter number
+[29-May-2025 15:20:07 UTC] API error: SQLSTATE[HY093]: Invalid parameter number
+[29-May-2025 15:20:51 UTC] API error: SQLSTATE[HY093]: Invalid parameter number
+[29-May-2025 15:22:49 UTC] API error: SQLSTATE[HY093]: Invalid parameter number
+[29-May-2025 22:26:48 UTC] API called with action: auth-login
+[29-May-2025 22:26:48 UTC] Module: auth, Operation: login
+[29-May-2025 22:26:48 UTC] Auth operation: login
+[29-May-2025 22:26:48 UTC] Login attempt for username: a
+[29-May-2025 22:26:48 UTC] Login successful for user: a
+[29-May-2025 22:26:56 UTC] API called with action: search-components
+[29-May-2025 22:26:56 UTC] Module: search, Operation: components
+[29-May-2025 22:26:56 UTC] Search error for cpu: SQLSTATE[HY093]: Invalid parameter number
+[29-May-2025 22:26:56 UTC] Search error for ram: SQLSTATE[HY093]: Invalid parameter number
+[29-May-2025 22:26:56 UTC] Search error for storage: SQLSTATE[HY093]: Invalid parameter number
+[29-May-2025 22:26:56 UTC] Search error for motherboard: SQLSTATE[HY093]: Invalid parameter number
+[29-May-2025 22:26:56 UTC] Search error for nic: SQLSTATE[HY093]: Invalid parameter number
+[29-May-2025 22:26:56 UTC] Search error for caddy: SQLSTATE[HY093]: Invalid parameter number
+[31-May-2025 22:00:05 UTC] API called with action: search-components
+[31-May-2025 22:00:05 UTC] Module: search, Operation: components
+[31-May-2025 22:00:11 UTC] API called with action: auth-login
+[31-May-2025 22:00:11 UTC] Module: auth, Operation: login
+[31-May-2025 22:00:11 UTC] Auth operation: login
+[31-May-2025 22:00:11 UTC] Login attempt for username: a
+[31-May-2025 22:00:11 UTC] Login successful for user: a
+[31-May-2025 22:00:15 UTC] API called with action: search-components
+[31-May-2025 22:00:15 UTC] Module: search, Operation: components
+[31-May-2025 22:00:15 UTC] Search error for cpu: SQLSTATE[HY093]: Invalid parameter number
+[31-May-2025 22:00:15 UTC] Search error for ram: SQLSTATE[HY093]: Invalid parameter number
+[31-May-2025 22:00:15 UTC] Search error for storage: SQLSTATE[HY093]: Invalid parameter number
+[31-May-2025 22:00:15 UTC] Search error for motherboard: SQLSTATE[HY093]: Invalid parameter number
+[31-May-2025 22:00:15 UTC] Search error for nic: SQLSTATE[HY093]: Invalid parameter number
+[31-May-2025 22:00:15 UTC] Search error for caddy: SQLSTATE[HY093]: Invalid parameter number
+[31-May-2025 22:00:36 UTC] API called with action: search-components
+[31-May-2025 22:00:36 UTC] Module: search, Operation: components
+[31-May-2025 22:00:36 UTC] Search error for cpu: SQLSTATE[HY093]: Invalid parameter number
+[31-May-2025 22:00:36 UTC] Search error for ram: SQLSTATE[HY093]: Invalid parameter number
+[31-May-2025 22:00:36 UTC] Search error for storage: SQLSTATE[HY093]: Invalid parameter number
+[31-May-2025 22:00:36 UTC] Search error for motherboard: SQLSTATE[HY093]: Invalid parameter number
+[31-May-2025 22:00:36 UTC] Search error for nic: SQLSTATE[HY093]: Invalid parameter number
+[31-May-2025 22:00:36 UTC] Search error for caddy: SQLSTATE[HY093]: Invalid parameter number
+[31-May-2025 22:02:06 UTC] API called with action: cpu-list
+[31-May-2025 22:02:06 UTC] Module: cpu, Operation: list
+[31-May-2025 22:17:48 UTC] API called with action: ram-list
+[31-May-2025 22:17:48 UTC] Module: ram, Operation: list
+[31-May-2025 22:18:13 UTC] API called with action: storage-list
+[31-May-2025 22:18:13 UTC] Module: storage, Operation: list
+[31-May-2025 22:19:29 UTC] API called with action: motherboard-list
+[31-May-2025 22:19:29 UTC] Module: motherboard, Operation: list
+[31-May-2025 22:19:39 UTC] API called with action: motherboard-list
+[31-May-2025 22:19:39 UTC] Module: motherboard, Operation: list
+[31-May-2025 22:19:45 UTC] API called with action: motherboard-list
+[31-May-2025 22:19:45 UTC] Module: motherboard, Operation: list
+[31-May-2025 22:21:24 UTC] API called with action: nic-list
+[31-May-2025 22:21:24 UTC] Module: nic, Operation: list
+[31-May-2025 22:21:48 UTC] API called with action: caddy-list
+[31-May-2025 22:21:48 UTC] Module: caddy, Operation: list
+[31-May-2025 22:22:43 UTC] API called with action: cpu-get
+[31-May-2025 22:22:43 UTC] Module: cpu, Operation: get
+[31-May-2025 22:23:40 UTC] API called with action: cpu-get
+[31-May-2025 22:23:40 UTC] Module: cpu, Operation: get
+[31-May-2025 22:24:18 UTC] API called with action: ram-get
+[31-May-2025 22:24:18 UTC] Module: ram, Operation: get
+[31-May-2025 22:27:05 UTC] API called with action: cpu-add
+[31-May-2025 22:27:05 UTC] Module: cpu, Operation: add
+[31-May-2025 22:27:20 UTC] API called with action: cpu-add
+[31-May-2025 22:27:20 UTC] Module: cpu, Operation: add
+[31-May-2025 22:30:03 UTC] API called with action: cpu-delete
+[31-May-2025 22:30:03 UTC] Module: cpu, Operation: delete
