@@ -66,3 +66,5 @@
 [31-May-2025 22:27:20 UTC] Module: cpu, Operation: add
 [31-May-2025 22:30:03 UTC] API called with action: cpu-delete
 [31-May-2025 22:30:03 UTC] Module: cpu, Operation: delete
+[02-Jun-2025 17:10:49 UTC] PHP Fatal error:  Cannot redeclare requirePermission() (previously declared in /home/shubhams/public_html/bdc_ims/includes/BaseFunctions.php:83) in /home/shubhams/public_html/bdc_ims/includes/ACL.php on line 886
+[03-Jun-2025 00:25:09 UTC] PHP Fatal error:  Cannot redeclare requirePermission() (previously declared in /home/shubhams/public_html/bdc_ims/includes/BaseFunctions.php:83) in /home/shubhams/public_html/bdc_ims/includes/ACL.php on line 886
