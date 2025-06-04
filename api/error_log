@@ -68,3 +68,23 @@
 [31-May-2025 22:30:03 UTC] Module: cpu, Operation: delete
 [02-Jun-2025 17:10:49 UTC] PHP Fatal error:  Cannot redeclare requirePermission() (previously declared in /home/shubhams/public_html/bdc_ims/includes/BaseFunctions.php:83) in /home/shubhams/public_html/bdc_ims/includes/ACL.php on line 886
 [03-Jun-2025 00:25:09 UTC] PHP Fatal error:  Cannot redeclare requirePermission() (previously declared in /home/shubhams/public_html/bdc_ims/includes/BaseFunctions.php:83) in /home/shubhams/public_html/bdc_ims/includes/ACL.php on line 886
+[03-Jun-2025 01:45:05 UTC] PHP Fatal error:  Cannot redeclare cleanInputData() (previously declared in /home/shubhams/public_html/bdc_ims/api/api.php:1679) in /home/shubhams/public_html/bdc_ims/includes/BaseFunctions.php on line 944
+[03-Jun-2025 10:20:02 UTC] API called with action: auth-login
+[03-Jun-2025 10:20:02 UTC] Module: auth, Operation: login
+[03-Jun-2025 10:20:02 UTC] Auth operation: login
+[03-Jun-2025 10:20:02 UTC] Login attempt for username: admin_test
+[03-Jun-2025 10:20:02 UTC] Invalid password for user: admin_test
+[03-Jun-2025 10:20:17 UTC] API called with action: auth-login
+[03-Jun-2025 10:20:17 UTC] Module: auth, Operation: login
+[03-Jun-2025 10:20:17 UTC] Auth operation: login
+[03-Jun-2025 10:20:17 UTC] Login attempt for username: a
+[03-Jun-2025 10:20:17 UTC] Login successful for user: a
+[03-Jun-2025 10:20:17 UTC] PHP Notice:  session_start(): Ignoring session_start() because a session is already active in /home/shubhams/public_html/bdc_ims/includes/BaseFunctions.php on line 162
+[03-Jun-2025 10:20:17 UTC] PHP Notice:  session_start(): Ignoring session_start() because a session is already active in /home/shubhams/public_html/bdc_ims/includes/BaseFunctions.php on line 231
+[03-Jun-2025 10:20:17 UTC] PHP Warning:  Cannot modify header information - headers already sent by (output started at /home/shubhams/public_html/bdc_ims/includes/BaseFunctions.php:162) in /home/shubhams/public_html/bdc_ims/includes/BaseFunctions.php on line 138
+[03-Jun-2025 10:39:15 UTC] API called with action: auth-logout
+[03-Jun-2025 10:39:15 UTC] Module: auth, Operation: logout
+[03-Jun-2025 10:39:15 UTC] Auth operation: logout
+[03-Jun-2025 10:39:15 UTC] PHP Notice:  session_start(): Ignoring session_start() because a session is already active in /home/shubhams/public_html/bdc_ims/includes/BaseFunctions.php on line 162
+[03-Jun-2025 10:39:15 UTC] PHP Warning:  Cannot modify header information - headers already sent by (output started at /home/shubhams/public_html/bdc_ims/includes/BaseFunctions.php:162) in /home/shubhams/public_html/bdc_ims/api/api.php on line 158
+[03-Jun-2025 10:39:15 UTC] PHP Warning:  Cannot modify header information - headers already sent by (output started at /home/shubhams/public_html/bdc_ims/includes/BaseFunctions.php:162) in /home/shubhams/public_html/bdc_ims/includes/BaseFunctions.php on line 138
