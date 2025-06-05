@@ -88,3 +88,49 @@
 [03-Jun-2025 10:39:15 UTC] PHP Notice:  session_start(): Ignoring session_start() because a session is already active in /home/shubhams/public_html/bdc_ims/includes/BaseFunctions.php on line 162
 [03-Jun-2025 10:39:15 UTC] PHP Warning:  Cannot modify header information - headers already sent by (output started at /home/shubhams/public_html/bdc_ims/includes/BaseFunctions.php:162) in /home/shubhams/public_html/bdc_ims/api/api.php on line 158
 [03-Jun-2025 10:39:15 UTC] PHP Warning:  Cannot modify header information - headers already sent by (output started at /home/shubhams/public_html/bdc_ims/includes/BaseFunctions.php:162) in /home/shubhams/public_html/bdc_ims/includes/BaseFunctions.php on line 138
+[04-Jun-2025 20:08:34 UTC] PHP Fatal error:  Cannot redeclare safeSessionStart() (previously declared in /home/shubhams/public_html/bdc_ims/api/api.php:1832) in /home/shubhams/public_html/bdc_ims/includes/BaseFunctions.php on line 20
+[04-Jun-2025 20:26:20 UTC] API called with action: auth-login
+[04-Jun-2025 20:26:20 UTC] Module: auth, Operation: login
+[04-Jun-2025 20:26:20 UTC] Auth operation: login
+[04-Jun-2025 20:26:20 UTC] Login attempt for username: a
+[04-Jun-2025 20:26:20 UTC] Login successful for user: a
+[04-Jun-2025 21:11:03 UTC] API called with action: auth-check_session
+[04-Jun-2025 21:11:03 UTC] Module: auth, Operation: check_session
+[04-Jun-2025 21:11:03 UTC] Auth operation: check_session
+[04-Jun-2025 21:11:08 UTC] API called with action: auth-login
+[04-Jun-2025 21:11:08 UTC] Module: auth, Operation: login
+[04-Jun-2025 21:11:08 UTC] Auth operation: login
+[04-Jun-2025 21:11:08 UTC] Login attempt for username: a
+[04-Jun-2025 21:11:08 UTC] Login successful for user: a
+[04-Jun-2025 21:11:11 UTC] API called with action: auth-check_session
+[04-Jun-2025 21:11:11 UTC] Module: auth, Operation: check_session
+[04-Jun-2025 21:11:11 UTC] Auth operation: check_session
+[04-Jun-2025 21:11:20 UTC] API called with action: dashboard-get_data
+[04-Jun-2025 21:11:20 UTC] Module: dashboard, Operation: get_data
+[04-Jun-2025 21:11:35 UTC] API called with action: cpu-get
+[04-Jun-2025 21:11:35 UTC] Module: cpu, Operation: get
+[04-Jun-2025 22:30:29 UTC] API called with action: get_user_permissions
+[04-Jun-2025 22:30:29 UTC] Module: get_user_permissions, Operation: 
+[04-Jun-2025 22:30:42 UTC] API called with action: auth-check_session
+[04-Jun-2025 22:30:42 UTC] Module: auth, Operation: check_session
+[04-Jun-2025 22:30:42 UTC] Auth operation: check_session
+[04-Jun-2025 22:30:46 UTC] API called with action: auth-login
+[04-Jun-2025 22:30:46 UTC] Module: auth, Operation: login
+[04-Jun-2025 22:30:46 UTC] Auth operation: login
+[04-Jun-2025 22:30:46 UTC] Login attempt for username: a
+[04-Jun-2025 22:30:46 UTC] Login successful for user: a
+[04-Jun-2025 22:30:54 UTC] API called with action: get_user_permissions
+[04-Jun-2025 22:30:54 UTC] Module: get_user_permissions, Operation: 
+[04-Jun-2025 22:31:15 UTC] API called with action: acl-get_user_permissions
+[04-Jun-2025 22:31:15 UTC] Module: acl, Operation: get_user_permissions
+[04-Jun-2025 22:33:05 UTC] API called with action: acl-get_all_roles
+[04-Jun-2025 22:33:05 UTC] Module: acl, Operation: get_all_roles
+[05-Jun-2025 11:23:57 UTC] API called with action: acl-get_user_permissions
+[05-Jun-2025 11:23:57 UTC] Module: acl, Operation: get_user_permissions
+[05-Jun-2025 11:24:03 UTC] API called with action: auth-login
+[05-Jun-2025 11:24:03 UTC] Module: auth, Operation: login
+[05-Jun-2025 11:24:03 UTC] Auth operation: login
+[05-Jun-2025 11:24:03 UTC] Login attempt for username: a
+[05-Jun-2025 11:24:03 UTC] Login successful for user: a
+[05-Jun-2025 11:25:57 UTC] API called with action: acl-get_user_permissions
+[05-Jun-2025 11:25:57 UTC] Module: acl, Operation: get_user_permissions
