@@ -1,0 +1,687 @@
+{
+	"info": {
+		"_postman_id": "b73dedad-0135-49a8-b880-5596171f54c1",
+		"name": "IMS API",
+		"description": "# 🚀 Get started here\n\nThis template guides you through CRUD operations (GET, POST, PUT, DELETE), variables, and tests.\n\n## 🔖 **How to use this template**\n\n#### **Step 1: Send requests**\n\nRESTful APIs allow you to perform CRUD operations using the POST, GET, PUT, and DELETE HTTP methods.\n\nThis collection contains each of these [request](https://learning.postman.com/docs/sending-requests/requests/) types. Open each request and click \"Send\" to see what happens.\n\n#### **Step 2: View responses**\n\nObserve the response tab for status code (200 OK), response time, and size.\n\n#### **Step 3: Send new Body data**\n\nUpdate or add new data in \"Body\" in the POST request. Typically, Body data is also used in PUT request.\n\n```\n{\n    \"name\": \"Add your name in the body\"\n}\n\n ```\n\n#### **Step 4: Update the variable**\n\nVariables enable you to store and reuse values in Postman. We have created a [variable](https://learning.postman.com/docs/sending-requests/variables/) called `base_url` with the sample request [https://postman-api-learner.glitch.me](https://postman-api-learner.glitch.me). Replace it with your API endpoint to customize this collection.\n\n#### **Step 5: Add tests in the \"Scripts\" tab**\n\nAdding tests to your requests can help you confirm that your API is working as expected. You can write test scripts in JavaScript and view the output in the \"Test Results\" tab.\n\n<img src=\"https://content.pstmn.io/fa30ea0a-373d-4545-a668-e7b283cca343/aW1hZ2UucG5n\" alt=\"\" height=\"1530\" width=\"2162\">\n\n## 💪 Pro tips\n\n- Use folders to group related requests and organize the collection.\n    \n- Add more [scripts](https://learning.postman.com/docs/writing-scripts/intro-to-scripts/) to verify if the API works as expected and execute workflows.\n    \n\n## 💡Related templates\n\n[API testing basics](https://go.postman.co/redirect/workspace?type=personal&collectionTemplateId=e9a37a28-055b-49cd-8c7e-97494a21eb54&sourceTemplateId=ddb19591-3097-41cf-82af-c84273e56719)  \n[API documentation](https://go.postman.co/redirect/workspace?type=personal&collectionTemplateId=e9c28f47-1253-44af-a2f3-20dce4da1f18&sourceTemplateId=ddb19591-3097-41cf-82af-c84273e56719)  \n[Authorization methods](https://go.postman.co/redirect/workspace?type=personal&collectionTemplateId=31a9a6ed-4cdf-4ced-984c-d12c9aec1c27&sourceTemplateId=ddb19591-3097-41cf-82af-c84273e56719)",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "34197478"
+	},
+	"item": [
+		{
+			"name": "LOGIN",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "action",
+							"value": "auth-login",
+							"type": "text"
+						},
+						{
+							"key": "username",
+							"value": "a",
+							"type": "text"
+						},
+						{
+							"key": "password",
+							"value": "aaaaaaaa",
+							"type": "text"
+						}
+					]
+				},
+				"url": {
+					"raw": "{{base_url}}",
+					"host": [
+						"{{base_url}}"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Logout",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "action",
+							"value": "auth-logout",
+							"type": "text"
+						},
+						{
+							"key": "session_id",
+							"value": "ce64eac2a90979fba0b01e340757f12d",
+							"type": "text"
+						}
+					]
+				},
+				"url": {
+					"raw": "{{base_url}}",
+					"host": [
+						"{{base_url}}"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Check_session",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "action",
+							"value": "auth-check_session",
+							"type": "text"
+						},
+						{
+							"key": "session_id",
+							"value": "{{SessionID}}",
+							"type": "text"
+						}
+					]
+				},
+				"url": {
+					"raw": "{{base_url}}",
+					"host": [
+						"{{base_url}}"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Dashboard-get_data",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "action",
+							"value": "dashboard-get_data",
+							"type": "text"
+						},
+						{
+							"key": "session_id",
+							"value": "{{SessionID}}",
+							"type": "text"
+						},
+						{
+							"key": "status",
+							"value": "all",
+							"type": "text"
+						},
+						{
+							"key": "component",
+							"value": "all",
+							"type": "text"
+						}
+					]
+				},
+				"url": {
+					"raw": "{{base_url}}",
+					"host": [
+						"{{base_url}}"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "search-components",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "action",
+							"value": "search-components",
+							"type": "text"
+						},
+						{
+							"key": "session_id",
+							"value": "{{SessionID}}",
+							"type": "text"
+						},
+						{
+							"key": "query",
+							"value": "CPU123456",
+							"type": "text"
+						},
+						{
+							"key": "type",
+							"value": "all",
+							"type": "text"
+						},
+						{
+							"key": "limit",
+							"value": "20",
+							"type": "text"
+						}
+					]
+				},
+				"url": {
+					"raw": "{{base_url}}",
+					"host": [
+						"{{base_url}}"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "cpu-list",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "action",
+							"value": "cpu-list",
+							"type": "text"
+						},
+						{
+							"key": "session_id",
+							"value": "{{SessionID}}",
+							"type": "text"
+						},
+						{
+							"key": "status",
+							"value": "all",
+							"type": "text"
+						},
+						{
+							"key": "limit",
+							"value": "50",
+							"type": "text"
+						},
+						{
+							"key": "offset",
+							"value": "0",
+							"type": "text"
+						}
+					]
+				},
+				"url": {
+					"raw": "{{base_url}}",
+					"host": [
+						"{{base_url}}"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "ram-list",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "action",
+							"value": "ram-list",
+							"type": "text"
+						},
+						{
+							"key": "session_id",
+							"value": "{{SessionID}}",
+							"type": "text"
+						},
+						{
+							"key": "status",
+							"value": "all",
+							"type": "text"
+						},
+						{
+							"key": "limit",
+							"value": "50",
+							"type": "text"
+						},
+						{
+							"key": "offset",
+							"value": "0",
+							"type": "text"
+						}
+					]
+				},
+				"url": {
+					"raw": "{{base_url}}",
+					"host": [
+						"{{base_url}}"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "storage-list",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "action",
+							"value": "storage-list",
+							"type": "text"
+						},
+						{
+							"key": "session_id",
+							"value": "{{SessionID}}",
+							"type": "text"
+						},
+						{
+							"key": "status",
+							"value": "all",
+							"type": "text"
+						}
+					]
+				},
+				"url": {
+					"raw": "{{base_url}}",
+					"host": [
+						"{{base_url}}"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "motherboard-list",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "action",
+							"value": "motherboard-list",
+							"type": "text"
+						},
+						{
+							"key": "session_id",
+							"value": "{{SessionID}}",
+							"type": "text"
+						},
+						{
+							"key": "status",
+							"value": "all",
+							"type": "text"
+						}
+					]
+				},
+				"url": {
+					"raw": "{{base_url}}",
+					"host": [
+						"{{base_url}}"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "nic-list",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "action",
+							"value": "nic-list",
+							"type": "text"
+						},
+						{
+							"key": "session_id",
+							"value": "{{SessionID}}",
+							"type": "text"
+						},
+						{
+							"key": "status",
+							"value": "all",
+							"type": "text"
+						}
+					]
+				},
+				"url": {
+					"raw": "{{base_url}}",
+					"host": [
+						"{{base_url}}"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "caddy-list",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "action",
+							"value": "caddy-list",
+							"type": "text"
+						},
+						{
+							"key": "session_id",
+							"value": "{{SessionID}}",
+							"type": "text"
+						},
+						{
+							"key": "status",
+							"value": "all",
+							"type": "text"
+						}
+					]
+				},
+				"url": {
+					"raw": "{{base_url}}",
+					"host": [
+						"{{base_url}}"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get-cpu-by-ID",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "action",
+							"value": "cpu-get",
+							"type": "text"
+						},
+						{
+							"key": "session_id",
+							"value": "{{SessionID}}",
+							"type": "text"
+						},
+						{
+							"key": "id",
+							"value": "1",
+							"type": "text"
+						}
+					]
+				},
+				"url": {
+					"raw": "{{base_url}}",
+					"host": [
+						"{{base_url}}"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get-ram-by-ID",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "action",
+							"value": "ram-get",
+							"type": "text"
+						},
+						{
+							"key": "session_id",
+							"value": "{{SessionID}}",
+							"type": "text"
+						},
+						{
+							"key": "id",
+							"value": "1",
+							"type": "text"
+						}
+					]
+				},
+				"url": {
+					"raw": "{{base_url}}",
+					"host": [
+						"{{base_url}}"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "cpu-add",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "action",
+							"value": "cpu-add",
+							"type": "text"
+						},
+						{
+							"key": "session_id",
+							"value": "{{SessionID}}",
+							"type": "text"
+						},
+						{
+							"key": "component_uuid",
+							"value": "545e143b-57b3-419e-86e5-1df6f7aa8fd3",
+							"type": "text"
+						},
+						{
+							"key": "serial_number",
+							"value": "CPU789013",
+							"type": "text"
+						},
+						{
+							"key": "status",
+							"value": "1",
+							"type": "text"
+						},
+						{
+							"key": "server_uuid",
+							"value": "",
+							"type": "text"
+						},
+						{
+							"key": "location",
+							"value": " Warehouse East",
+							"type": "text"
+						},
+						{
+							"key": "rack_position",
+							"value": "Shelf B4",
+							"type": "text"
+						},
+						{
+							"key": "purchase_date",
+							"value": "2024-01-10",
+							"type": "text"
+						},
+						{
+							"key": "warranty_end_date",
+							"value": "2027-01-10",
+							"type": "text"
+						},
+						{
+							"key": "flag",
+							"value": "Backup",
+							"type": "text"
+						},
+						{
+							"key": "notes",
+							"value": "AMD EPYC 16-core 2.9GHz",
+							"type": "text"
+						}
+					]
+				},
+				"url": {
+					"raw": "{{base_url}}",
+					"host": [
+						"{{base_url}}"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "cpu-delete",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "action",
+							"value": "cpu-delete",
+							"type": "text"
+						},
+						{
+							"key": "session_id",
+							"value": "{{SessionID}}",
+							"type": "text"
+						},
+						{
+							"key": "id",
+							"value": "3",
+							"type": "text"
+						}
+					]
+				},
+				"url": {
+					"raw": "{{base_url}}",
+					"host": [
+						"{{base_url}}"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "acl-get_user_permissions",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "action",
+							"value": "acl-get_user_permissions",
+							"type": "text"
+						},
+						{
+							"key": "user_id",
+							"value": "25",
+							"type": "text"
+						}
+					]
+				},
+				"url": {
+					"raw": "{{base_url}}",
+					"host": [
+						"{{base_url}}"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "acl-get_all_roles",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "action",
+							"value": "acl-get_all_roles",
+							"type": "text"
+						}
+					]
+				},
+				"url": {
+					"raw": "{{base_url}}",
+					"host": [
+						"{{base_url}}"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "New Request",
+			"request": {
+				"method": "GET",
+				"header": []
+			},
+			"response": []
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "session_id",
+			"value": "9fb52b4905cbfc517c5915720025033d"
+		},
+		{
+			"key": "base_url",
+			"value": "https://shubham.staging.cloudmate.in/bdc_ims/api/api.php"
+		},
+		{
+			"key": "SessionID",
+			"value": "64704010a56a0202354028f78faf48c0",
+			"type": "default"
+		}
+	]
+}

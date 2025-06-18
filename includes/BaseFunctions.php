@@ -4,9 +4,9 @@ if (!isset($pdo)) {
     require_once(__DIR__ . '/db_config.php');
 }
 
-// Include ACL class only if it exists and hasn't been included
-if (file_exists(__DIR__ . '/ACL.php') && !class_exists('ACL')) {
-    require_once(__DIR__ . '/ACL.php');
+// Include Simple ACL class
+if (file_exists(__DIR__ . '/SimpleACL.php') && !class_exists('SimpleACL')) {
+    require_once(__DIR__ . '/SimpleACL.php');
 }
 
 // Only include config if not already included
@@ -27,9 +27,11 @@ if (!function_exists('safeSessionStart')) {
     }
 }
 
+/**
+ * Check if user is logged in
+ */
 if (!function_exists('isUserLoggedIn')) {
     function isUserLoggedIn($pdo) {
-        // Use safe session start
         safeSessionStart();
         
         if (!isset($_SESSION['id'])) {
@@ -62,7 +64,7 @@ if (!function_exists('isUserLoggedIn')) {
 }
 
 /**
- * Enhanced session validation with ACL
+ * Enhanced session validation with Simple ACL
  */
 if (!function_exists('isUserLoggedInWithACL')) {
     function isUserLoggedInWithACL($pdo) {
@@ -71,17 +73,19 @@ if (!function_exists('isUserLoggedInWithACL')) {
             return false;
         }
         
-        // Add ACL information to user data only if ACL class exists
-        if (class_exists('ACL')) {
-            $acl = new ACL($pdo, $user['id']);
-            $user['roles'] = $acl->getUserRoles();
-            $user['permissions'] = $acl->getUserPermissions();
-            $user['is_super_admin'] = $acl->isSuperAdmin();
+        // Add Simple ACL information to user data
+        if (class_exists('SimpleACL')) {
+            $acl = new SimpleACL($pdo, $user['id']);
+            $user['role'] = $acl->getUserRole();
+            $user['permissions'] = $acl->getPermissionsSummary();
+            $user['is_admin'] = $acl->isAdmin();
+            $user['is_manager'] = $acl->isManagerOrAdmin();
         } else {
             // Fallback if ACL is not available
-            $user['roles'] = [];
+            $user['role'] = 'viewer';
             $user['permissions'] = [];
-            $user['is_super_admin'] = false;
+            $user['is_admin'] = false;
+            $user['is_manager'] = false;
         }
         
         return $user;
@@ -92,20 +96,19 @@ if (!function_exists('isUserLoggedInWithACL')) {
  * Check if current user has permission
  */
 if (!function_exists('hasPermission')) {
-    function hasPermission($pdo, $resource, $action, $resourceId = null) {
+    function hasPermission($pdo, $action, $componentType = null) {
         safeSessionStart();
         if (!isset($_SESSION['id'])) {
             return false;
         }
         
-        // If ACL class doesn't exist, return false for all permissions except basic read
-        if (!class_exists('ACL')) {
+        if (!class_exists('SimpleACL')) {
             // Allow basic read access but deny all other actions
             return ($action === 'read');
         }
         
-        $acl = new ACL($pdo, $_SESSION['id']);
-        return $acl->hasPermission($resource, $action, $resourceId);
+        $acl = new SimpleACL($pdo, $_SESSION['id']);
+        return $acl->hasPermission($action, $componentType);
     }
 }
 
@@ -113,11 +116,12 @@ if (!function_exists('hasPermission')) {
  * Require permission or exit with error
  */
 if (!function_exists('requirePermission')) {
-    function requirePermission($pdo, $resource, $action, $resourceId = null) {
-        if (!hasPermission($pdo, $resource, $action, $resourceId)) {
+    function requirePermission($pdo, $action, $componentType = null) {
+        if (!hasPermission($pdo, $action, $componentType)) {
             http_response_code(403);
             send_json_response(0, 0, 403, "Access denied. Insufficient permissions.", [
-                'required_permission' => $resource . '.' . $action
+                'required_permission' => $action,
+                'component_type' => $componentType
             ]);
             exit;
         }
@@ -125,117 +129,89 @@ if (!function_exists('requirePermission')) {
 }
 
 /**
- * Check if user has any of the specified roles
+ * Check if user has specific role
  */
-if (!function_exists('hasAnyRole')) {
-    function hasAnyRole($pdo, $roles) {
+if (!function_exists('hasRole')) {
+    function hasRole($pdo, $roleName) {
         safeSessionStart();
         if (!isset($_SESSION['id'])) {
             return false;
         }
         
-        if (!class_exists('ACL')) {
+        if (!class_exists('SimpleACL')) {
             return false;
         }
         
-        $acl = new ACL($pdo, $_SESSION['id']);
-        foreach ($roles as $role) {
-            if ($acl->hasRole($role)) {
-                return true;
-            }
-        }
-        return false;
+        $acl = new SimpleACL($pdo, $_SESSION['id']);
+        return $acl->hasRole($roleName);
     }
 }
 
 /**
- * Require any of the specified roles
+ * Check if user is admin
  */
-if (!function_exists('requireAnyRole')) {
-    function requireAnyRole($pdo, $roles) {
-        if (!hasAnyRole($pdo, $roles)) {
-            http_response_code(403);
-            send_json_response(0, 0, 403, "Access denied. Insufficient role privileges.", [
-                'required_roles' => $roles
-            ]);
-            exit;
-        }
+if (!function_exists('isAdmin')) {
+    function isAdmin($pdo) {
+        return hasRole($pdo, 'admin');
     }
 }
 
 /**
- * Get current user's ACL instance
+ * Check if user is manager or admin
+ */
+if (!function_exists('isManagerOrAdmin')) {
+    function isManagerOrAdmin($pdo) {
+        safeSessionStart();
+        if (!isset($_SESSION['id'])) {
+            return false;
+        }
+        
+        if (!class_exists('SimpleACL')) {
+            return false;
+        }
+        
+        $acl = new SimpleACL($pdo, $_SESSION['id']);
+        return $acl->isManagerOrAdmin();
+    }
+}
+
+/**
+ * Get current user's Simple ACL instance
  */
 if (!function_exists('getCurrentUserACL')) {
     function getCurrentUserACL($pdo) {
         safeSessionStart();
         $userId = $_SESSION['id'] ?? null;
         
-        if (!class_exists('ACL') || !$userId) {
+        if (!class_exists('SimpleACL') || !$userId) {
             return null;
         }
         
-        return new ACL($pdo, $userId);
+        return new SimpleACL($pdo, $userId);
     }
 }
 
 /**
- * Initialize default ACL for new users
+ * Initialize default role for new users
  */
-if (!function_exists('initializeUserACL')) {
-    function initializeUserACL($pdo, $userId, $defaultRole = 'viewer') {
-        if (!class_exists('ACL')) {
-            return true; // Skip ACL initialization if not available
+if (!function_exists('initializeUserRole')) {
+    function initializeUserRole($pdo, $userId, $defaultRole = 'viewer') {
+        if (!class_exists('SimpleACL')) {
+            return true; // Skip if not available
         }
         
         try {
-          $acl = new ACL($pdo);
-            return $acl->assignRole($userId, $defaultRole, 1); // Assigned by system admin (user ID 1)
+            $acl = new SimpleACL($pdo);
+            return $acl->initializeUserRole($userId, $defaultRole);
         } catch (Exception $e) {
-            error_log("Error initializing user ACL: " . $e->getMessage());
+            error_log("Error initializing user role: " . $e->getMessage());
             return false;
         }
     }
 }
 
 /**
- * Filter components based on user permissions
- */
-if (!function_exists('filterComponentsByPermission')) {
-    function filterComponentsByPermission($pdo, $components, $action = 'read') {
-        safeSessionStart();
-        if (!isset($_SESSION['id'])) {
-            return [];
-        }
-        
-        if (!class_exists('ACL')) {
-            // If ACL is not available, return all components for read action, empty for others
-            return ($action === 'read') ? $components : [];
-        }
-        
-        $acl = new ACL($pdo, $_SESSION['id']);
-        
-        // If user is super admin, return all components
-        if ($acl->isSuperAdmin()) {
-            return $components;
-        }
-        
-        $filteredComponents = [];
-        foreach ($components as $component) {
-            $resourceType = $component['component_type'] ?? 'unknown';
-            $resourceId = $component['UUID'] ?? null;
-            
-            if ($acl->hasPermission($resourceType, $action, $resourceId)) {
-                $filteredComponents[] = $component;
-            }
-        }
-        
-        return $filteredComponents;
-    }
-}
-
-/**
- * Enhanced JSON response with ACL context
+ * Enhanced JSON response with Simple ACL context
  */
 if (!function_exists('send_json_response')) {
     function send_json_response($logged_in, $success, $status_code, $message, $other_params = []) {
@@ -253,16 +229,17 @@ if (!function_exists('send_json_response')) {
             'timestamp' => date('c')
         ];
         
-        // Add user context if logged in and ACL is available
-        if ($logged_in && isset($_SESSION['id']) && class_exists('ACL')) {
+        // Add user context if logged in
+        if ($logged_in && isset($_SESSION['id']) && class_exists('SimpleACL')) {
             global $pdo;
             try {
-                $acl = new ACL($pdo, $_SESSION['id']);
+                $acl = new SimpleACL($pdo, $_SESSION['id']);
                 $resp['user_context'] = [
                     'user_id' => $_SESSION['id'],
                     'username' => $_SESSION['username'] ?? null,
-                    'roles' => array_column($acl->getUserRoles(), 'name'),
-                    'is_super_admin' => $acl->isSuperAdmin()
+                    'role' => $acl->getUserRole(),
+                    'is_admin' => $acl->isAdmin(),
+                    'is_manager' => $acl->isManagerOrAdmin()
                 ];
             } catch (Exception $e) {
                 error_log("Error adding user context to response: " . $e->getMessage());
@@ -279,17 +256,17 @@ if (!function_exists('send_json_response')) {
 }
 
 /**
- * Enhanced user creation with ACL
+ * Enhanced user creation with Simple ACL
  */
 if (!function_exists('createUserWithACL')) {
-    function createUserWithACL($pdo, $userData, $roles = ['viewer']) {
+    function createUserWithACL($pdo, $userData, $role = 'viewer') {
         try {
             $pdo->beginTransaction();
             
             // Create user
             $stmt = $pdo->prepare("
-                INSERT INTO users (firstname, lastname, username, email, password, acl)
-                VALUES (:firstname, :lastname, :username, :email, :password, 0)
+                INSERT INTO users (firstname, lastname, username, email, password)
+                VALUES (:firstname, :lastname, :username, :email, :password)
             ");
             
             $stmt->bindParam(':firstname', $userData['firstname']);
@@ -301,12 +278,10 @@ if (!function_exists('createUserWithACL')) {
             $stmt->execute();
             $userId = $pdo->lastInsertId();
             
-            // Assign roles only if ACL is available
-            if (class_exists('ACL')) {
-                $acl = new ACL($pdo);
-                foreach ($roles as $role) {
-                    $acl->assignRole($userId, $role, $_SESSION['id'] ?? 1);
-                }
+            // Assign role
+            if (class_exists('SimpleACL')) {
+                $acl = new SimpleACL($pdo);
+                $acl->initializeUserRole($userId, $role);
             }
             
             $pdo->commit();
@@ -331,44 +306,31 @@ if (!function_exists('getDashboardDataWithACL')) {
         }
         
         $dashboardData = [];
-        
-        // Component counts (only for components user can read)
         $componentTypes = ['cpu', 'ram', 'storage', 'motherboard', 'nic', 'caddy'];
-        $dashboardData['components'] = [];
         
-        if (class_exists('ACL')) {
-            $acl = new ACL($pdo, $_SESSION['id']);
+        if (class_exists('SimpleACL')) {
+            $acl = new SimpleACL($pdo, $_SESSION['id']);
             
             foreach ($componentTypes as $type) {
-                if ($acl->hasPermission($type, 'read')) {
-                    $dashboardData['components'][$type] = [
-                        'can_read' => true,
-                        'can_create' => $acl->hasPermission($type, 'create'),
-                        'can_update' => $acl->hasPermission($type, 'update'),
-                        'can_delete' => $acl->hasPermission($type, 'delete'),
-                        'can_export' => $acl->hasPermission($type, 'export')
-                    ];
-                } else {
-                    $dashboardData['components'][$type] = [
-                        'can_read' => false,
-                        'can_create' => false,
-                        'can_update' => false,
-                        'can_delete' => false,
-                        'can_export' => false
-                    ];
-                }
+                $dashboardData['components'][$type] = [
+                    'can_read' => $acl->hasPermission('read'),
+                    'can_create' => $acl->hasPermission('create'),
+                    'can_update' => $acl->hasPermission('update'),
+                    'can_delete' => $acl->hasPermission('delete'),
+                    'can_export' => $acl->hasPermission('export')
+                ];
             }
             
             // System permissions
             $dashboardData['system'] = [
-                'can_manage_users' => $acl->hasPermission('users', 'read'),
-                'can_manage_roles' => $acl->hasPermission('roles', 'read'),
-                'can_view_reports' => $acl->hasPermission('reports', 'read'),
-                'can_access_settings' => $acl->hasPermission('system', 'settings'),
-                'is_admin' => $acl->hasRole('admin') || $acl->hasRole('super_admin')
+                'can_manage_users' => $acl->canManageUsers(),
+                'can_view_audit_log' => $acl->isAdmin(),
+                'is_admin' => $acl->isAdmin(),
+                'is_manager' => $acl->isManagerOrAdmin(),
+                'role' => $acl->getUserRole()
             ];
         } else {
-            // Fallback permissions if ACL is not available - basic read-only access
+            // Fallback permissions if ACL is not available
             foreach ($componentTypes as $type) {
                 $dashboardData['components'][$type] = [
                     'can_read' => true,
@@ -381,10 +343,10 @@ if (!function_exists('getDashboardDataWithACL')) {
             
             $dashboardData['system'] = [
                 'can_manage_users' => false,
-                'can_manage_roles' => false,
-                'can_view_reports' => false,
-                'can_access_settings' => false,
-                'is_admin' => false
+                'can_view_audit_log' => false,
+                'is_admin' => false,
+                'is_manager' => false,
+                'role' => 'viewer'
             ];
         }
         
@@ -393,82 +355,35 @@ if (!function_exists('getDashboardDataWithACL')) {
 }
 
 /**
- * Cleanup expired ACL entries (should be run periodically)
- */
-if (!function_exists('cleanupACL')) {
-    function cleanupACL($pdo) {
-        if (!class_exists('ACL')) {
-            return true; // Skip if ACL not available
-        }
-        
-        try {
-            $acl = new ACL($pdo);
-            return $acl->cleanupExpired();
-        } catch (Exception $e) {
-            error_log("Error cleaning up ACL: " . $e->getMessage());
-            return false;
-        }
-    }
-}
-
-/**
  * Validate component access for API operations
  */
 if (!function_exists('validateComponentAccess')) {
-    function validateComponentAccess($pdo, $componentType, $action, $componentId = null) {
+    function validateComponentAccess($pdo, $action, $componentType = null, $componentId = null) {
         safeSessionStart();
         if (!isset($_SESSION['id'])) {
             send_json_response(0, 0, 401, "Authentication required");
             exit;
         }
         
-        if (!class_exists('ACL')) {
+        if (!class_exists('SimpleACL')) {
             // If ACL is not available, only allow read operations
             if ($action !== 'read') {
                 send_json_response(1, 0, 403, "Access denied. ACL system not available.", [
-                    'required_permission' => $componentType . '.' . $action,
-                    'component_type' => $componentType,
-                    'action' => $action
+                    'required_permission' => $action,
+                    'component_type' => $componentType
                 ]);
                 exit;
             }
             return true;
         }
         
-        $acl = new ACL($pdo, $_SESSION['id']);
+        $acl = new SimpleACL($pdo, $_SESSION['id']);
         
-        // Get component UUID if component ID is provided
-        $resourceId = null;
-        if ($componentId && in_array($componentType, ['cpu', 'ram', 'storage', 'motherboard', 'nic', 'caddy'])) {
-            try {
-                $tableMap = [
-                    'cpu' => 'cpuinventory',
-                    'ram' => 'raminventory',
-                    'storage' => 'storageinventory',
-                    'motherboard' => 'motherboardinventory',
-                    'nic' => 'nicinventory',
-                    'caddy' => 'caddyinventory'
-                ];
-                
-                if (isset($tableMap[$componentType])) {
-                    $stmt = $pdo->prepare("SELECT UUID FROM {$tableMap[$componentType]} WHERE ID = :id");
-                    $stmt->bindParam(':id', $componentId, PDO::PARAM_INT);
-                    $stmt->execute();
-                    $component = $stmt->fetch();
-                    if ($component) {
-                        $resourceId = $component['UUID'];
-                    }
-                }
-            } catch (Exception $e) {
-                error_log("Error getting component UUID: " . $e->getMessage());
-            }
-        }
-        
-        if (!$acl->hasPermission($componentType, $action, $resourceId)) {
+        if (!$acl->hasPermission($action, $componentType)) {
             send_json_response(1, 0, 403, "Access denied. Insufficient permissions for this operation.", [
-                'required_permission' => $componentType . '.' . $action,
+                'required_permission' => $action,
                 'component_type' => $componentType,
-                'action' => $action
+                'user_role' => $acl->getUserRole()
             ]);
             exit;
         }
@@ -481,37 +396,19 @@ if (!function_exists('validateComponentAccess')) {
  * Log significant actions for audit trail
  */
 if (!function_exists('logAction')) {
-    function logAction($pdo, $action, $resourceType = null, $resourceId = null, $details = null) {
+    function logAction($pdo, $action, $componentType = null, $componentId = null, $oldValues = null, $newValues = null) {
         safeSessionStart();
         if (!isset($_SESSION['id'])) {
             return;
         }
         
+        if (!class_exists('SimpleACL')) {
+            return; // Skip logging if ACL not available
+        }
+        
         try {
-            // Check if acl_audit_log table exists, if not skip logging
-            $stmt = $pdo->prepare("SHOW TABLES LIKE 'acl_audit_log'");
-            $stmt->execute();
-            if ($stmt->rowCount() == 0) {
-                return; // Table doesn't exist, skip logging
-            }
-            
-            $stmt = $pdo->prepare("
-                INSERT INTO acl_audit_log 
-                (user_id, action, resource_type, resource_id, result, ip_address, user_agent)
-                VALUES (:user_id, :action, :resource_type, :resource_id, 'granted', :ip_address, :user_agent)
-            ");
-            
-            $ipAddress = getClientIPAddress();
-            $userAgent = $_SERVER['HTTP_USER_AGENT'] ?? null;
-            
-            $stmt->bindParam(':user_id', $_SESSION['id'], PDO::PARAM_INT);
-            $stmt->bindParam(':action', $action);
-            $stmt->bindParam(':resource_type', $resourceType);
-            $stmt->bindParam(':resource_id', $resourceId);
-            $stmt->bindParam(':ip_address', $ipAddress);
-            $stmt->bindParam(':user_agent', $userAgent);
-            
-            $stmt->execute();
+            $acl = new SimpleACL($pdo, $_SESSION['id']);
+            $acl->logAction($action, $componentType, $componentId, $oldValues, $newValues);
         } catch (Exception $e) {
             error_log("Error logging action: " . $e->getMessage());
         }
@@ -532,109 +429,33 @@ if (!function_exists('getUserPermissionsSummary')) {
             return null;
         }
         
-        if (!class_exists('ACL')) {
+        if (!class_exists('SimpleACL')) {
             // Return basic permissions if ACL is not available
             return [
                 'user_id' => $userId,
-                'roles' => [],
-                'permissions' => [],
-                'is_super_admin' => false,
+                'role' => 'viewer',
+                'role_display_name' => 'Viewer/User',
+                'permissions' => ['Read', 'Export'],
+                'level' => 1,
                 'component_access' => [
-                    'cpu' => ['read' => true, 'create' => false, 'update' => false, 'delete' => false, 'export' => false],
-                    'ram' => ['read' => true, 'create' => false, 'update' => false, 'delete' => false, 'export' => false],
-                    'storage' => ['read' => true, 'create' => false, 'update' => false, 'delete' => false, 'export' => false],
-                    'motherboard' => ['read' => true, 'create' => false, 'update' => false, 'delete' => false, 'export' => false],
-                    'nic' => ['read' => true, 'create' => false, 'update' => false, 'delete' => false, 'export' => false],
-                    'caddy' => ['read' => true, 'create' => false, 'update' => false, 'delete' => false, 'export' => false]
+                    'cpu' => ['read' => true, 'create' => false, 'update' => false, 'delete' => false, 'export' => true],
+                    'ram' => ['read' => true, 'create' => false, 'update' => false, 'delete' => false, 'export' => true],
+                    'storage' => ['read' => true, 'create' => false, 'update' => false, 'delete' => false, 'export' => true],
+                    'motherboard' => ['read' => true, 'create' => false, 'update' => false, 'delete' => false, 'export' => true],
+                    'nic' => ['read' => true, 'create' => false, 'update' => false, 'delete' => false, 'export' => true],
+                    'caddy' => ['read' => true, 'create' => false, 'update' => false, 'delete' => false, 'export' => true]
                 ],
                 'system_access' => [
-                    'users' => ['read' => false, 'create' => false, 'update' => false, 'delete' => false, 'manage_roles' => false],
-                    'roles' => ['read' => false, 'create' => false, 'update' => false, 'delete' => false, 'assign_permissions' => false],
-                    'system' => ['admin' => false, 'settings' => false, 'backup' => false],
-                    'reports' => ['read' => false, 'create' => false, 'export' => false]
+                    'can_manage_users' => false,
+                    'can_view_audit_log' => false,
+                    'can_manage_roles' => false
                 ]
             ];
         }
         
         try {
-            $acl = new ACL($pdo, $userId);
-            
-            return [
-                'user_id' => $userId,
-                'roles' => $acl->getUserRoles(),
-                'permissions' => $acl->getUserPermissions(),
-                'is_super_admin' => $acl->isSuperAdmin(),
-                'component_access' => [
-                    'cpu' => [
-                        'read' => $acl->hasPermission('cpu', 'read'),
-                        'create' => $acl->hasPermission('cpu', 'create'),
-                        'update' => $acl->hasPermission('cpu', 'update'),
-                        'delete' => $acl->hasPermission('cpu', 'delete'),
-                        'export' => $acl->hasPermission('cpu', 'export')
-                    ],
-                    'ram' => [
-                        'read' => $acl->hasPermission('ram', 'read'),
-                        'create' => $acl->hasPermission('ram', 'create'),
-                        'update' => $acl->hasPermission('ram', 'update'),
-                        'delete' => $acl->hasPermission('ram', 'delete'),
-                        'export' => $acl->hasPermission('ram', 'export')
-                    ],
-                    'storage' => [
-                        'read' => $acl->hasPermission('storage', 'read'),
-                        'create' => $acl->hasPermission('storage', 'create'),
-                        'update' => $acl->hasPermission('storage', 'update'),
-                        'delete' => $acl->hasPermission('storage', 'delete'),
-                        'export' => $acl->hasPermission('storage', 'export')
-                    ],
-                    'motherboard' => [
-                        'read' => $acl->hasPermission('motherboard', 'read'),
-                        'create' => $acl->hasPermission('motherboard', 'create'),
-                        'update' => $acl->hasPermission('motherboard', 'update'),
-                        'delete' => $acl->hasPermission('motherboard', 'delete'),
-                        'export' => $acl->hasPermission('motherboard', 'export')
-                    ],
-                    'nic' => [
-                        'read' => $acl->hasPermission('nic', 'read'),
-                        'create' => $acl->hasPermission('nic', 'create'),
-                        'update' => $acl->hasPermission('nic', 'update'),
-                        'delete' => $acl->hasPermission('nic', 'delete'),
-                        'export' => $acl->hasPermission('nic', 'export')
-                    ],
-                    'caddy' => [
-                        'read' => $acl->hasPermission('caddy', 'read'),
-                        'create' => $acl->hasPermission('caddy', 'create'),
-                        'update' => $acl->hasPermission('caddy', 'update'),
-                        'delete' => $acl->hasPermission('caddy', 'delete'),
-                        'export' => $acl->hasPermission('caddy', 'export')
-                    ]
-                ],
-                'system_access' => [
-                    'users' => [
-                        'read' => $acl->hasPermission('users', 'read'),
-                        'create' => $acl->hasPermission('users', 'create'),
-                        'update' => $acl->hasPermission('users', 'update'),
-                        'delete' => $acl->hasPermission('users', 'delete'),
-                        'manage_roles' => $acl->hasPermission('users', 'manage_roles')
-                    ],
-                    'roles' => [
-                        'read' => $acl->hasPermission('roles', 'read'),
-                        'create' => $acl->hasPermission('roles', 'create'),
-                        'update' => $acl->hasPermission('roles', 'update'),
-                        'delete' => $acl->hasPermission('roles', 'delete'),
-                        'assign_permissions' => $acl->hasPermission('roles', 'assign_permissions')
-                    ],
-                    'system' => [
-                        'admin' => $acl->hasPermission('system', 'admin'),
-                        'settings' => $acl->hasPermission('system', 'settings'),
-                        'backup' => $acl->hasPermission('system', 'backup')
-                    ],
-                    'reports' => [
-                        'read' => $acl->hasPermission('reports', 'read'),
-                        'create' => $acl->hasPermission('reports', 'create'),
-                        'export' => $acl->hasPermission('reports', 'export')
-                    ]
-                ]
-            ];
+            $acl = new SimpleACL($pdo, $userId);
+            return $acl->getPermissionsSummary();
         } catch (Exception $e) {
             error_log("Error getting user permissions summary: " . $e->getMessage());
             return null;
@@ -643,41 +464,254 @@ if (!function_exists('getUserPermissionsSummary')) {
 }
 
 /**
- * Check if user can perform bulk operations
+ * Get component counts with ACL filtering
  */
-if (!function_exists('canPerformBulkOperation')) {
-    function canPerformBulkOperation($pdo, $componentType, $action, $componentIds = []) {
-        safeSessionStart();
-        if (!isset($_SESSION['id'])) {
-            return false;
+if (!function_exists('getComponentCountsWithACL')) {
+    function getComponentCountsWithACL($pdo, $statusFilter = null) {
+        $counts = [
+            'cpu' => 0, 'ram' => 0, 'storage' => 0,
+            'motherboard' => 0, 'nic' => 0, 'caddy' => 0, 'total' => 0
+        ];
+        
+        $tables = [
+            'cpu' => 'cpuinventory', 'ram' => 'raminventory', 'storage' => 'storageinventory',
+            'motherboard' => 'motherboardinventory', 'nic' => 'nicinventory', 'caddy' => 'caddyinventory'
+        ];
+        
+        // Check if user can read components
+        if (!hasPermission($pdo, 'read')) {
+            return $counts; // Return zero counts if no read permission
         }
         
-        if (!class_exists('ACL')) {
-            return ($action === 'read'); // Only allow read operations if ACL not available
-        }
-        
-        $acl = new ACL($pdo, $_SESSION['id']);
-        
-        // Super admin can do anything
-        if ($acl->isSuperAdmin()) {
-            return true;
-        }
-        
-        // Check general permission first
-        if (!$acl->hasPermission($componentType, $action)) {
-            return false;
-        }
-        
-        // If specific component IDs provided, check each one
-        if (!empty($componentIds)) {
-            foreach ($componentIds as $componentId) {
-                // Get component UUID and check specific permission
-                // Implementation would be similar to validateComponentAccess
-                // For now, we'll assume general permission is sufficient
+        foreach ($tables as $key => $table) {
+            try {
+                $query = "SELECT COUNT(*) as count FROM $table";
+                if ($statusFilter !== null && $statusFilter !== 'all') {
+                    $query .= " WHERE Status = :status";
+                }
+                
+                $stmt = $pdo->prepare($query);
+                if ($statusFilter !== null && $statusFilter !== 'all') {
+                    $stmt->bindParam(':status', $statusFilter, PDO::PARAM_INT);
+                }
+                $stmt->execute();
+                $result = $stmt->fetch();
+                $counts[$key] = (int)$result['count'];
+                $counts['total'] += (int)$result['count'];
+            } catch (PDOException $e) {
+                error_log("Error counting $key: " . $e->getMessage());
             }
         }
         
-        return true;
+        return $counts;
+    }
+}
+
+/**
+ * Get recent activity with ACL filtering
+ */
+if (!function_exists('getRecentActivityWithACL')) {
+    function getRecentActivityWithACL($pdo, $limit = 10) {
+        // Check if user can read components
+        if (!hasPermission($pdo, 'read')) {
+            return [];
+        }
+        
+        try {
+            $activities = [];
+            $tables = [
+                'cpu' => 'cpuinventory', 'ram' => 'raminventory', 'storage' => 'storageinventory',
+                'motherboard' => 'motherboardinventory', 'nic' => 'nicinventory', 'caddy' => 'caddyinventory'
+            ];
+            
+            foreach ($tables as $type => $table) {
+                $stmt = $pdo->prepare("
+                    SELECT ID, SerialNumber, Status, UpdatedAt, '$type' as component_type
+                    FROM $table ORDER BY UpdatedAt DESC LIMIT $limit
+                ");
+                $stmt->execute();
+                $results = $stmt->fetchAll();
+                
+                foreach ($results as $result) {
+                    $activities[] = [
+                        'id' => $result['ID'],
+                        'component_type' => $result['component_type'],
+                        'serial_number' => $result['SerialNumber'],
+                        'status' => $result['Status'],
+                        'updated_at' => $result['UpdatedAt'],
+                        'action' => 'Updated'
+                    ];
+                }
+            }
+            
+            usort($activities, function($a, $b) {
+                return strtotime($b['updated_at']) - strtotime($a['updated_at']);
+            });
+            
+            return array_slice($activities, 0, $limit);
+            
+        } catch (PDOException $e) {
+            error_log("Error getting recent activity: " . $e->getMessage());
+            return [];
+        }
+    }
+}
+
+/**
+ * Get warranty alerts with ACL filtering
+ */
+if (!function_exists('getWarrantyAlertsWithACL')) {
+    function getWarrantyAlertsWithACL($pdo, $days = 90) {
+        // Check if user can read components
+        if (!hasPermission($pdo, 'read')) {
+            return [];
+        }
+        
+        try {
+            $alerts = [];
+            $tables = [
+                'cpu' => 'cpuinventory', 'ram' => 'raminventory', 'storage' => 'storageinventory',
+                'motherboard' => 'motherboardinventory', 'nic' => 'nicinventory', 'caddy' => 'caddyinventory'
+            ];
+            
+            $alertDate = date('Y-m-d', strtotime("+$days days"));
+            
+            foreach ($tables as $type => $table) {
+                $stmt = $pdo->prepare("
+                    SELECT ID, SerialNumber, WarrantyEndDate, '$type' as component_type
+                    FROM $table 
+                    WHERE WarrantyEndDate IS NOT NULL 
+                    AND WarrantyEndDate <= :alert_date
+                    AND Status != 0
+                    ORDER BY WarrantyEndDate ASC
+                ");
+                $stmt->bindParam(':alert_date', $alertDate);
+                $stmt->execute();
+                $results = $stmt->fetchAll();
+                
+                foreach ($results as $result) {
+                    $daysUntilExpiry = floor((strtotime($result['WarrantyEndDate']) - time()) / (60 * 60 * 24));
+                    $alerts[] = [
+                        'id' => $result['ID'],
+                        'component_type' => $result['component_type'],
+                        'serial_number' => $result['SerialNumber'],
+                        'warranty_end_date' => $result['WarrantyEndDate'],
+                        'days_until_expiry' => $daysUntilExpiry,
+                        'severity' => $daysUntilExpiry <= 30 ? 'high' : ($daysUntilExpiry <= 60 ? 'medium' : 'low')
+                    ];
+                }
+            }
+            
+            return $alerts;
+            
+        } catch (PDOException $e) {
+            error_log("Error getting warranty alerts: " . $e->getMessage());
+            return [];
+        }
+    }
+}
+
+/**
+ * Search components with ACL filtering
+ */
+if (!function_exists('searchComponentsWithACL')) {
+    function searchComponentsWithACL($pdo, $query, $componentType = 'all', $limit = 20) {
+        // Check if user can read components
+        if (!hasPermission($pdo, 'read')) {
+            return [
+                'components' => [],
+                'total_found' => 0,
+                'accessible_count' => 0
+            ];
+        }
+        
+        $results = [];
+        $totalFound = 0;
+        
+        $tableMap = [
+            'cpu' => 'cpuinventory',
+            'ram' => 'raminventory', 
+            'storage' => 'storageinventory',
+            'motherboard' => 'motherboardinventory',
+            'nic' => 'nicinventory',
+            'caddy' => 'caddyinventory'
+        ];
+        
+        $searchTables = [];
+        if ($componentType === 'all') {
+            $searchTables = $tableMap;
+        } elseif (isset($tableMap[$componentType])) {
+            $searchTables = [$componentType => $tableMap[$componentType]];
+        }
+        
+        foreach ($searchTables as $type => $table) {
+            try {
+                $searchQuery = "
+                    SELECT ID, UUID, SerialNumber, Status, ServerUUID, Location, RackPosition,
+                           PurchaseDate, WarrantyEndDate, Flag, Notes, CreatedAt, UpdatedAt,
+                           '$type' as component_type
+                    FROM $table 
+                    WHERE SerialNumber LIKE :query 
+                       OR UUID LIKE :query 
+                       OR Location LIKE :query 
+                       OR RackPosition LIKE :query 
+                       OR Flag LIKE :query 
+                       OR Notes LIKE :query
+                ";
+                
+                // Add NIC-specific search fields
+                if ($type === 'nic') {
+                    $searchQuery = "
+                        SELECT ID, UUID, SerialNumber, Status, ServerUUID, Location, RackPosition,
+                               MacAddress, IPAddress, NetworkName, PurchaseDate, WarrantyEndDate, 
+                               Flag, Notes, CreatedAt, UpdatedAt, '$type' as component_type
+                        FROM $table 
+                        WHERE SerialNumber LIKE :query 
+                           OR UUID LIKE :query 
+                           OR Location LIKE :query 
+                           OR RackPosition LIKE :query 
+                           OR Flag LIKE :query 
+                           OR Notes LIKE :query
+                           OR MacAddress LIKE :query 
+                           OR IPAddress LIKE :query 
+                           OR NetworkName LIKE :query
+                    ";
+                }
+                
+                $searchQuery .= " ORDER BY CreatedAt DESC LIMIT :limit";
+                
+                $stmt = $pdo->prepare($searchQuery);
+                $searchTerm = '%' . $query . '%';
+                $stmt->bindParam(':query', $searchTerm);
+                $stmt->bindParam(':limit', $limit, PDO::PARAM_INT);
+                $stmt->execute();
+                
+                $componentResults = $stmt->fetchAll();
+                $totalFound += count($componentResults);
+                $results = array_merge($results, $componentResults);
+                
+            } catch (PDOException $e) {
+                error_log("Search error for $type: " . $e->getMessage());
+            }
+        }
+        
+        // Sort results by relevance and limit
+        usort($results, function($a, $b) use ($query) {
+            $aExact = (stripos($a['SerialNumber'], $query) !== false) ? 1 : 0;
+            $bExact = (stripos($b['SerialNumber'], $query) !== false) ? 1 : 0;
+            
+            if ($aExact !== $bExact) {
+                return $bExact - $aExact;
+            }
+            
+            return strtotime($b['UpdatedAt']) - strtotime($a['UpdatedAt']);
+        });
+        
+        return [
+            'components' => array_slice($results, 0, $limit),
+            'total_found' => $totalFound,
+            'accessible_count' => $totalFound
+        ];
     }
 }
 

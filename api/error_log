@@ -134,3 +134,61 @@
 [05-Jun-2025 11:24:03 UTC] Login successful for user: a
 [05-Jun-2025 11:25:57 UTC] API called with action: acl-get_user_permissions
 [05-Jun-2025 11:25:57 UTC] Module: acl, Operation: get_user_permissions
+[05-Jun-2025 22:19:01 UTC] PHP Warning:  require_once(/home/shubhams/public_html/bdc_ims/api/../includes/SimpleACL.php): Failed to open stream: No such file or directory in /home/shubhams/public_html/bdc_ims/api/api.php on line 15
+[05-Jun-2025 22:19:01 UTC] PHP Fatal error:  Uncaught Error: Failed opening required '/home/shubhams/public_html/bdc_ims/api/../includes/SimpleACL.php' (include_path='.:/opt/cpanel/ea-php81/root/usr/share/pear') in /home/shubhams/public_html/bdc_ims/api/api.php:15
+Stack trace:
+#0 {main}
+  thrown in /home/shubhams/public_html/bdc_ims/api/api.php on line 15
+[05-Jun-2025 22:24:06 UTC] API called with action: auth-check_session
+[05-Jun-2025 22:24:06 UTC] Module: auth, Operation: check_session
+[05-Jun-2025 22:24:06 UTC] Auth operation: check_session
+[05-Jun-2025 22:24:12 UTC] API called with action: auth-login
+[05-Jun-2025 22:24:12 UTC] Module: auth, Operation: login
+[05-Jun-2025 22:24:12 UTC] Auth operation: login
+[05-Jun-2025 22:24:12 UTC] Login attempt for username: a
+[05-Jun-2025 22:24:12 UTC] Login successful for user: a with role: viewer
+[05-Jun-2025 22:24:12 UTC] PHP Fatal error:  Uncaught Error: PDOStatement::bindParam(): Argument #2 ($var) cannot be passed by reference in /home/shubhams/public_html/bdc_ims/includes/SimpleACL.php:247
+Stack trace:
+#0 /home/shubhams/public_html/bdc_ims/includes/BaseFunctions.php(411): SimpleACL->logAction('User login', 'auth', '25', NULL, NULL)
+#1 /home/shubhams/public_html/bdc_ims/api/api.php(135): logAction(Object(PDO), 'User login', 'auth', 25)
+#2 /home/shubhams/public_html/bdc_ims/api/api.php(62): handleAuthOperations('login')
+#3 {main}
+  thrown in /home/shubhams/public_html/bdc_ims/includes/SimpleACL.php on line 247
+[05-Jun-2025 22:26:48 UTC] API called with action: auth-login
+[05-Jun-2025 22:26:48 UTC] Module: auth, Operation: login
+[05-Jun-2025 22:26:48 UTC] Auth operation: login
+[05-Jun-2025 22:26:48 UTC] Login attempt for username: a
+[05-Jun-2025 22:26:48 UTC] Login successful for user: a with role: viewer
+[05-Jun-2025 22:27:29 UTC] API called with action: auth-check_session
+[05-Jun-2025 22:27:29 UTC] Module: auth, Operation: check_session
+[05-Jun-2025 22:27:29 UTC] Auth operation: check_session
+[05-Jun-2025 22:28:03 UTC] API called with action: auth-check_session
+[05-Jun-2025 22:28:03 UTC] Module: auth, Operation: check_session
+[05-Jun-2025 22:28:03 UTC] Auth operation: check_session
+[07-Jun-2025 21:26:55 UTC] API called with action: cpu-get
+[07-Jun-2025 21:26:55 UTC] Module: cpu, Operation: get
+[07-Jun-2025 21:27:01 UTC] API called with action: auth-login
+[07-Jun-2025 21:27:01 UTC] Module: auth, Operation: login
+[07-Jun-2025 21:27:01 UTC] Auth operation: login
+[07-Jun-2025 21:27:01 UTC] Login attempt for username: a
+[07-Jun-2025 21:27:01 UTC] Login successful for user: a with role: viewer
+[07-Jun-2025 21:29:45 UTC] API called with action: cpu-get
+[07-Jun-2025 21:29:45 UTC] Module: cpu, Operation: get
+[07-Jun-2025 21:31:37 UTC] API called with action: cpu-add
+[07-Jun-2025 21:31:37 UTC] Module: cpu, Operation: add
+[10-Jun-2025 07:14:33 UTC] API called with action: auth-login
+[10-Jun-2025 07:14:33 UTC] Module: auth, Operation: login
+[10-Jun-2025 07:14:33 UTC] Auth operation: login
+[10-Jun-2025 07:14:33 UTC] Login attempt for username: a
+[10-Jun-2025 07:14:33 UTC] Login successful for user: a with role: viewer
+[10-Jun-2025 07:15:24 UTC] API called with action: dashboard-get_data
+[10-Jun-2025 07:15:24 UTC] Module: dashboard, Operation: get_data
+[11-Jun-2025 10:23:29 UTC] API called with action: auth-login
+[11-Jun-2025 10:23:29 UTC] Module: auth, Operation: login
+[11-Jun-2025 10:23:29 UTC] Auth operation: login
+[11-Jun-2025 10:23:29 UTC] Login attempt for username: a
+[11-Jun-2025 10:23:29 UTC] Login successful for user: a with role: viewer
+[11-Jun-2025 10:30:28 UTC] API called with action: cpu-list
+[11-Jun-2025 10:30:28 UTC] Module: cpu, Operation: list
+[11-Jun-2025 10:32:21 UTC] API called with action: cpu-add
+[11-Jun-2025 10:32:21 UTC] Module: cpu, Operation: add
