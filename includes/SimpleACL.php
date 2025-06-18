@@ -1,8 +1,5 @@
 <?php
-/**
- * Simple ACL Class for BDC IMS
- * Supports only 3 roles: viewer, manager, admin
- */
+
 
 class SimpleACL {
     private $pdo;
@@ -36,7 +33,7 @@ class SimpleACL {
     }
     
     /**
-     * Get user's role
+     * Get user's role with fallback to legacy ACL field
      */
     public function getUserRole() {
         if ($this->userRole !== null) {
@@ -48,6 +45,7 @@ class SimpleACL {
         }
         
         try {
+            // First try to get role from user_roles table
             $stmt = $this->pdo->prepare("
                 SELECT r.name 
                 FROM user_roles ur 
@@ -58,12 +56,78 @@ class SimpleACL {
             $stmt->execute([$this->userId]);
             
             $result = $stmt->fetch();
-            $this->userRole = $result ? $result['name'] : self::ROLE_VIEWER;
+            if ($result) {
+                $this->userRole = $result['name'];
+                return $this->userRole;
+            }
+            
+            // Fallback to legacy ACL field if no role assignment found
+            $stmt = $this->pdo->prepare("SELECT acl FROM users WHERE id = ?");
+            $stmt->execute([$this->userId]);
+            $user = $stmt->fetch();
+            
+            if ($user) {
+                switch ($user['acl']) {
+                    case 1:
+                        $this->userRole = self::ROLE_ADMIN;
+                        // Auto-assign admin role to user_roles table for future consistency
+                        $this->autoAssignRoleFromLegacyACL($this->userId, self::ROLE_ADMIN);
+                        break;
+                    case 2:
+                        $this->userRole = self::ROLE_MANAGER;
+                        $this->autoAssignRoleFromLegacyACL($this->userId, self::ROLE_MANAGER);
+                        break;
+                    default:
+                        $this->userRole = self::ROLE_VIEWER;
+                        $this->autoAssignRoleFromLegacyACL($this->userId, self::ROLE_VIEWER);
+                        break;
+                }
+            } else {
+                $this->userRole = self::ROLE_VIEWER;
+            }
             
             return $this->userRole;
         } catch (PDOException $e) {
             error_log("SimpleACL Error getting user role: " . $e->getMessage());
             return self::ROLE_VIEWER; // Default to viewer on error
+        }
+    }
+    
+    /**
+     * Auto-assign role from legacy ACL field to user_roles table
+     */
+    private function autoAssignRoleFromLegacyACL($userId, $roleName) {
+        try {
+            // Get role ID
+            $stmt = $this->pdo->prepare("SELECT id FROM roles WHERE name = ?");
+            $stmt->execute([$roleName]);
+            $role = $stmt->fetch();
+            
+            if (!$role) {
+                return false;
+            }
+            
+            // Check if assignment already exists
+            $stmt = $this->pdo->prepare("
+                SELECT id FROM user_roles 
+                WHERE user_id = ? AND role_id = ?
+            ");
+            $stmt->execute([$userId, $role['id']]);
+            
+            if (!$stmt->fetch()) {
+                // Create the assignment
+                $stmt = $this->pdo->prepare("
+                    INSERT INTO user_roles (user_id, role_id, assigned_by, assigned_at) 
+                    VALUES (?, ?, ?, NOW())
+                ");
+                $stmt->execute([$userId, $role['id'], $userId]);
+                error_log("Auto-assigned role '$roleName' to user $userId from legacy ACL");
+            }
+            
+            return true;
+        } catch (PDOException $e) {
+            error_log("SimpleACL Error auto-assigning role: " . $e->getMessage());
+            return false;
         }
     }
     
@@ -166,6 +230,13 @@ class SimpleACL {
     }
     
     /**
+     * Initialize user role (used when creating new users)
+     */
+    public function initializeUserRole($userId, $defaultRole = 'viewer') {
+        return $this->assignRole($userId, $defaultRole, 1); // Assigned by system (user ID 1)
+    }
+    
+    /**
      * Get all available roles
      */
     public function getAllRoles() {
@@ -217,45 +288,36 @@ class SimpleACL {
     }
     
     /**
-     * Log action for audit trail - FIXED VERSION
+     * Log user action for audit trail
      */
     public function logAction($action, $componentType = null, $componentId = null, $oldValues = null, $newValues = null) {
         if (!$this->userId) {
-            return;
+            return false;
         }
         
         try {
-            // Check if table exists first
-            $stmt = $this->pdo->prepare("SHOW TABLES LIKE 'simple_audit_log'");
-            $stmt->execute();
-            if ($stmt->rowCount() == 0) {
-                return; // Table doesn't exist, skip logging
-            }
-            
             $stmt = $this->pdo->prepare("
                 INSERT INTO simple_audit_log 
-                (user_id, action, component_type, component_id, old_values, new_values, ip_address, user_agent)
+                (user_id, action, component_type, component_id, old_values, new_values, ip_address, user_agent) 
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             ");
             
-            $ipAddress = $this->getClientIPAddress();
+            $ipAddress = $_SERVER['REMOTE_ADDR'] ?? null;
             $userAgent = $_SERVER['HTTP_USER_AGENT'] ?? null;
-            $oldValuesJson = $oldValues ? json_encode($oldValues) : null;
-            $newValuesJson = $newValues ? json_encode($newValues) : null;
             
-            // Use execute with array instead of bindParam to avoid reference issues
-            $stmt->execute([
+            return $stmt->execute([
                 $this->userId,
                 $action,
                 $componentType,
                 $componentId,
-                $oldValuesJson,
-                $newValuesJson,
+                $oldValues ? json_encode($oldValues) : null,
+                $newValues ? json_encode($newValues) : null,
                 $ipAddress,
                 $userAgent
             ]);
         } catch (PDOException $e) {
             error_log("SimpleACL Error logging action: " . $e->getMessage());
+            return false;
         }
     }
     
@@ -346,20 +408,26 @@ class SimpleACL {
         $role = $this->getUserRole();
         $hierarchy = $this->getRoleHierarchy();
         
+        $componentTypes = ['cpu', 'ram', 'storage', 'motherboard', 'nic', 'caddy'];
+        $componentAccess = [];
+        
+        foreach ($componentTypes as $type) {
+            $componentAccess[$type] = [
+                'read' => $this->hasPermission(self::ACTION_READ),
+                'create' => $this->hasPermission(self::ACTION_CREATE),
+                'update' => $this->hasPermission(self::ACTION_UPDATE),
+                'delete' => $this->hasPermission(self::ACTION_DELETE),
+                'export' => $this->hasPermission(self::ACTION_EXPORT)
+            ];
+        }
+        
         return [
             'user_id' => $this->userId,
             'role' => $role,
             'role_display_name' => $hierarchy[$role]['display_name'] ?? 'Unknown',
             'permissions' => $hierarchy[$role]['permissions'] ?? [],
             'level' => $hierarchy[$role]['level'] ?? 0,
-            'component_access' => [
-                'cpu' => $this->getComponentPermissions(),
-                'ram' => $this->getComponentPermissions(),
-                'storage' => $this->getComponentPermissions(),
-                'motherboard' => $this->getComponentPermissions(),
-                'nic' => $this->getComponentPermissions(),
-                'caddy' => $this->getComponentPermissions()
-            ],
+            'component_access' => $componentAccess,
             'system_access' => [
                 'can_manage_users' => $this->canManageUsers(),
                 'can_view_audit_log' => $this->isAdmin(),
@@ -369,57 +437,177 @@ class SimpleACL {
     }
     
     /**
-     * Get component permissions based on role
+     * Remove role from user
      */
-    private function getComponentPermissions() {
-        return [
-            'read' => $this->hasPermission(self::ACTION_READ),
-            'create' => $this->hasPermission(self::ACTION_CREATE),
-            'update' => $this->hasPermission(self::ACTION_UPDATE),
-            'delete' => $this->hasPermission(self::ACTION_DELETE),
-            'export' => $this->hasPermission(self::ACTION_EXPORT)
-        ];
-    }
-    
-    /**
-     * Get client IP address
-     */
-    private function getClientIPAddress() {
-        if (!empty($_SERVER['HTTP_CLIENT_IP'])) {
-            return $_SERVER['HTTP_CLIENT_IP'];
-        } elseif (!empty($_SERVER['HTTP_X_FORWARDED_FOR'])) {
-            return $_SERVER['HTTP_X_FORWARDED_FOR'];
-        } else {
-            return $_SERVER['REMOTE_ADDR'] ?? 'unknown';
-        }
-    }
-    
-    /**
-     * Initialize default role for new user
-     */
-    public function initializeUserRole($userId, $defaultRole = self::ROLE_VIEWER) {
-        return $this->assignRole($userId, $defaultRole, 1); // Assigned by system admin
-    }
-    
-    /**
-     * Cleanup old audit logs (run periodically)
-     */
-    public function cleanupAuditLog($daysToKeep = 90) {
+    public function removeRole($userId, $roleName) {
         if (!$this->isAdmin()) {
             return false;
         }
         
         try {
             $stmt = $this->pdo->prepare("
-                DELETE FROM simple_audit_log 
-                WHERE created_at < DATE_SUB(NOW(), INTERVAL ? DAY)
+                DELETE ur FROM user_roles ur
+                JOIN roles r ON ur.role_id = r.id
+                WHERE ur.user_id = ? AND r.name = ?
             ");
-            $stmt->execute([$daysToKeep]);
-            return true;
+            $result = $stmt->execute([$userId, $roleName]);
+            
+            if ($result && $userId == $this->userId) {
+                $this->userRole = null; // Clear cache
+            }
+            
+            return $result;
         } catch (PDOException $e) {
-            error_log("SimpleACL Error cleaning up audit log: " . $e->getMessage());
+            error_log("SimpleACL Error removing role: " . $e->getMessage());
             return false;
         }
+    }
+    
+    /**
+     * Check if role exists
+     */
+    public function roleExists($roleName) {
+        try {
+            $stmt = $this->pdo->prepare("SELECT COUNT(*) FROM roles WHERE name = ?");
+            $stmt->execute([$roleName]);
+            return $stmt->fetchColumn() > 0;
+        } catch (PDOException $e) {
+            error_log("SimpleACL Error checking role existence: " . $e->getMessage());
+            return false;
+        }
+    }
+    
+    /**
+     * Create a new role (admin only)
+     */
+    public function createRole($name, $displayName, $description = null) {
+        if (!$this->isAdmin()) {
+            return false;
+        }
+        
+        try {
+            $stmt = $this->pdo->prepare("
+                INSERT INTO roles (name, display_name, description) 
+                VALUES (?, ?, ?)
+            ");
+            return $stmt->execute([$name, $displayName, $description]);
+        } catch (PDOException $e) {
+            error_log("SimpleACL Error creating role: " . $e->getMessage());
+            return false;
+        }
+    }
+    
+    /**
+     * Delete a role (admin only, cannot delete system roles)
+     */
+    public function deleteRole($roleName) {
+        if (!$this->isAdmin()) {
+            return false;
+        }
+        
+        // Prevent deletion of system roles
+        if (in_array($roleName, [self::ROLE_ADMIN, self::ROLE_MANAGER, self::ROLE_VIEWER])) {
+            return false;
+        }
+        
+        try {
+            $this->pdo->beginTransaction();
+            
+            // Remove all user assignments for this role
+            $stmt = $this->pdo->prepare("
+                DELETE ur FROM user_roles ur
+                JOIN roles r ON ur.role_id = r.id
+                WHERE r.name = ?
+            ");
+            $stmt->execute([$roleName]);
+            
+            // Delete the role
+            $stmt = $this->pdo->prepare("DELETE FROM roles WHERE name = ?");
+            $result = $stmt->execute([$roleName]);
+            
+            $this->pdo->commit();
+            return $result;
+        } catch (PDOException $e) {
+            $this->pdo->rollBack();
+            error_log("SimpleACL Error deleting role: " . $e->getMessage());
+            return false;
+        }
+    }
+    
+    /**
+     * Get user count for each role
+     */
+    public function getRoleStats() {
+        try {
+            $stmt = $this->pdo->query("
+                SELECT 
+                    r.name,
+                    r.display_name,
+                    COUNT(ur.id) as user_count
+                FROM roles r
+                LEFT JOIN user_roles ur ON r.id = ur.role_id
+                GROUP BY r.id
+                ORDER BY r.name
+            ");
+            return $stmt->fetchAll(PDO::FETCH_ASSOC);
+        } catch (PDOException $e) {
+            error_log("SimpleACL Error getting role stats: " . $e->getMessage());
+            return [];
+        }
+    }
+    
+    /**
+     * Clear user role cache
+     */
+    public function clearCache() {
+        $this->userRole = null;
+    }
+    
+    /**
+     * Get current user info with role
+     */
+    public function getCurrentUserInfo() {
+        if (!$this->userId) {
+            return null;
+        }
+        
+        try {
+            $stmt = $this->pdo->prepare("
+                SELECT 
+                    u.id, u.username, u.email, u.firstname, u.lastname,
+                    r.name as role_name, r.display_name as role_display_name
+                FROM users u 
+                LEFT JOIN user_roles ur ON u.id = ur.user_id 
+                LEFT JOIN roles r ON ur.role_id = r.id 
+                WHERE u.id = ?
+            ");
+            $stmt->execute([$this->userId]);
+            $user = $stmt->fetch(PDO::FETCH_ASSOC);
+            
+            if ($user) {
+                $user['is_admin'] = $this->isAdmin();
+                $user['is_manager'] = $this->isManagerOrAdmin();
+                $user['permissions'] = $this->getPermissionsSummary();
+            }
+            
+            return $user;
+        } catch (PDOException $e) {
+            error_log("SimpleACL Error getting current user info: " . $e->getMessage());
+            return null;
+        }
+    }
+    
+    /**
+     * Validate permission for specific action and component
+     */
+    public function validatePermission($action, $componentType = null, $throwException = false) {
+        $hasPermission = $this->hasPermission($action, $componentType);
+        
+        if (!$hasPermission && $throwException) {
+            throw new Exception("Access denied. Insufficient permissions for action: $action");
+        }
+        
+        return $hasPermission;
     }
 }
 ?>

@@ -192,3 +192,50 @@ Stack trace:
 [11-Jun-2025 10:30:28 UTC] Module: cpu, Operation: list
 [11-Jun-2025 10:32:21 UTC] API called with action: cpu-add
 [11-Jun-2025 10:32:21 UTC] Module: cpu, Operation: add
+[18-Jun-2025 11:02:07 UTC] API called with action: auth-login
+[18-Jun-2025 11:02:07 UTC] Module: auth, Operation: login
+[18-Jun-2025 11:02:07 UTC] Auth operation: login
+[18-Jun-2025 11:02:07 UTC] Login attempt for username: admin@example.com
+[18-Jun-2025 11:02:07 UTC] User not found: admin@example.com
+[18-Jun-2025 11:02:24 UTC] API called with action: auth-login
+[18-Jun-2025 11:02:24 UTC] Module: auth, Operation: login
+[18-Jun-2025 11:02:24 UTC] Auth operation: login
+[18-Jun-2025 11:02:24 UTC] Login attempt for username: admin
+[18-Jun-2025 11:02:24 UTC] Login successful for user: admin with role: viewer
+[18-Jun-2025 11:04:27 UTC] API called with action: auth-login
+[18-Jun-2025 11:04:27 UTC] Module: auth, Operation: login
+[18-Jun-2025 11:04:27 UTC] Auth operation: login
+[18-Jun-2025 11:04:27 UTC] Login attempt for username: johnadmin
+[18-Jun-2025 11:04:27 UTC] Login successful for user: johnadmin with role: viewer
+[18-Jun-2025 11:06:05 UTC] API called with action: acl-get_user_permissions
+[18-Jun-2025 11:06:05 UTC] Module: acl, Operation: get_user_permissions
+[18-Jun-2025 11:06:31 UTC] API called with action: acl-get_user_permissions
+[18-Jun-2025 11:06:31 UTC] Module: acl, Operation: get_user_permissions
+[18-Jun-2025 11:06:49 UTC] API called with action: auth-check_session
+[18-Jun-2025 11:06:49 UTC] Module: auth, Operation: check_session
+[18-Jun-2025 11:06:49 UTC] Auth operation: check_session
+[18-Jun-2025 11:07:39 UTC] API called with action: cpu-add
+[18-Jun-2025 11:07:39 UTC] Module: cpu, Operation: add
+[18-Jun-2025 11:37:34 UTC] API called with action: auth-login
+[18-Jun-2025 11:37:34 UTC] Module: auth, Operation: login
+[18-Jun-2025 11:37:34 UTC] Auth operation: login
+[18-Jun-2025 11:37:34 UTC] Login attempt for username: johnadmin
+[18-Jun-2025 11:37:34 UTC] Auto-assigned role 'admin' to user 37 from legacy ACL
+[18-Jun-2025 11:37:34 UTC] Login successful for user: johnadmin with role: admin
+[18-Jun-2025 11:37:55 UTC] API called with action: auth-login
+[18-Jun-2025 11:37:55 UTC] Module: auth, Operation: login
+[18-Jun-2025 11:37:55 UTC] Auth operation: login
+[18-Jun-2025 11:37:55 UTC] Login attempt for username: a
+[18-Jun-2025 11:37:55 UTC] Auto-assigned role 'viewer' to user 25 from legacy ACL
+[18-Jun-2025 11:37:55 UTC] Login successful for user: a with role: viewer
+[18-Jun-2025 11:38:04 UTC] API called with action: cpu-add
+[18-Jun-2025 11:38:04 UTC] Module: cpu, Operation: add
+[18-Jun-2025 11:38:04 UTC] PHP Notice:  session_start(): Ignoring session_start() because a session is already active in /home/shubhams/public_html/bdc_ims/api/api.php on line 702
+[18-Jun-2025 11:38:26 UTC] API called with action: auth-login
+[18-Jun-2025 11:38:26 UTC] Module: auth, Operation: login
+[18-Jun-2025 11:38:26 UTC] Auth operation: login
+[18-Jun-2025 11:38:26 UTC] Login attempt for username: johnadmin
+[18-Jun-2025 11:38:26 UTC] Login successful for user: johnadmin with role: admin
+[18-Jun-2025 11:39:47 UTC] API called with action: cpu-add
+[18-Jun-2025 11:39:47 UTC] Module: cpu, Operation: add
+[18-Jun-2025 11:39:47 UTC] PHP Notice:  session_start(): Ignoring session_start() because a session is already active in /home/shubhams/public_html/bdc_ims/api/api.php on line 702
