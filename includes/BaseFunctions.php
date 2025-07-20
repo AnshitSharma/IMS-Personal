@@ -1,23 +1,14 @@
 <?php
+/**
+ * Base Functions for BDC IMS
+ * Enhanced with proper ACL integration
+ */
 
-if (!isset($pdo)) {
-    require_once(__DIR__ . '/db_config.php');
-}
-
-// Include Simple ACL class
-if (file_exists(__DIR__ . '/SimpleACL.php') && !class_exists('SimpleACL')) {
-    require_once(__DIR__ . '/SimpleACL.php');
-}
-
-// Only include config if not already included
-if (!defined('MAIN_SITE_URL')) {
-    if (file_exists(__DIR__ . '/config.php')) {
-        require_once(__DIR__ . '/config.php');
-    }
-}
+// Include the SimpleACL class
+require_once __DIR__ . '/SimpleACL.php';
 
 /**
- * Safe session start - only starts if not already active
+ * Safe session start to avoid warnings
  */
 if (!function_exists('safeSessionStart')) {
     function safeSessionStart() {
@@ -28,36 +19,55 @@ if (!function_exists('safeSessionStart')) {
 }
 
 /**
- * Check if user is logged in
+ * Enhanced database connection with error handling
+ */
+if (!function_exists('getDatabaseConnection')) {
+    function getDatabaseConnection() {
+        try {
+            $dsn = "mysql:host=" . DB_HOST . ";dbname=" . DB_NAME . ";charset=utf8mb4";
+            $options = [
+                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+                PDO::ATTR_EMULATE_PREPARES => false,
+            ];
+            return new PDO($dsn, DB_USER, DB_PASS, $options);
+        } catch (PDOException $e) {
+            error_log("Database connection failed: " . $e->getMessage());
+            return null;
+        }
+    }
+}
+
+/**
+ * Check if user is logged in (basic check)
  */
 if (!function_exists('isUserLoggedIn')) {
     function isUserLoggedIn($pdo) {
         safeSessionStart();
         
-        if (!isset($_SESSION['id'])) {
+        if (!isset($_SESSION["loggedin"]) || $_SESSION["loggedin"] !== true) {
             return false;
         }
         
-        $user_id = $_SESSION['id'];
+        if (!isset($_SESSION["id"])) {
+            return false;
+        }
         
+        // Verify user still exists in database
         try {
-            $stmt = $pdo->prepare("SELECT * FROM users WHERE id = :user_id");
-            $stmt->bindParam(':user_id', $user_id, PDO::PARAM_INT);
-            $stmt->execute();
-            
+            $stmt = $pdo->prepare("SELECT id, username, email, firstname, lastname FROM users WHERE id = ?");
+            $stmt->execute([$_SESSION["id"]]);
             $user = $stmt->fetch();
             
-            // If user not found, clear session
             if (!$user) {
-                session_unset();
+                // User no longer exists, clear session
                 session_destroy();
                 return false;
             }
             
-            return $user; // Returns the user data
-            
+            return $user;
         } catch (PDOException $e) {
-            error_log("Database error in isUserLoggedIn: " . $e->getMessage());
+            error_log("Error checking user login status: " . $e->getMessage());
             return false;
         }
     }
@@ -125,6 +135,44 @@ if (!function_exists('requirePermission')) {
             ]);
             exit;
         }
+    }
+}
+
+/**
+ * Validate component access for API operations
+ */
+if (!function_exists('validateComponentAccess')) {
+    function validateComponentAccess($pdo, $action, $componentType = null, $componentId = null) {
+        safeSessionStart();
+        if (!isset($_SESSION['id'])) {
+            send_json_response(0, 0, 401, "Authentication required");
+            exit;
+        }
+        
+        if (!class_exists('SimpleACL')) {
+            // If ACL is not available, only allow read operations
+            if ($action !== 'read') {
+                send_json_response(1, 0, 403, "Access denied. ACL system not available.", [
+                    'required_permission' => $action,
+                    'component_type' => $componentType
+                ]);
+                exit;
+            }
+            return true;
+        }
+        
+        $acl = new SimpleACL($pdo, $_SESSION['id']);
+        
+        if (!$acl->hasPermission($action, $componentType)) {
+            send_json_response(1, 0, 403, "Access denied. Insufficient permissions for this operation.", [
+                'required_permission' => $action,
+                'component_type' => $componentType,
+                'user_role' => $acl->getUserRole()
+            ]);
+            exit;
+        }
+        
+        return true;
     }
 }
 
@@ -296,103 +344,6 @@ if (!function_exists('createUserWithACL')) {
 }
 
 /**
- * Get user dashboard data with permission filtering
- */
-if (!function_exists('getDashboardDataWithACL')) {
-    function getDashboardDataWithACL($pdo) {
-        safeSessionStart();
-        if (!isset($_SESSION['id'])) {
-            return null;
-        }
-        
-        $dashboardData = [];
-        $componentTypes = ['cpu', 'ram', 'storage', 'motherboard', 'nic', 'caddy'];
-        
-        if (class_exists('SimpleACL')) {
-            $acl = new SimpleACL($pdo, $_SESSION['id']);
-            
-            foreach ($componentTypes as $type) {
-                $dashboardData['components'][$type] = [
-                    'can_read' => $acl->hasPermission('read'),
-                    'can_create' => $acl->hasPermission('create'),
-                    'can_update' => $acl->hasPermission('update'),
-                    'can_delete' => $acl->hasPermission('delete'),
-                    'can_export' => $acl->hasPermission('export')
-                ];
-            }
-            
-            // System permissions
-            $dashboardData['system'] = [
-                'can_manage_users' => $acl->canManageUsers(),
-                'can_view_audit_log' => $acl->isAdmin(),
-                'is_admin' => $acl->isAdmin(),
-                'is_manager' => $acl->isManagerOrAdmin(),
-                'role' => $acl->getUserRole()
-            ];
-        } else {
-            // Fallback permissions if ACL is not available
-            foreach ($componentTypes as $type) {
-                $dashboardData['components'][$type] = [
-                    'can_read' => true,
-                    'can_create' => false,
-                    'can_update' => false,
-                    'can_delete' => false,
-                    'can_export' => false
-                ];
-            }
-            
-            $dashboardData['system'] = [
-                'can_manage_users' => false,
-                'can_view_audit_log' => false,
-                'is_admin' => false,
-                'is_manager' => false,
-                'role' => 'viewer'
-            ];
-        }
-        
-        return $dashboardData;
-    }
-}
-
-/**
- * Validate component access for API operations
- */
-if (!function_exists('validateComponentAccess')) {
-    function validateComponentAccess($pdo, $action, $componentType = null, $componentId = null) {
-        safeSessionStart();
-        if (!isset($_SESSION['id'])) {
-            send_json_response(0, 0, 401, "Authentication required");
-            exit;
-        }
-        
-        if (!class_exists('SimpleACL')) {
-            // If ACL is not available, only allow read operations
-            if ($action !== 'read') {
-                send_json_response(1, 0, 403, "Access denied. ACL system not available.", [
-                    'required_permission' => $action,
-                    'component_type' => $componentType
-                ]);
-                exit;
-            }
-            return true;
-        }
-        
-        $acl = new SimpleACL($pdo, $_SESSION['id']);
-        
-        if (!$acl->hasPermission($action, $componentType)) {
-            send_json_response(1, 0, 403, "Access denied. Insufficient permissions for this operation.", [
-                'required_permission' => $action,
-                'component_type' => $componentType,
-                'user_role' => $acl->getUserRole()
-            ]);
-            exit;
-        }
-        
-        return true;
-    }
-}
-
-/**
  * Log significant actions for audit trail
  */
 if (!function_exists('logAction')) {
@@ -464,267 +415,194 @@ if (!function_exists('getUserPermissionsSummary')) {
 }
 
 /**
- * Get component counts with ACL filtering
+ * Get user dashboard data with permission filtering
  */
-if (!function_exists('getComponentCountsWithACL')) {
-    function getComponentCountsWithACL($pdo, $statusFilter = null) {
-        $counts = [
-            'cpu' => 0, 'ram' => 0, 'storage' => 0,
-            'motherboard' => 0, 'nic' => 0, 'caddy' => 0, 'total' => 0
-        ];
-        
-        $tables = [
-            'cpu' => 'cpuinventory', 'ram' => 'raminventory', 'storage' => 'storageinventory',
-            'motherboard' => 'motherboardinventory', 'nic' => 'nicinventory', 'caddy' => 'caddyinventory'
-        ];
-        
-        // Check if user can read components
-        if (!hasPermission($pdo, 'read')) {
-            return $counts; // Return zero counts if no read permission
+if (!function_exists('getDashboardDataWithACL')) {
+    function getDashboardDataWithACL($pdo) {
+        safeSessionStart();
+        if (!isset($_SESSION['id'])) {
+            return null;
         }
         
-        foreach ($tables as $key => $table) {
-            try {
-                $query = "SELECT COUNT(*) as count FROM $table";
-                if ($statusFilter !== null && $statusFilter !== 'all') {
-                    $query .= " WHERE Status = :status";
-                }
-                
-                $stmt = $pdo->prepare($query);
-                if ($statusFilter !== null && $statusFilter !== 'all') {
-                    $stmt->bindParam(':status', $statusFilter, PDO::PARAM_INT);
-                }
-                $stmt->execute();
-                $result = $stmt->fetch();
-                $counts[$key] = (int)$result['count'];
-                $counts['total'] += (int)$result['count'];
-            } catch (PDOException $e) {
-                error_log("Error counting $key: " . $e->getMessage());
+        $dashboardData = [];
+        $componentTypes = ['cpu', 'ram', 'storage', 'motherboard', 'nic', 'caddy'];
+        
+        if (class_exists('SimpleACL')) {
+            $acl = new SimpleACL($pdo, $_SESSION['id']);
+            
+            foreach ($componentTypes as $type) {
+                $dashboardData['components'][$type] = [
+                    'can_read' => $acl->hasPermission('read'),
+                    'can_create' => $acl->hasPermission('create'),
+                    'can_update' => $acl->hasPermission('update'),
+                    'can_delete' => $acl->hasPermission('delete'),
+                    'can_export' => $acl->hasPermission('export')
+                ];
             }
+            
+            // System permissions
+            $dashboardData['system'] = [
+                'can_manage_users' => $acl->canManageUsers(),
+                'can_view_audit_log' => $acl->isAdmin(),
+                'is_admin' => $acl->isAdmin(),
+                'is_manager' => $acl->isManagerOrAdmin(),
+                'role' => $acl->getUserRole()
+            ];
+        } else {
+            // Fallback permissions if ACL is not available
+            foreach ($componentTypes as $type) {
+                $dashboardData['components'][$type] = [
+                    'can_read' => true,
+                    'can_create' => false,
+                    'can_update' => false,
+                    'can_delete' => false,
+                    'can_export' => false
+                ];
+            }
+            
+            $dashboardData['system'] = [
+                'can_manage_users' => false,
+                'can_view_audit_log' => false,
+                'is_admin' => false,
+                'is_manager' => false,
+                'role' => 'viewer'
+            ];
         }
         
-        return $counts;
+        return $dashboardData;
     }
 }
 
 /**
- * Get recent activity with ACL filtering
+ * Password hashing wrapper
  */
-if (!function_exists('getRecentActivityWithACL')) {
-    function getRecentActivityWithACL($pdo, $limit = 10) {
-        // Check if user can read components
-        if (!hasPermission($pdo, 'read')) {
-            return [];
-        }
-        
-        try {
-            $activities = [];
-            $tables = [
-                'cpu' => 'cpuinventory', 'ram' => 'raminventory', 'storage' => 'storageinventory',
-                'motherboard' => 'motherboardinventory', 'nic' => 'nicinventory', 'caddy' => 'caddyinventory'
-            ];
-            
-            foreach ($tables as $type => $table) {
-                $stmt = $pdo->prepare("
-                    SELECT ID, SerialNumber, Status, UpdatedAt, '$type' as component_type
-                    FROM $table ORDER BY UpdatedAt DESC LIMIT $limit
-                ");
-                $stmt->execute();
-                $results = $stmt->fetchAll();
-                
-                foreach ($results as $result) {
-                    $activities[] = [
-                        'id' => $result['ID'],
-                        'component_type' => $result['component_type'],
-                        'serial_number' => $result['SerialNumber'],
-                        'status' => $result['Status'],
-                        'updated_at' => $result['UpdatedAt'],
-                        'action' => 'Updated'
-                    ];
+if (!function_exists('hashPassword')) {
+    function hashPassword($password) {
+        return password_hash($password, PASSWORD_DEFAULT);
+    }
+}
+
+/**
+ * Password verification wrapper
+ */
+if (!function_exists('verifyPassword')) {
+    function verifyPassword($password, $hash) {
+        return password_verify($password, $hash);
+    }
+}
+
+/**
+ * Generate secure random token
+ */
+if (!function_exists('generateSecureToken')) {
+    function generateSecureToken($length = 32) {
+        return bin2hex(random_bytes($length));
+    }
+}
+
+/**
+ * Validate email address
+ */
+if (!function_exists('isValidEmail')) {
+    function isValidEmail($email) {
+        return filter_var($email, FILTER_VALIDATE_EMAIL) !== false;
+    }
+}
+
+/**
+ * Sanitize input string
+ */
+if (!function_exists('sanitizeInput')) {
+    function sanitizeInput($input) {
+        return htmlspecialchars(trim($input), ENT_QUOTES, 'UTF-8');
+    }
+}
+
+/**
+ * Get client IP address
+ */
+if (!function_exists('getClientIP')) {
+    function getClientIP() {
+        $ipKeys = ['HTTP_CLIENT_IP', 'HTTP_X_FORWARDED_FOR', 'REMOTE_ADDR'];
+        foreach ($ipKeys as $key) {
+            if (array_key_exists($key, $_SERVER) === true) {
+                foreach (explode(',', $_SERVER[$key]) as $ip) {
+                    $ip = trim($ip);
+                    if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) !== false) {
+                        return $ip;
+                    }
                 }
             }
-            
-            usort($activities, function($a, $b) {
-                return strtotime($b['updated_at']) - strtotime($a['updated_at']);
-            });
-            
-            return array_slice($activities, 0, $limit);
-            
-        } catch (PDOException $e) {
-            error_log("Error getting recent activity: " . $e->getMessage());
-            return [];
+        }
+        return $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+    }
+}
+
+/**
+ * Format bytes to human readable
+ */
+if (!function_exists('formatBytes')) {
+    function formatBytes($bytes, $precision = 2) {
+        $units = array('B', 'KB', 'MB', 'GB', 'TB');
+        
+        for ($i = 0; $bytes > 1024 && $i < count($units) - 1; $i++) {
+            $bytes /= 1024;
+        }
+        
+        return round($bytes, $precision) . ' ' . $units[$i];
+    }
+}
+
+/**
+ * Debug logging helper
+ */
+if (!function_exists('debugLog')) {
+    function debugLog($message, $data = null) {
+        if (defined('DEBUG_MODE') && DEBUG_MODE) {
+            $logEntry = date('Y-m-d H:i:s') . " [DEBUG] " . $message;
+            if ($data) {
+                $logEntry .= " | Data: " . json_encode($data);
+            }
+            error_log($logEntry);
         }
     }
 }
 
 /**
- * Get warranty alerts with ACL filtering
+ * Rate limiting helper
  */
-if (!function_exists('getWarrantyAlertsWithACL')) {
-    function getWarrantyAlertsWithACL($pdo, $days = 90) {
-        // Check if user can read components
-        if (!hasPermission($pdo, 'read')) {
-            return [];
-        }
+if (!function_exists('checkRateLimit')) {
+    function checkRateLimit($key, $maxAttempts = 10, $timeWindow = 3600) {
+        safeSessionStart();
         
-        try {
-            $alerts = [];
-            $tables = [
-                'cpu' => 'cpuinventory', 'ram' => 'raminventory', 'storage' => 'storageinventory',
-                'motherboard' => 'motherboardinventory', 'nic' => 'nicinventory', 'caddy' => 'caddyinventory'
-            ];
-            
-            $alertDate = date('Y-m-d', strtotime("+$days days"));
-            
-            foreach ($tables as $type => $table) {
-                $stmt = $pdo->prepare("
-                    SELECT ID, SerialNumber, WarrantyEndDate, '$type' as component_type
-                    FROM $table 
-                    WHERE WarrantyEndDate IS NOT NULL 
-                    AND WarrantyEndDate <= :alert_date
-                    AND Status != 0
-                    ORDER BY WarrantyEndDate ASC
-                ");
-                $stmt->bindParam(':alert_date', $alertDate);
-                $stmt->execute();
-                $results = $stmt->fetchAll();
-                
-                foreach ($results as $result) {
-                    $daysUntilExpiry = floor((strtotime($result['WarrantyEndDate']) - time()) / (60 * 60 * 24));
-                    $alerts[] = [
-                        'id' => $result['ID'],
-                        'component_type' => $result['component_type'],
-                        'serial_number' => $result['SerialNumber'],
-                        'warranty_end_date' => $result['WarrantyEndDate'],
-                        'days_until_expiry' => $daysUntilExpiry,
-                        'severity' => $daysUntilExpiry <= 30 ? 'high' : ($daysUntilExpiry <= 60 ? 'medium' : 'low')
-                    ];
-                }
-            }
-            
-            return $alerts;
-            
-        } catch (PDOException $e) {
-            error_log("Error getting warranty alerts: " . $e->getMessage());
-            return [];
-        }
-    }
-}
-
-/**
- * Search components with ACL filtering
- */
-if (!function_exists('searchComponentsWithACL')) {
-    function searchComponentsWithACL($pdo, $query, $componentType = 'all', $limit = 20) {
-        // Check if user can read components
-        if (!hasPermission($pdo, 'read')) {
-            return [
-                'components' => [],
-                'total_found' => 0,
-                'accessible_count' => 0
-            ];
-        }
+        $rateLimitKey = 'rate_limit_' . $key;
+        $attempts = $_SESSION[$rateLimitKey] ?? [];
+        $now = time();
         
-        $results = [];
-        $totalFound = 0;
-        
-        $tableMap = [
-            'cpu' => 'cpuinventory',
-            'ram' => 'raminventory', 
-            'storage' => 'storageinventory',
-            'motherboard' => 'motherboardinventory',
-            'nic' => 'nicinventory',
-            'caddy' => 'caddyinventory'
-        ];
-        
-        $searchTables = [];
-        if ($componentType === 'all') {
-            $searchTables = $tableMap;
-        } elseif (isset($tableMap[$componentType])) {
-            $searchTables = [$componentType => $tableMap[$componentType]];
-        }
-        
-        foreach ($searchTables as $type => $table) {
-            try {
-                $searchQuery = "
-                    SELECT ID, UUID, SerialNumber, Status, ServerUUID, Location, RackPosition,
-                           PurchaseDate, WarrantyEndDate, Flag, Notes, CreatedAt, UpdatedAt,
-                           '$type' as component_type
-                    FROM $table 
-                    WHERE SerialNumber LIKE :query 
-                       OR UUID LIKE :query 
-                       OR Location LIKE :query 
-                       OR RackPosition LIKE :query 
-                       OR Flag LIKE :query 
-                       OR Notes LIKE :query
-                ";
-                
-                // Add NIC-specific search fields
-                if ($type === 'nic') {
-                    $searchQuery = "
-                        SELECT ID, UUID, SerialNumber, Status, ServerUUID, Location, RackPosition,
-                               MacAddress, IPAddress, NetworkName, PurchaseDate, WarrantyEndDate, 
-                               Flag, Notes, CreatedAt, UpdatedAt, '$type' as component_type
-                        FROM $table 
-                        WHERE SerialNumber LIKE :query 
-                           OR UUID LIKE :query 
-                           OR Location LIKE :query 
-                           OR RackPosition LIKE :query 
-                           OR Flag LIKE :query 
-                           OR Notes LIKE :query
-                           OR MacAddress LIKE :query 
-                           OR IPAddress LIKE :query 
-                           OR NetworkName LIKE :query
-                    ";
-                }
-                
-                $searchQuery .= " ORDER BY CreatedAt DESC LIMIT :limit";
-                
-                $stmt = $pdo->prepare($searchQuery);
-                $searchTerm = '%' . $query . '%';
-                $stmt->bindParam(':query', $searchTerm);
-                $stmt->bindParam(':limit', $limit, PDO::PARAM_INT);
-                $stmt->execute();
-                
-                $componentResults = $stmt->fetchAll();
-                $totalFound += count($componentResults);
-                $results = array_merge($results, $componentResults);
-                
-            } catch (PDOException $e) {
-                error_log("Search error for $type: " . $e->getMessage());
-            }
-        }
-        
-        // Sort results by relevance and limit
-        usort($results, function($a, $b) use ($query) {
-            $aExact = (stripos($a['SerialNumber'], $query) !== false) ? 1 : 0;
-            $bExact = (stripos($b['SerialNumber'], $query) !== false) ? 1 : 0;
-            
-            if ($aExact !== $bExact) {
-                return $bExact - $aExact;
-            }
-            
-            return strtotime($b['UpdatedAt']) - strtotime($a['UpdatedAt']);
+        // Remove old attempts outside the time window
+        $attempts = array_filter($attempts, function($timestamp) use ($now, $timeWindow) {
+            return ($now - $timestamp) < $timeWindow;
         });
         
-        return [
-            'components' => array_slice($results, 0, $limit),
-            'total_found' => $totalFound,
-            'accessible_count' => $totalFound
-        ];
+        if (count($attempts) >= $maxAttempts) {
+            return false;
+        }
+        
+        $attempts[] = $now;
+        $_SESSION[$rateLimitKey] = $attempts;
+        
+        return true;
     }
 }
 
 /**
- * Generate CSRF token
+ * Clear rate limit for a key
  */
-if (!function_exists('generateCSRFToken')) {
-    function generateCSRFToken() {
+if (!function_exists('clearRateLimit')) {
+    function clearRateLimit($key) {
         safeSessionStart();
-        if (!isset($_SESSION['csrf_token'])) {
-            $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
-        }
-        return $_SESSION['csrf_token'];
+        $rateLimitKey = 'rate_limit_' . $key;
+        unset($_SESSION[$rateLimitKey]);
     }
 }
 
@@ -739,157 +617,15 @@ if (!function_exists('validateCSRFToken')) {
 }
 
 /**
- * Get component table name
+ * Generate CSRF token
  */
-if (!function_exists('getComponentTable')) {
-    function getComponentTable($componentType) {
-        $tableMap = [
-            'cpu' => 'cpuinventory',
-            'ram' => 'raminventory',
-            'storage' => 'storageinventory',
-            'motherboard' => 'motherboardinventory',
-            'nic' => 'nicinventory',
-            'caddy' => 'caddyinventory'
-        ];
-        
-        return $tableMap[$componentType] ?? null;
+if (!function_exists('generateCSRFToken')) {
+    function generateCSRFToken() {
+        safeSessionStart();
+        if (!isset($_SESSION['csrf_token'])) {
+            $_SESSION['csrf_token'] = generateSecureToken();
+        }
+        return $_SESSION['csrf_token'];
     }
 }
-
-/**
- * Rate limiting helper
- */
-if (!function_exists('checkRateLimit')) {
-    function checkRateLimit($identifier, $maxRequests = 100, $timeWindow = 3600) {
-        $cacheFile = sys_get_temp_dir() . '/rate_limit_' . md5($identifier);
-        
-        if (file_exists($cacheFile)) {
-            $data = json_decode(file_get_contents($cacheFile), true);
-            if ($data && $data['reset_time'] > time()) {
-                if ($data['requests'] >= $maxRequests) {
-                    return false;
-                }
-                $data['requests']++;
-            } else {
-                $data = ['requests' => 1, 'reset_time' => time() + $timeWindow];
-            }
-        } else {
-            $data = ['requests' => 1, 'reset_time' => time() + $timeWindow];
-        }
-        
-        file_put_contents($cacheFile, json_encode($data));
-        return true;
-    }
-}
-
-/**
- * Validate MAC address format
- */
-if (!function_exists('validateMacAddress')) {
-    function validateMacAddress($mac) {
-        return (bool)preg_match('/^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$/', $mac);
-    }
-}
-
-/**
- * Validate IP address format
- */
-if (!function_exists('validateIPAddress')) {
-    function validateIPAddress($ip) {
-        return filter_var($ip, FILTER_VALIDATE_IP) !== false;
-    }
-}
-
-/**
- * Get client IP address
- */
-if (!function_exists('getClientIPAddress')) {
-    function getClientIPAddress() {
-        // Check for IP from shared internet
-        if (!empty($_SERVER['HTTP_CLIENT_IP'])) {
-            return $_SERVER['HTTP_CLIENT_IP'];
-        }
-        // Check for IP passed from proxy
-        elseif (!empty($_SERVER['HTTP_X_FORWARDED_FOR'])) {
-            return $_SERVER['HTTP_X_FORWARDED_FOR'];
-        }
-        // Check for IP from remote address
-        else {
-            return $_SERVER['REMOTE_ADDR'] ?? 'unknown';
-        }
-    }
-}
-
-/**
- * Generate UUID for components
- */
-if (!function_exists('generateComponentUUID')) {
-    function generateComponentUUID() {
-        return sprintf('%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
-            mt_rand(0, 0xffff), mt_rand(0, 0xffff),
-            mt_rand(0, 0xffff),
-            mt_rand(0, 0x0fff) | 0x4000,
-            mt_rand(0, 0x3fff) | 0x8000,
-            mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff)
-        );
-    }
-}
-
-/**
- * Validate component data
- */
-if (!function_exists('validateComponentData')) {
-    function validateComponentData($componentType, $data) {
-        $errors = [];
-        
-        // Common validations
-        if (empty($data['serial_number'])) {
-            $errors[] = "Serial number is required";
-        }
-        
-        if (isset($data['status']) && !in_array($data['status'], ['0', '1', '2'])) {
-            $errors[] = "Invalid status value";
-        }
-        
-        if (isset($data['purchase_date']) && !empty($data['purchase_date'])) {
-            if (!DateTime::createFromFormat('Y-m-d', $data['purchase_date'])) {
-                $errors[] = "Invalid purchase date format";
-            }
-        }
-        
-        if (isset($data['warranty_end_date']) && !empty($data['warranty_end_date'])) {
-            if (!DateTime::createFromFormat('Y-m-d', $data['warranty_end_date'])) {
-                $errors[] = "Invalid warranty end date format";
-            }
-        }
-        
-        // Component-specific validations
-        if ($componentType === 'nic') {
-            if (isset($data['mac_address']) && !empty($data['mac_address'])) {
-                if (!validateMacAddress($data['mac_address'])) {
-                    $errors[] = "Invalid MAC address format";
-                }
-            }
-            
-            if (isset($data['ip_address']) && !empty($data['ip_address'])) {
-                if (!validateIPAddress($data['ip_address'])) {
-                    $errors[] = "Invalid IP address format";
-                }
-            }
-        }
-        
-        return $errors;
-    }
-}
-
-/**
- * Check if request is AJAX
- */
-if (!function_exists('isAjaxRequest')) {
-    function isAjaxRequest() {
-        return !empty($_SERVER['HTTP_X_REQUESTED_WITH']) && 
-               strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) == 'xmlhttprequest';
-    }
-}
-
 ?>

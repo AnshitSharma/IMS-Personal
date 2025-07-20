@@ -239,3 +239,173 @@ Stack trace:
 [18-Jun-2025 11:39:47 UTC] API called with action: cpu-add
 [18-Jun-2025 11:39:47 UTC] Module: cpu, Operation: add
 [18-Jun-2025 11:39:47 UTC] PHP Notice:  session_start(): Ignoring session_start() because a session is already active in /home/shubhams/public_html/bdc_ims/api/api.php on line 702
+[18-Jun-2025 13:04:22 UTC] PHP Fatal error:  Cannot redeclare safeSessionStart() (previously declared in /home/shubhams/public_html/bdc_ims/api/api.php:1074) in /home/shubhams/public_html/bdc_ims/includes/BaseFunctions.php on line 11
+[18-Jun-2025 13:11:37 UTC] API called with action: auth-login
+[18-Jun-2025 13:11:37 UTC] Module: auth, Operation: login
+[18-Jun-2025 13:11:37 UTC] Auth operation: login
+[18-Jun-2025 13:11:37 UTC] Login attempt for username: johnadmin
+[18-Jun-2025 13:11:37 UTC] Login error: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'status' in 'WHERE'
+[18-Jun-2025 13:11:39 UTC] API called with action: auth-login
+[18-Jun-2025 13:11:39 UTC] Module: auth, Operation: login
+[18-Jun-2025 13:11:39 UTC] Auth operation: login
+[18-Jun-2025 13:11:39 UTC] Login attempt for username: johnadmin
+[18-Jun-2025 13:11:39 UTC] Login error: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'status' in 'WHERE'
+[18-Jun-2025 13:13:10 UTC] API called with action: auth-login
+[18-Jun-2025 13:13:10 UTC] Module: auth, Operation: login
+[18-Jun-2025 13:13:10 UTC] Auth operation: login
+[18-Jun-2025 13:13:10 UTC] Login attempt for username: johnadmin
+[18-Jun-2025 13:13:10 UTC] Login error: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'status' in 'WHERE'
+[18-Jun-2025 13:21:39 UTC] API called with action: auth-login
+[18-Jun-2025 13:21:39 UTC] Module: auth, Operation: login
+[18-Jun-2025 13:21:39 UTC] Auth operation: login
+[18-Jun-2025 13:21:39 UTC] Login attempt for username: johnadmin
+[18-Jun-2025 13:21:39 UTC] Login error: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'status' in 'WHERE'
+[18-Jun-2025 13:21:41 UTC] API called with action: auth-login
+[18-Jun-2025 13:21:41 UTC] Module: auth, Operation: login
+[18-Jun-2025 13:21:41 UTC] Auth operation: login
+[18-Jun-2025 13:21:41 UTC] Login attempt for username: johnadmin
+[18-Jun-2025 13:21:41 UTC] Login error: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'status' in 'WHERE'
+[18-Jun-2025 13:30:24 UTC] API called with action: auth-login
+[18-Jun-2025 13:30:24 UTC] Module: auth, Operation: login
+[18-Jun-2025 13:30:24 UTC] Auth operation: login
+[18-Jun-2025 13:30:24 UTC] Login attempt for username: johnadmin
+[18-Jun-2025 13:30:24 UTC] Login error: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'status' in 'WHERE'
+[18-Jun-2025 13:30:34 UTC] PHP Fatal error:  Cannot redeclare safeSessionStart() (previously declared in /home/shubhams/public_html/bdc_ims/api/api.php:1074) in /home/shubhams/public_html/bdc_ims/includes/BaseFunctions.php on line 11
+[18-Jun-2025 13:30:37 UTC] PHP Fatal error:  Cannot redeclare safeSessionStart() (previously declared in /home/shubhams/public_html/bdc_ims/api/api.php:1074) in /home/shubhams/public_html/bdc_ims/includes/BaseFunctions.php on line 11
+[18-Jun-2025 16:09:30 UTC] PHP Fatal error:  Cannot redeclare safeSessionStart() (previously declared in /home/shubhams/public_html/bdc_ims/api/api.php:1074) in /home/shubhams/public_html/bdc_ims/includes/BaseFunctions.php on line 11
+[18-Jun-2025 16:10:00 UTC] PHP Parse error:  Unmatched '}' in /home/shubhams/public_html/bdc_ims/includes/BaseFunctions.php on line 101
+[18-Jun-2025 16:10:30 UTC] PHP Parse error:  Unmatched '}' in /home/shubhams/public_html/bdc_ims/includes/BaseFunctions.php on line 178
+[18-Jun-2025 16:10:59 UTC] PHP Fatal error:  Cannot redeclare performGlobalSearch() (previously declared in /home/shubhams/public_html/bdc_ims/api/api.php:1041) in /home/shubhams/public_html/bdc_ims/includes/BaseFunctions.php on line 175
+[18-Jun-2025 16:14:08 UTC] API called with action: auth-login
+[18-Jun-2025 16:14:08 UTC] Module: auth, Operation: login
+[18-Jun-2025 16:14:08 UTC] Auth operation: login
+[18-Jun-2025 16:14:08 UTC] Login attempt for username: johnadmin
+[18-Jun-2025 16:14:08 UTC] Login error: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'status' in 'WHERE'
+[18-Jun-2025 19:01:03 UTC] PHP Warning:  require_once(../config/config.php): Failed to open stream: No such file or directory in /home/shubhams/public_html/bdc_ims/api/api.php on line 14
+[18-Jun-2025 19:01:03 UTC] PHP Fatal error:  Uncaught Error: Failed opening required '../config/config.php' (include_path='.:/opt/cpanel/ea-php81/root/usr/share/pear') in /home/shubhams/public_html/bdc_ims/api/api.php:14
+Stack trace:
+#0 {main}
+  thrown in /home/shubhams/public_html/bdc_ims/api/api.php on line 14
+[18-Jun-2025 19:30:57 UTC] PHP Warning:  require_once(../config/config.php): Failed to open stream: No such file or directory in /home/shubhams/public_html/bdc_ims/api/api.php on line 14
+[18-Jun-2025 19:30:57 UTC] PHP Fatal error:  Uncaught Error: Failed opening required '../config/config.php' (include_path='.:/opt/cpanel/ea-php81/root/usr/share/pear') in /home/shubhams/public_html/bdc_ims/api/api.php:14
+Stack trace:
+#0 {main}
+  thrown in /home/shubhams/public_html/bdc_ims/api/api.php on line 14
+[18-Jun-2025 20:58:06 UTC] API called with action: auth-login
+[18-Jun-2025 20:58:06 UTC] Module: auth, Operation: login
+[18-Jun-2025 20:58:06 UTC] Auth operation: login
+[18-Jun-2025 20:58:06 UTC] Login attempt for username: johnadmin
+[18-Jun-2025 20:58:06 UTC] Login successful for user: johnadmin with role: admin
+[18-Jun-2025 22:02:31 UTC] API called with action: auth-login
+[18-Jun-2025 22:02:31 UTC] Module: auth, Operation: login
+[18-Jun-2025 22:02:31 UTC] Auth operation: login
+[18-Jun-2025 22:02:31 UTC] Login attempt for username: johnadmin
+[18-Jun-2025 22:02:31 UTC] Login successful for user: johnadmin with role: admin
+[18-Jun-2025 22:02:37 UTC] API called with action: cpu-add
+[18-Jun-2025 22:02:37 UTC] Module: cpu, Operation: add
+[18-Jun-2025 22:03:17 UTC] API called with action: cpu-add
+[18-Jun-2025 22:03:17 UTC] Module: cpu, Operation: add
+[19-Jun-2025 19:28:07 UTC] API called with action: cpu-add
+[19-Jun-2025 19:28:07 UTC] Module: cpu, Operation: add
+[19-Jun-2025 19:28:15 UTC] API called with action: auth-login
+[19-Jun-2025 19:28:15 UTC] Module: auth, Operation: login
+[19-Jun-2025 19:28:15 UTC] Auth operation: login
+[19-Jun-2025 19:28:15 UTC] Login attempt for username: johnadmin
+[19-Jun-2025 19:28:15 UTC] Login successful for user: johnadmin with role: admin
+[19-Jun-2025 19:28:25 UTC] API called with action: cpu-add
+[19-Jun-2025 19:28:25 UTC] Module: cpu, Operation: add
+[19-Jun-2025 19:40:03 UTC] API called with action: auth-login
+[19-Jun-2025 19:40:03 UTC] Module: auth, Operation: login
+[19-Jun-2025 19:40:03 UTC] Auth operation: login
+[19-Jun-2025 19:40:03 UTC] Login attempt for username: johnadmin
+[19-Jun-2025 19:40:03 UTC] Login successful for user: johnadmin with role: admin
+[19-Jun-2025 19:40:13 UTC] API called with action: cpu-add
+[19-Jun-2025 19:40:13 UTC] Module: cpu, Operation: add
+[19-Jun-2025 19:40:13 UTC] Inserting CPU data: {"UUID":"545e143b-57b3-419e-86e5-1df6f7aa8fg4","SerialNumber":"CPU789022","Status":"2","ServerUUID":"","Location":"Warehouse East","RackPosition":"Shelf B4","PurchaseDate":"2024-01-29","WarrantyEndDate":"2026-01-29","Flag":"Backup","Notes":"AMD EPYC 64-core 2.9GHz"}
+[19-Jun-2025 19:42:25 UTC] API called with action: cpu-delete
+[19-Jun-2025 19:42:25 UTC] Module: cpu, Operation: delete
+[19-Jun-2025 19:56:10 UTC] API called with action: cpu-add
+[19-Jun-2025 19:56:10 UTC] Module: cpu, Operation: add
+[19-Jun-2025 19:56:10 UTC] Inserting cpu data: {"UUID":"545e143b-57b3-419e-86e5-1df6f7aa8fg4","SerialNumber":"CPU789022","Status":"2","ServerUUID":"","Location":"Warehouse East","RackPosition":"Shelf B4","PurchaseDate":"2024-01-29","WarrantyEndDate":"2026-01-29","Flag":"Backup","Notes":"AMD EPYC 64-core 2.9GHz"}
+[19-Jun-2025 19:56:20 UTC] API called with action: cpu-add
+[19-Jun-2025 19:56:20 UTC] Module: cpu, Operation: add
+[19-Jun-2025 19:56:20 UTC] Inserting cpu data: {"UUID":"545e143b-57b3-419e-86e5-1df6f7aa8fg4","SerialNumber":"CPU789022","Status":"2","ServerUUID":"","Location":"Warehouse East","RackPosition":"Shelf B4","PurchaseDate":"2024-01-29","WarrantyEndDate":"2026-01-29","Flag":"Backup","Notes":"AMD EPYC 64-core 2.9GHz"}
+[19-Jun-2025 19:56:20 UTC] Add cpu operation error: SQLSTATE[23000]: Integrity constraint violation: 1062 Duplicate entry '545e143b-57b3-419e-86e5-1df6f7aa8fg4' for key 'UUID'
+[19-Jun-2025 19:56:34 UTC] API called with action: cpu-list
+[19-Jun-2025 19:56:34 UTC] Module: cpu, Operation: list
+[27-Jun-2025 22:45:12 UTC] API called with action: auth-login
+[27-Jun-2025 22:45:12 UTC] Module: auth, Operation: login
+[27-Jun-2025 22:45:12 UTC] Auth operation: login
+[27-Jun-2025 22:45:12 UTC] Login attempt for username: johnadmin
+[27-Jun-2025 22:45:12 UTC] Login successful for user: johnadmin with role: admin
+[27-Jun-2025 22:45:38 UTC] API called with action: cpu-list
+[27-Jun-2025 22:45:38 UTC] Module: cpu, Operation: list
+[27-Jun-2025 22:46:22 UTC] API called with action: cpu-add
+[27-Jun-2025 22:46:22 UTC] Module: cpu, Operation: add
+[27-Jun-2025 22:46:22 UTC] Inserting cpu data: {"UUID":"545e143b-57b3-419e-86e5-1df6f7aa8fg4","SerialNumber":"CPU789022","Status":"2","ServerUUID":"","Location":"Warehouse East","RackPosition":"Shelf B4","PurchaseDate":"2024-01-29","WarrantyEndDate":"2026-01-29","Flag":"Backup","Notes":"AMD EPYC 64-core 2.9GHz"}
+[27-Jun-2025 22:46:22 UTC] Add cpu operation error: SQLSTATE[23000]: Integrity constraint violation: 1062 Duplicate entry '545e143b-57b3-419e-86e5-1df6f7aa8fg4' for key 'UUID'
+[27-Jun-2025 22:46:53 UTC] API called with action: cpu-add
+[27-Jun-2025 22:46:53 UTC] Module: cpu, Operation: add
+[27-Jun-2025 22:46:53 UTC] Inserting cpu data: {"UUID":"545e143b-57b3-419e-86e5-1df6f7aa8fz3","SerialNumber":"CPU789029","Status":"2","ServerUUID":"","Location":"Warehouse East","RackPosition":"Shelf B4","PurchaseDate":"2024-01-31","WarrantyEndDate":"2026-01-31","Flag":"Backup","Notes":"AMD EPYC 64-core 2.9GHz"}
+[27-Jun-2025 22:47:23 UTC] API called with action: auth-login
+[27-Jun-2025 22:47:23 UTC] Module: auth, Operation: login
+[27-Jun-2025 22:47:23 UTC] Auth operation: login
+[27-Jun-2025 22:47:23 UTC] Login attempt for username: a
+[27-Jun-2025 22:47:23 UTC] Login successful for user: a with role: viewer
+[27-Jun-2025 22:47:40 UTC] API called with action: cpu-list
+[27-Jun-2025 22:47:40 UTC] Module: cpu, Operation: list
+[27-Jun-2025 22:48:03 UTC] API called with action: cpu-add
+[27-Jun-2025 22:48:03 UTC] Module: cpu, Operation: add
+[01-Jul-2025 12:59:48 UTC] API called with action: auth-check_session
+[01-Jul-2025 12:59:48 UTC] Module: auth, Operation: check_session
+[01-Jul-2025 12:59:48 UTC] Auth operation: check_session
+[01-Jul-2025 13:00:00 UTC] API called with action: auth-login
+[01-Jul-2025 13:00:00 UTC] Module: auth, Operation: login
+[01-Jul-2025 13:00:00 UTC] Auth operation: login
+[01-Jul-2025 13:00:00 UTC] Login attempt for username: a
+[01-Jul-2025 13:00:00 UTC] Login successful for user: a with role: viewer
+[01-Jul-2025 13:00:40 UTC] API called with action: cpu-list
+[01-Jul-2025 13:00:40 UTC] Module: cpu, Operation: list
+[05-Jul-2025 12:47:03 UTC] API called with action: auth-login
+[05-Jul-2025 12:47:03 UTC] Module: auth, Operation: login
+[05-Jul-2025 12:47:03 UTC] Auth operation: login
+[05-Jul-2025 12:47:03 UTC] Login attempt for username: a
+[05-Jul-2025 12:47:03 UTC] Login successful for user: a with role: viewer
+[05-Jul-2025 12:47:39 UTC] API called with action: auth-login
+[05-Jul-2025 12:47:39 UTC] Module: auth, Operation: login
+[05-Jul-2025 12:47:39 UTC] Auth operation: login
+[05-Jul-2025 12:47:39 UTC] Login attempt for username: johnadmin
+[05-Jul-2025 12:47:39 UTC] Invalid password for user: johnadmin
+[05-Jul-2025 12:50:43 UTC] API called with action: auth-login
+[05-Jul-2025 12:50:43 UTC] Module: auth, Operation: login
+[05-Jul-2025 12:50:43 UTC] Auth operation: login
+[05-Jul-2025 12:50:43 UTC] Login attempt for username: johnadmin
+[05-Jul-2025 12:50:43 UTC] Login successful for user: johnadmin with role: admin
+[10-Jul-2025 14:33:37 UTC] API called with action: auth-login
+[10-Jul-2025 14:33:37 UTC] Module: auth, Operation: login
+[10-Jul-2025 14:33:37 UTC] Auth operation: login
+[10-Jul-2025 14:33:37 UTC] Login attempt for username: johnadmin
+[10-Jul-2025 14:33:38 UTC] Login successful for user: johnadmin with role: admin
+[10-Jul-2025 14:33:55 UTC] API called with action: auth-check_session
+[10-Jul-2025 14:33:55 UTC] Module: auth, Operation: check_session
+[10-Jul-2025 14:33:55 UTC] Auth operation: check_session
+[10-Jul-2025 14:36:27 UTC] API called with action: cpu-list
+[10-Jul-2025 14:36:27 UTC] Module: cpu, Operation: list
+[10-Jul-2025 14:46:15 UTC] API called with action: cpu-add
+[10-Jul-2025 14:46:15 UTC] Module: cpu, Operation: add
+[10-Jul-2025 14:46:15 UTC] Inserting cpu data: {"UUID":"545e143b-57b3-419e-86e5-1df6f7aa8fz5","SerialNumber":"CPU789021","Status":"2","ServerUUID":"","Location":"Warehouse East","RackPosition":"Shelf B4","PurchaseDate":"2024-01-31","WarrantyEndDate":"2026-01-31","Flag":"Backup","Notes":"AMD EPYC 64-core 2.9GHz"}
+[10-Jul-2025 14:46:24 UTC] API called with action: cpu-add
+[10-Jul-2025 14:46:24 UTC] Module: cpu, Operation: add
+[10-Jul-2025 14:46:24 UTC] Inserting cpu data: {"UUID":"545e143b-57b3-419e-86e5-1df6f7aa8fz5","SerialNumber":"CPU789021","Status":"2","ServerUUID":"","Location":"Warehouse East","RackPosition":"Shelf B4","PurchaseDate":"2024-01-31","WarrantyEndDate":"2026-01-31","Flag":"Backup","Notes":"AMD EPYC 64-core 2.9GHz"}
+[10-Jul-2025 14:46:24 UTC] Add cpu operation error: SQLSTATE[23000]: Integrity constraint violation: 1062 Duplicate entry '545e143b-57b3-419e-86e5-1df6f7aa8fz5' for key 'UUID'
+[17-Jul-2025 15:58:51 UTC] API called with action: auth-login
+[17-Jul-2025 15:58:51 UTC] Module: auth, Operation: login
+[17-Jul-2025 15:58:51 UTC] Auth operation: login
+[17-Jul-2025 15:58:51 UTC] Login attempt for username: johnadmin
+[17-Jul-2025 15:58:51 UTC] Login successful for user: johnadmin with role: admin
+[17-Jul-2025 15:59:02 UTC] API called with action: cpu-list
+[17-Jul-2025 15:59:02 UTC] Module: cpu, Operation: list
+[17-Jul-2025 15:59:18 UTC] API called with action: cpu-add
+[17-Jul-2025 15:59:18 UTC] Module: cpu, Operation: add
+[17-Jul-2025 15:59:18 UTC] Inserting cpu data: {"UUID":"545e143b-57b3-419e-86e5-1df6f7aa8fz5","SerialNumber":"CPU789021","Status":"2","ServerUUID":"","Location":"Warehouse East","RackPosition":"Shelf B4","PurchaseDate":"2024-01-31","WarrantyEndDate":"2026-01-31","Flag":"Backup","Notes":"AMD EPYC 64-core 2.9GHz"}
+[17-Jul-2025 15:59:18 UTC] Add cpu operation error: SQLSTATE[23000]: Integrity constraint violation: 1062 Duplicate entry '545e143b-57b3-419e-86e5-1df6f7aa8fz5' for key 'UUID'
