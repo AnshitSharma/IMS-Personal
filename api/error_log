@@ -409,3 +409,73 @@ Stack trace:
 [17-Jul-2025 15:59:18 UTC] Module: cpu, Operation: add
 [17-Jul-2025 15:59:18 UTC] Inserting cpu data: {"UUID":"545e143b-57b3-419e-86e5-1df6f7aa8fz5","SerialNumber":"CPU789021","Status":"2","ServerUUID":"","Location":"Warehouse East","RackPosition":"Shelf B4","PurchaseDate":"2024-01-31","WarrantyEndDate":"2026-01-31","Flag":"Backup","Notes":"AMD EPYC 64-core 2.9GHz"}
 [17-Jul-2025 15:59:18 UTC] Add cpu operation error: SQLSTATE[23000]: Integrity constraint violation: 1062 Duplicate entry '545e143b-57b3-419e-86e5-1df6f7aa8fz5' for key 'UUID'
+[20-Jul-2025 21:50:32 UTC] API called with action: cpu-list
+[20-Jul-2025 21:50:32 UTC] Module: cpu, Operation: list
+[20-Jul-2025 21:50:39 UTC] API called with action: auth-login
+[20-Jul-2025 21:50:39 UTC] Module: auth, Operation: login
+[20-Jul-2025 21:50:39 UTC] Auth operation: login
+[20-Jul-2025 21:50:39 UTC] Login attempt for username: johnadmin
+[20-Jul-2025 21:50:39 UTC] Login successful for user: johnadmin with role: admin
+[20-Jul-2025 21:50:42 UTC] API called with action: cpu-list
+[20-Jul-2025 21:50:42 UTC] Module: cpu, Operation: list
+[22-Jul-2025 00:10:35 UTC] PHP Fatal error:  Uncaught Error: Call to undefined function function_calls() in /home/shubhams/public_html/bdc_ims/includes/JWTAuthFunctions.php:169
+Stack trace:
+#0 /home/shubhams/public_html/bdc_ims/includes/BaseFunctions.php(10): require_once()
+#1 /home/shubhams/public_html/bdc_ims/api/api.php(8): require_once('/home/shubhams/...')
+#2 {main}
+  thrown in /home/shubhams/public_html/bdc_ims/includes/JWTAuthFunctions.php on line 169
+[22-Jul-2025 00:30:26 UTC] API called with action: auth-login
+[22-Jul-2025 00:30:26 UTC] Module: auth, Operation: login
+[22-Jul-2025 00:30:26 UTC] Auth operation: login
+[22-Jul-2025 00:30:26 UTC] Login attempt for username: johnadmin
+[22-Jul-2025 00:30:26 UTC] Login successful for user: johnadmin with role: admin
+[22-Jul-2025 00:32:51 UTC] API called with action: auth-check_session
+[22-Jul-2025 00:32:51 UTC] Module: auth, Operation: check_session
+[22-Jul-2025 00:32:51 UTC] Auth operation: check_session
+[22-Jul-2025 00:40:46 UTC] API called with action: auth-check_session
+[22-Jul-2025 00:40:46 UTC] Module: auth, Operation: check_session
+[22-Jul-2025 00:40:46 UTC] Auth operation: check_session
+[22-Jul-2025 00:41:04 UTC] API called with action: auth-check_session
+[22-Jul-2025 00:41:04 UTC] Module: auth, Operation: check_session
+[22-Jul-2025 00:41:04 UTC] Auth operation: check_session
+[22-Jul-2025 00:41:24 UTC] API called with action: auth-refresh
+[22-Jul-2025 00:41:24 UTC] Module: auth, Operation: refresh
+[22-Jul-2025 00:41:24 UTC] Auth operation: refresh
+[22-Jul-2025 00:41:44 UTC] API called with action: auth-refresh
+[22-Jul-2025 00:41:44 UTC] Module: auth, Operation: refresh
+[22-Jul-2025 00:41:44 UTC] Auth operation: refresh
+[22-Jul-2025 00:42:13 UTC] API called with action: auth-verify
+[22-Jul-2025 00:42:13 UTC] Module: auth, Operation: verify
+[22-Jul-2025 00:42:13 UTC] Auth operation: verify
+[22-Jul-2025 00:42:30 UTC] API called with action: auth-login
+[22-Jul-2025 00:42:30 UTC] Module: auth, Operation: login
+[22-Jul-2025 00:42:30 UTC] Auth operation: login
+[22-Jul-2025 00:42:30 UTC] Login attempt for username: johnadmin
+[22-Jul-2025 00:42:30 UTC] Login successful for user: johnadmin with role: admin
+[22-Jul-2025 00:42:35 UTC] API called with action: auth-verify
+[22-Jul-2025 00:42:35 UTC] Module: auth, Operation: verify
+[22-Jul-2025 00:42:35 UTC] Auth operation: verify
+[22-Jul-2025 00:43:43 UTC] API called with action: auth-refresh
+[22-Jul-2025 00:43:43 UTC] Module: auth, Operation: refresh
+[22-Jul-2025 00:43:43 UTC] Auth operation: refresh
+[22-Jul-2025 00:44:13 UTC] API called with action: auth-verify
+[22-Jul-2025 00:44:13 UTC] Module: auth, Operation: verify
+[22-Jul-2025 00:44:13 UTC] Auth operation: verify
+[22-Jul-2025 00:44:50 UTC] API called with action: auth-logout
+[22-Jul-2025 00:44:50 UTC] Module: auth, Operation: logout
+[22-Jul-2025 00:44:50 UTC] Auth operation: logout
+[22-Jul-2025 00:45:39 UTC] API called with action: cpu-list
+[22-Jul-2025 00:45:39 UTC] Module: cpu, Operation: list
+[22-Jul-2025 00:45:39 UTC] Authenticated user: johnadmin (ID: 37)
+[22-Jul-2025 19:49:22 UTC] API called with action: cpu-add
+[22-Jul-2025 19:49:22 UTC] Module: cpu, Operation: add
+[22-Jul-2025 19:49:36 UTC] API called with action: cpu-add
+[22-Jul-2025 19:49:36 UTC] Module: cpu, Operation: add
+[22-Jul-2025 19:49:36 UTC] Authenticated user: johnadmin (ID: 37)
+[22-Jul-2025 19:49:49 UTC] API called with action: cpu-add
+[22-Jul-2025 19:49:49 UTC] Module: cpu, Operation: add
+[22-Jul-2025 19:49:49 UTC] Authenticated user: johnadmin (ID: 37)
+[22-Jul-2025 19:49:49 UTC] Error adding cpu component: SQLSTATE[23000]: Integrity constraint violation: 1062 Duplicate entry 'CPU789021' for key 'SerialNumber'
+[22-Jul-2025 19:50:05 UTC] API called with action: cpu-add
+[22-Jul-2025 19:50:05 UTC] Module: cpu, Operation: add
+[22-Jul-2025 19:50:05 UTC] Authenticated user: johnadmin (ID: 37)

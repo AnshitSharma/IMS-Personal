@@ -1,21 +1,21 @@
 <?php
 /**
- * Base Functions for BDC IMS
- * Enhanced with proper ACL integration
+ * Updated BaseFunctions.php with JWT Support - FIXED VERSION
+ * This file now includes both session-based and JWT-based authentication functions
+ * for backward compatibility during migration
  */
 
-// Include the SimpleACL class
-require_once __DIR__ . '/SimpleACL.php';
+// Include JWT components only if they exist
+if (file_exists(__DIR__ . '/JWTHelper.php')) {
+    require_once __DIR__ . '/JWTHelper.php';
+}
 
-/**
- * Safe session start to avoid warnings
- */
-if (!function_exists('safeSessionStart')) {
-    function safeSessionStart() {
-        if (session_status() === PHP_SESSION_NONE) {
-            session_start();
-        }
-    }
+if (file_exists(__DIR__ . '/JWTAuthFunctions.php')) {
+    require_once __DIR__ . '/JWTAuthFunctions.php';
+}
+
+if (file_exists(__DIR__ . '/SimpleACL.php')) {
+    require_once __DIR__ . '/SimpleACL.php';
 }
 
 /**
@@ -39,7 +39,145 @@ if (!function_exists('getDatabaseConnection')) {
 }
 
 /**
- * Check if user is logged in (basic check)
+ * Send JSON response with consistent format
+ */
+if (!function_exists('send_json_response')) {
+    function send_json_response($success, $status, $http_code, $message, $data = null) {
+        // Prevent any previous output
+        if (ob_get_level()) {
+            ob_clean();
+        }
+        
+        // Set headers
+        header('Content-Type: application/json', true, $http_code);
+        
+        $response = [
+            'success' => (bool)$success,
+            'status' => (int)$status,
+            'message' => $message,
+            'timestamp' => date('Y-m-d H:i:s'),
+            'http_code' => $http_code
+        ];
+        
+        if ($data !== null) {
+            $response['data'] = $data;
+        }
+        
+        echo json_encode($response, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+        exit();
+    }
+}
+
+/**
+ * Universal authentication function
+ * Tries JWT first, then falls back to session-based auth
+ */
+if (!function_exists('authenticateUser')) {
+    function authenticateUser($pdo) {
+        // Try JWT authentication first if JWT functions are available
+        if (function_exists('authenticateWithJWT')) {
+            $jwtUser = authenticateWithJWT($pdo);
+            if ($jwtUser) {
+                return $jwtUser;
+            }
+        }
+        
+        // Fall back to session-based authentication
+        return isUserLoggedIn($pdo);
+    }
+}
+
+/**
+ * Universal authentication with ACL
+ */
+if (!function_exists('authenticateUserWithACL')) {
+    function authenticateUserWithACL($pdo) {
+        // Try JWT authentication first if JWT functions are available
+        if (function_exists('authenticateWithJWTAndACL')) {
+            $jwtUser = authenticateWithJWTAndACL($pdo);
+            if ($jwtUser) {
+                return $jwtUser;
+            }
+        }
+        
+        // Fall back to session-based authentication
+        return isUserLoggedInWithACL($pdo);
+    }
+}
+
+/**
+ * Universal permission check
+ */
+if (!function_exists('checkUserPermission')) {
+    function checkUserPermission($pdo, $action, $componentType = null) {
+        // Try JWT permission check first if JWT functions are available
+        if (function_exists('hasJWTPermission') && class_exists('JWTHelper')) {
+            $token = JWTHelper::extractTokenFromHeader();
+            if ($token) {
+                return hasJWTPermission($pdo, $action, $componentType);
+            }
+        }
+        
+        // Fall back to session-based permission check
+        return hasPermission($pdo, $action, $componentType);
+    }
+}
+
+/**
+ * Universal permission requirement
+ */
+if (!function_exists('requireUserPermission')) {
+    function requireUserPermission($pdo, $action, $componentType = null) {
+        // Try JWT permission check first if JWT functions are available
+        if (function_exists('requireJWTPermission') && class_exists('JWTHelper')) {
+            $token = JWTHelper::extractTokenFromHeader();
+            if ($token) {
+                requireJWTPermission($pdo, $action, $componentType);
+                return;
+            }
+        }
+        
+        // Fall back to session-based permission check
+        requirePermission($pdo, $action, $componentType);
+    }
+}
+
+/**
+ * Get current user ID (works with both JWT and sessions)
+ */
+if (!function_exists('getCurrentUserId')) {
+    function getCurrentUserId($pdo = null) {
+        // Try JWT first if available
+        if (function_exists('getUserIdFromJWT')) {
+            $userId = getUserIdFromJWT();
+            if ($userId) {
+                return $userId;
+            }
+        }
+        
+        // Fall back to session
+        safeSessionStart();
+        return $_SESSION['id'] ?? null;
+    }
+}
+
+/**
+ * Legacy session-based functions (kept for backward compatibility)
+ */
+
+/**
+ * Safe session start to avoid warnings
+ */
+if (!function_exists('safeSessionStart')) {
+    function safeSessionStart() {
+        if (session_status() === PHP_SESSION_NONE) {
+            session_start();
+        }
+    }
+}
+
+/**
+ * Check if user is logged in (session-based - legacy)
  */
 if (!function_exists('isUserLoggedIn')) {
     function isUserLoggedIn($pdo) {
@@ -74,7 +212,7 @@ if (!function_exists('isUserLoggedIn')) {
 }
 
 /**
- * Enhanced session validation with Simple ACL
+ * Enhanced session validation with Simple ACL (legacy)
  */
 if (!function_exists('isUserLoggedInWithACL')) {
     function isUserLoggedInWithACL($pdo) {
@@ -103,7 +241,7 @@ if (!function_exists('isUserLoggedInWithACL')) {
 }
 
 /**
- * Check if current user has permission
+ * Check if current user has permission (session-based - legacy)
  */
 if (!function_exists('hasPermission')) {
     function hasPermission($pdo, $action, $componentType = null) {
@@ -123,293 +261,14 @@ if (!function_exists('hasPermission')) {
 }
 
 /**
- * Require permission or exit with error
+ * Require permission or exit with error (session-based - legacy)
  */
 if (!function_exists('requirePermission')) {
     function requirePermission($pdo, $action, $componentType = null) {
         if (!hasPermission($pdo, $action, $componentType)) {
             http_response_code(403);
-            send_json_response(0, 0, 403, "Access denied. Insufficient permissions.", [
-                'required_permission' => $action,
-                'component_type' => $componentType
-            ]);
-            exit;
-        }
-    }
-}
-
-/**
- * Validate component access for API operations
- */
-if (!function_exists('validateComponentAccess')) {
-    function validateComponentAccess($pdo, $action, $componentType = null, $componentId = null) {
-        safeSessionStart();
-        if (!isset($_SESSION['id'])) {
-            send_json_response(0, 0, 401, "Authentication required");
-            exit;
-        }
-        
-        if (!class_exists('SimpleACL')) {
-            // If ACL is not available, only allow read operations
-            if ($action !== 'read') {
-                send_json_response(1, 0, 403, "Access denied. ACL system not available.", [
-                    'required_permission' => $action,
-                    'component_type' => $componentType
-                ]);
-                exit;
-            }
-            return true;
-        }
-        
-        $acl = new SimpleACL($pdo, $_SESSION['id']);
-        
-        if (!$acl->hasPermission($action, $componentType)) {
-            send_json_response(1, 0, 403, "Access denied. Insufficient permissions for this operation.", [
-                'required_permission' => $action,
-                'component_type' => $componentType,
-                'user_role' => $acl->getUserRole()
-            ]);
-            exit;
-        }
-        
-        return true;
-    }
-}
-
-/**
- * Check if user has specific role
- */
-if (!function_exists('hasRole')) {
-    function hasRole($pdo, $roleName) {
-        safeSessionStart();
-        if (!isset($_SESSION['id'])) {
-            return false;
-        }
-        
-        if (!class_exists('SimpleACL')) {
-            return false;
-        }
-        
-        $acl = new SimpleACL($pdo, $_SESSION['id']);
-        return $acl->hasRole($roleName);
-    }
-}
-
-/**
- * Check if user is admin
- */
-if (!function_exists('isAdmin')) {
-    function isAdmin($pdo) {
-        return hasRole($pdo, 'admin');
-    }
-}
-
-/**
- * Check if user is manager or admin
- */
-if (!function_exists('isManagerOrAdmin')) {
-    function isManagerOrAdmin($pdo) {
-        safeSessionStart();
-        if (!isset($_SESSION['id'])) {
-            return false;
-        }
-        
-        if (!class_exists('SimpleACL')) {
-            return false;
-        }
-        
-        $acl = new SimpleACL($pdo, $_SESSION['id']);
-        return $acl->isManagerOrAdmin();
-    }
-}
-
-/**
- * Get current user's Simple ACL instance
- */
-if (!function_exists('getCurrentUserACL')) {
-    function getCurrentUserACL($pdo) {
-        safeSessionStart();
-        $userId = $_SESSION['id'] ?? null;
-        
-        if (!class_exists('SimpleACL') || !$userId) {
-            return null;
-        }
-        
-        return new SimpleACL($pdo, $userId);
-    }
-}
-
-/**
- * Initialize default role for new users
- */
-if (!function_exists('initializeUserRole')) {
-    function initializeUserRole($pdo, $userId, $defaultRole = 'viewer') {
-        if (!class_exists('SimpleACL')) {
-            return true; // Skip if not available
-        }
-        
-        try {
-            $acl = new SimpleACL($pdo);
-            return $acl->initializeUserRole($userId, $defaultRole);
-        } catch (Exception $e) {
-            error_log("Error initializing user role: " . $e->getMessage());
-            return false;
-        }
-    }
-}
-
-/**
- * Enhanced JSON response with Simple ACL context
- */
-if (!function_exists('send_json_response')) {
-    function send_json_response($logged_in, $success, $status_code, $message, $other_params = []) {
-        // Only set headers if they haven't been sent
-        if (!headers_sent()) {
-            header('Content-Type: application/json');
-            http_response_code($status_code);
-        }
-        
-        $resp = [
-            'is_logged_in' => $logged_in,
-            'status_code' => $status_code,
-            'success' => $success,
-            'message' => $message,
-            'timestamp' => date('c')
-        ];
-        
-        // Add user context if logged in
-        if ($logged_in && isset($_SESSION['id']) && class_exists('SimpleACL')) {
-            global $pdo;
-            try {
-                $acl = new SimpleACL($pdo, $_SESSION['id']);
-                $resp['user_context'] = [
-                    'user_id' => $_SESSION['id'],
-                    'username' => $_SESSION['username'] ?? null,
-                    'role' => $acl->getUserRole(),
-                    'is_admin' => $acl->isAdmin(),
-                    'is_manager' => $acl->isManagerOrAdmin()
-                ];
-            } catch (Exception $e) {
-                error_log("Error adding user context to response: " . $e->getMessage());
-            }
-        }
-        
-        if ($other_params != []) {
-            $resp = array_merge($resp, $other_params);
-        }
-        
-        echo json_encode($resp);
-        exit();
-    }
-}
-
-/**
- * Enhanced user creation with Simple ACL
- */
-if (!function_exists('createUserWithACL')) {
-    function createUserWithACL($pdo, $userData, $role = 'viewer') {
-        try {
-            $pdo->beginTransaction();
-            
-            // Create user
-            $stmt = $pdo->prepare("
-                INSERT INTO users (firstname, lastname, username, email, password)
-                VALUES (:firstname, :lastname, :username, :email, :password)
-            ");
-            
-            $stmt->bindParam(':firstname', $userData['firstname']);
-            $stmt->bindParam(':lastname', $userData['lastname']);
-            $stmt->bindParam(':username', $userData['username']);
-            $stmt->bindParam(':email', $userData['email']);
-            $stmt->bindParam(':password', $userData['password']);
-            
-            $stmt->execute();
-            $userId = $pdo->lastInsertId();
-            
-            // Assign role
-            if (class_exists('SimpleACL')) {
-                $acl = new SimpleACL($pdo);
-                $acl->initializeUserRole($userId, $role);
-            }
-            
-            $pdo->commit();
-            return $userId;
-            
-        } catch (Exception $e) {
-            $pdo->rollBack();
-            error_log("Error creating user with ACL: " . $e->getMessage());
-            return false;
-        }
-    }
-}
-
-/**
- * Log significant actions for audit trail
- */
-if (!function_exists('logAction')) {
-    function logAction($pdo, $action, $componentType = null, $componentId = null, $oldValues = null, $newValues = null) {
-        safeSessionStart();
-        if (!isset($_SESSION['id'])) {
-            return;
-        }
-        
-        if (!class_exists('SimpleACL')) {
-            return; // Skip logging if ACL not available
-        }
-        
-        try {
-            $acl = new SimpleACL($pdo, $_SESSION['id']);
-            $acl->logAction($action, $componentType, $componentId, $oldValues, $newValues);
-        } catch (Exception $e) {
-            error_log("Error logging action: " . $e->getMessage());
-        }
-    }
-}
-
-/**
- * Get user's effective permissions summary
- */
-if (!function_exists('getUserPermissionsSummary')) {
-    function getUserPermissionsSummary($pdo, $userId = null) {
-        if (!$userId) {
-            safeSessionStart();
-            $userId = $_SESSION['id'] ?? null;
-        }
-        
-        if (!$userId) {
-            return null;
-        }
-        
-        if (!class_exists('SimpleACL')) {
-            // Return basic permissions if ACL is not available
-            return [
-                'user_id' => $userId,
-                'role' => 'viewer',
-                'role_display_name' => 'Viewer/User',
-                'permissions' => ['Read', 'Export'],
-                'level' => 1,
-                'component_access' => [
-                    'cpu' => ['read' => true, 'create' => false, 'update' => false, 'delete' => false, 'export' => true],
-                    'ram' => ['read' => true, 'create' => false, 'update' => false, 'delete' => false, 'export' => true],
-                    'storage' => ['read' => true, 'create' => false, 'update' => false, 'delete' => false, 'export' => true],
-                    'motherboard' => ['read' => true, 'create' => false, 'update' => false, 'delete' => false, 'export' => true],
-                    'nic' => ['read' => true, 'create' => false, 'update' => false, 'delete' => false, 'export' => true],
-                    'caddy' => ['read' => true, 'create' => false, 'update' => false, 'delete' => false, 'export' => true]
-                ],
-                'system_access' => [
-                    'can_manage_users' => false,
-                    'can_view_audit_log' => false,
-                    'can_manage_roles' => false
-                ]
-            ];
-        }
-        
-        try {
-            $acl = new SimpleACL($pdo, $userId);
-            return $acl->getPermissionsSummary();
-        } catch (Exception $e) {
-            error_log("Error getting user permissions summary: " . $e->getMessage());
-            return null;
+            send_json_response(0, 0, 403, "Access denied. Insufficient permissions.");
+            exit();
         }
     }
 }
@@ -419,8 +278,8 @@ if (!function_exists('getUserPermissionsSummary')) {
  */
 if (!function_exists('getDashboardDataWithACL')) {
     function getDashboardDataWithACL($pdo) {
-        safeSessionStart();
-        if (!isset($_SESSION['id'])) {
+        $user = authenticateUserWithACL($pdo);
+        if (!$user) {
             return null;
         }
         
@@ -428,7 +287,7 @@ if (!function_exists('getDashboardDataWithACL')) {
         $componentTypes = ['cpu', 'ram', 'storage', 'motherboard', 'nic', 'caddy'];
         
         if (class_exists('SimpleACL')) {
-            $acl = new SimpleACL($pdo, $_SESSION['id']);
+            $acl = new SimpleACL($pdo, $user['id']);
             
             foreach ($componentTypes as $type) {
                 $dashboardData['components'][$type] = [
@@ -492,16 +351,25 @@ if (!function_exists('verifyPassword')) {
 }
 
 /**
- * Generate secure random token
+ * Clean and validate input data
  */
-if (!function_exists('generateSecureToken')) {
-    function generateSecureToken($length = 32) {
-        return bin2hex(random_bytes($length));
+if (!function_exists('cleanInputData')) {
+    function cleanInputData($data) {
+        if (is_array($data)) {
+            foreach ($data as $key => $value) {
+                $data[$key] = cleanInputData($value);
+            }
+        } else {
+            $data = trim($data);
+            $data = stripslashes($data);
+            $data = htmlspecialchars($data, ENT_QUOTES, 'UTF-8');
+        }
+        return $data;
     }
 }
 
 /**
- * Validate email address
+ * Validate email format
  */
 if (!function_exists('isValidEmail')) {
     function isValidEmail($email) {
@@ -510,122 +378,44 @@ if (!function_exists('isValidEmail')) {
 }
 
 /**
- * Sanitize input string
+ * Generate secure random string
  */
-if (!function_exists('sanitizeInput')) {
-    function sanitizeInput($input) {
-        return htmlspecialchars(trim($input), ENT_QUOTES, 'UTF-8');
+if (!function_exists('generateRandomString')) {
+    function generateRandomString($length = 32) {
+        return bin2hex(random_bytes($length / 2));
     }
 }
 
 /**
- * Get client IP address
+ * Log API actions
  */
-if (!function_exists('getClientIP')) {
-    function getClientIP() {
-        $ipKeys = ['HTTP_CLIENT_IP', 'HTTP_X_FORWARDED_FOR', 'REMOTE_ADDR'];
-        foreach ($ipKeys as $key) {
-            if (array_key_exists($key, $_SERVER) === true) {
-                foreach (explode(',', $_SERVER[$key]) as $ip) {
-                    $ip = trim($ip);
-                    if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) !== false) {
-                        return $ip;
-                    }
-                }
-            }
-        }
-        return $_SERVER['REMOTE_ADDR'] ?? 'unknown';
-    }
-}
-
-/**
- * Format bytes to human readable
- */
-if (!function_exists('formatBytes')) {
-    function formatBytes($bytes, $precision = 2) {
-        $units = array('B', 'KB', 'MB', 'GB', 'TB');
-        
-        for ($i = 0; $bytes > 1024 && $i < count($units) - 1; $i++) {
-            $bytes /= 1024;
-        }
-        
-        return round($bytes, $precision) . ' ' . $units[$i];
-    }
-}
-
-/**
- * Debug logging helper
- */
-if (!function_exists('debugLog')) {
-    function debugLog($message, $data = null) {
-        if (defined('DEBUG_MODE') && DEBUG_MODE) {
-            $logEntry = date('Y-m-d H:i:s') . " [DEBUG] " . $message;
-            if ($data) {
-                $logEntry .= " | Data: " . json_encode($data);
-            }
-            error_log($logEntry);
-        }
-    }
-}
-
-/**
- * Rate limiting helper
- */
-if (!function_exists('checkRateLimit')) {
-    function checkRateLimit($key, $maxAttempts = 10, $timeWindow = 3600) {
-        safeSessionStart();
-        
-        $rateLimitKey = 'rate_limit_' . $key;
-        $attempts = $_SESSION[$rateLimitKey] ?? [];
-        $now = time();
-        
-        // Remove old attempts outside the time window
-        $attempts = array_filter($attempts, function($timestamp) use ($now, $timeWindow) {
-            return ($now - $timestamp) < $timeWindow;
-        });
-        
-        if (count($attempts) >= $maxAttempts) {
+if (!function_exists('logAPIAction')) {
+    function logAPIAction($pdo, $action, $componentType = null, $componentId = null, $oldValues = null, $newValues = null) {
+        $userId = getCurrentUserId($pdo);
+        if (!$userId) {
             return false;
         }
         
-        $attempts[] = $now;
-        $_SESSION[$rateLimitKey] = $attempts;
-        
-        return true;
-    }
-}
-
-/**
- * Clear rate limit for a key
- */
-if (!function_exists('clearRateLimit')) {
-    function clearRateLimit($key) {
-        safeSessionStart();
-        $rateLimitKey = 'rate_limit_' . $key;
-        unset($_SESSION[$rateLimitKey]);
-    }
-}
-
-/**
- * Validate CSRF token
- */
-if (!function_exists('validateCSRFToken')) {
-    function validateCSRFToken($token) {
-        safeSessionStart();
-        return isset($_SESSION['csrf_token']) && hash_equals($_SESSION['csrf_token'], $token);
-    }
-}
-
-/**
- * Generate CSRF token
- */
-if (!function_exists('generateCSRFToken')) {
-    function generateCSRFToken() {
-        safeSessionStart();
-        if (!isset($_SESSION['csrf_token'])) {
-            $_SESSION['csrf_token'] = generateSecureToken();
+        try {
+            $stmt = $pdo->prepare("
+                INSERT INTO simple_audit_log 
+                (user_id, action, component_type, component_id, old_values, new_values, ip_address, user_agent, created_at) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())
+            ");
+            
+            return $stmt->execute([
+                $userId,
+                $action,
+                $componentType,
+                $componentId,
+                $oldValues ? json_encode($oldValues) : null,
+                $newValues ? json_encode($newValues) : null,
+                $_SERVER['REMOTE_ADDR'] ?? null,
+                $_SERVER['HTTP_USER_AGENT'] ?? null
+            ]);
+        } catch (PDOException $e) {
+            error_log("Failed to log API action: " . $e->getMessage());
+            return false;
         }
-        return $_SESSION['csrf_token'];
     }
 }
-?>
