@@ -1,256 +1,170 @@
 <?php
 /**
- * Updated api.php with Extended Component Fields
- * Main API endpoint for BDC IMS with complete component field support
+ * Complete API with JWT Support
+ * Replace your existing api.php with this version
  */
 
-// Prevent any output before JSON response
 ob_start();
 
-// Error reporting for debugging (disable in production)
 error_reporting(E_ALL);
-ini_set('display_errors', 0); // Set to 0 in production
+ini_set('display_errors', 0);
 ini_set('log_errors', 1);
 
-// Include required files
 require_once(__DIR__ . '/../includes/db_config.php');
 require_once(__DIR__ . '/../includes/BaseFunctions.php');
 
-// Initialize JWT with secret key
-if (class_exists('JWTHelper')) {
-    JWTHelper::init(getenv('JWT_SECRET') ?: 'bdc-ims-default-secret-change-in-production-environment');
-}
-
-// Set headers
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
 
-// Handle preflight OPTIONS requests
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(200);
     exit();
 }
 
-// Clean any previous output
 if (ob_get_level()) {
     ob_clean();
 }
 
-// Get the action parameter
+// Clean up expired tokens periodically
+if (rand(1, 100) === 1) {
+    JWTHelper::cleanupExpiredTokens($pdo);
+}
+
 $action = $_POST['action'] ?? $_GET['action'] ?? '';
 
 if (empty($action)) {
     send_json_response(0, 0, 400, "Action parameter is required");
 }
 
-// Parse action
 $parts = explode('-', $action, 2);
 $module = $parts[0] ?? '';
 $operation = $parts[1] ?? '';
 
-error_log("API called with action: $action");
-error_log("Module: $module, Operation: $operation");
+error_log("API called with action: $action (Module: $module, Operation: $operation)");
 
-// Authentication operations (no JWT required)
+// Authentication operations (no login required)
 if ($module === 'auth') {
-    error_log("Auth operation: $operation");
-    
     switch ($operation) {
         case 'login':
             $username = trim($_POST['username'] ?? '');
             $password = $_POST['password'] ?? '';
             
+            error_log("Login attempt - Username: '$username'");
+            
             if (empty($username) || empty($password)) {
+                error_log("Login failed: Missing username or password");
                 send_json_response(0, 0, 400, "Username and password are required");
             }
             
-            try {
-                error_log("Login attempt for username: $username");
-                
-                $stmt = $pdo->prepare("SELECT * FROM users WHERE username = :username");
-                $stmt->bindParam(':username', $username, PDO::PARAM_STR);
-                $stmt->execute();
-                
-                if ($stmt->rowCount() == 1) {
-                    $user = $stmt->fetch();
-                    
-                    if (password_verify($password, $user['password'])) {
-                        // Generate JWT token if JWT is available
-                        if (function_exists('generateUserJWT')) {
-                            $token = generateUserJWT($user, $pdo);
-                            
-                            // Get user permissions
-                            if (class_exists('SimpleACL')) {
-                                $acl = new SimpleACL($pdo, $user['id']);
-                                $userRole = $acl->getUserRole();
-                                $permissionsSummary = $acl->getPermissionsSummary();
-                                
-                                // Log successful login
-                                $acl->logAction("User login", "auth", $user['id']);
-                            } else {
-                                $userRole = 'viewer';
-                                $permissionsSummary = [];
-                            }
-                            
-                            error_log("Login successful for user: $username with role: $userRole");
-                            
-                            $responseData = [
-                                'token' => $token,
-                                'token_type' => 'Bearer',
-                                'expires_in' => 24 * 60 * 60, // 24 hours in seconds
-                                'user' => [
-                                    'id' => $user['id'],
-                                    'username' => $user['username'],
-                                    'email' => $user['email'],
-                                    'firstname' => $user['firstname'] ?? '',
-                                    'lastname' => $user['lastname'] ?? '',
-                                    'role' => $userRole,
-                                    'is_admin' => isset($acl) ? $acl->isAdmin() : false,
-                                    'is_manager' => isset($acl) ? $acl->isManagerOrAdmin() : false
-                                ],
-                                'permissions' => $permissionsSummary
-                            ];
-                            
-                            send_json_response(1, 1, 200, "Login successful", $responseData);
-                        } else {
-                            // Fallback to session-based login
-                            session_start();
-                            $_SESSION["loggedin"] = true;
-                            $_SESSION["id"] = $user["id"];
-                            $_SESSION["username"] = $username;
-                            $_SESSION["email"] = $user["email"];
-                            
-                            send_json_response(1, 1, 200, "Login successful (session)", [
-                                'user' => [
-                                    'id' => $user['id'],
-                                    'username' => $username,
-                                    'email' => $user['email']
-                                ],
-                                'session_id' => session_id()
-                            ]);
-                        }
-                    } else {
-                        error_log("Invalid password for user: $username");
-                        send_json_response(0, 0, 401, "Invalid credentials");
-                    }
-                } else {
-                    error_log("User not found: $username");
-                    send_json_response(0, 0, 401, "Invalid credentials");
-                }
-            } catch (Exception $e) {
-                error_log("Login error: " . $e->getMessage());
-                send_json_response(0, 0, 500, "Login failed");
-            }
-            break;
+            $authResult = authenticateUser($pdo, $username, $password);
             
-        case 'logout':
-            // For JWT, logout is handled client-side, but we can log the action
-            if (function_exists('logoutJWT')) {
-                logoutJWT();
+            if ($authResult) {
+                // Also create session for backward compatibility
+                safeSessionStart();
+                $_SESSION['id'] = $authResult['user']['id'];
+                $_SESSION['username'] = $authResult['user']['username'];
+                $_SESSION['email'] = $authResult['user']['email'];
+                
+                error_log("Login successful for user: " . $authResult['user']['username'] . " (ID: " . $authResult['user']['id'] . ")");
+                
+                send_json_response(1, 1, 200, "Login successful", $authResult);
             } else {
-                // Session-based logout
-                session_start();
-                session_destroy();
-            }
-            send_json_response(1, 1, 200, "Logout successful");
-            break;
-            
-        case 'verify':
-        case 'check_token':
-            if (function_exists('authenticateWithJWTAndACL')) {
-                $user = authenticateWithJWTAndACL($pdo);
-                if ($user) {
-                    $responseData = [
-                        'user' => [
-                            'id' => $user['id'],
-                            'username' => $user['username'],
-                            'email' => $user['email'],
-                            'firstname' => $user['firstname'] ?? '',
-                            'lastname' => $user['lastname'] ?? '',
-                            'role' => $user['role'] ?? 'viewer',
-                            'is_admin' => $user['is_admin'] ?? false,
-                            'is_manager' => $user['is_manager'] ?? false
-                        ],
-                        'permissions' => $user['permissions'] ?? []
-                    ];
-                    
-                    send_json_response(1, 1, 200, "Token valid", $responseData);
-                } else {
-                    send_json_response(0, 0, 401, "Invalid or expired token");
-                }
-            } else {
-                // Fallback to session check
-                session_start();
-                if (isset($_SESSION['loggedin']) && $_SESSION['loggedin'] === true) {
-                    send_json_response(1, 1, 200, "Session valid", [
-                        'user' => [
-                            'id' => $_SESSION['id'],
-                            'username' => $_SESSION['username'],
-                            'email' => $_SESSION['email']
-                        ]
-                    ]);
-                } else {
-                    send_json_response(0, 0, 401, "Session invalid");
-                }
+                error_log("Login failed for username: $username");
+                send_json_response(0, 0, 401, "Invalid username or password");
             }
             break;
             
         case 'refresh':
-            if (function_exists('refreshJWTToken')) {
-                $newToken = refreshJWTToken();
-                if ($newToken) {
-                    $responseData = [
-                        'token' => $newToken,
-                        'token_type' => 'Bearer',
-                        'expires_in' => 24 * 60 * 60
-                    ];
-                    send_json_response(1, 1, 200, "Token refreshed", $responseData);
-                } else {
-                    send_json_response(0, 0, 401, "Unable to refresh token");
-                }
+            $refreshToken = $_POST['refresh_token'] ?? '';
+            
+            if (empty($refreshToken)) {
+                send_json_response(0, 0, 400, "Refresh token is required");
+            }
+            
+            $refreshResult = refreshJWTToken($pdo, $refreshToken);
+            
+            if ($refreshResult) {
+                error_log("Token refresh successful for user: " . $refreshResult['user']['username']);
+                send_json_response(1, 1, 200, "Token refreshed successfully", $refreshResult);
             } else {
-                send_json_response(0, 0, 400, "Token refresh not available");
+                error_log("Token refresh failed for token: " . substr($refreshToken, 0, 10) . "...");
+                send_json_response(0, 0, 401, "Invalid refresh token");
+            }
+            break;
+            
+        case 'logout':
+            // Try to get user from JWT first
+            $user = authenticateWithJWT($pdo);
+            
+            if ($user) {
+                // Invalidate refresh token if provided
+                $refreshToken = $_POST['refresh_token'] ?? '';
+                if ($refreshToken) {
+                    try {
+                        $stmt = $pdo->prepare("DELETE FROM auth_tokens WHERE token = ? AND user_id = ?");
+                        $stmt->execute([$refreshToken, $user['id']]);
+                    } catch (Exception $e) {
+                        error_log("Error invalidating refresh token: " . $e->getMessage());
+                    }
+                }
+                
+                error_log("JWT logout for user: " . $user['username']);
+            }
+            
+            // Also destroy session for backward compatibility
+            safeSessionStart();
+            session_destroy();
+            
+            error_log("User logged out");
+            send_json_response(1, 1, 200, "Logout successful");
+            break;
+            
+        case 'check_session':
+            // Try JWT authentication first, then session
+            $user = authenticateWithJWT($pdo);
+            
+            if (!$user) {
+                $user = isUserLoggedIn($pdo);
+            }
+            
+            if ($user) {
+                error_log("Session/token check successful for user: " . $user['username']);
+                send_json_response(1, 1, 200, "Authentication valid", ['user' => $user]);
+            } else {
+                error_log("Session/token check failed - no valid authentication");
+                send_json_response(0, 0, 401, "No valid authentication");
+            }
+            break;
+            
+        case 'verify_token':
+            // Verify JWT token endpoint
+            $user = authenticateWithJWT($pdo);
+            
+            if ($user) {
+                send_json_response(1, 1, 200, "Token is valid", ['user' => $user]);
+            } else {
+                send_json_response(0, 0, 401, "Invalid token");
             }
             break;
             
         default:
+            error_log("Invalid auth operation: $operation");
             send_json_response(0, 0, 400, "Invalid auth operation");
     }
     exit();
 }
 
-// All other operations require authentication
-$user = null;
+// All other operations require authentication (JWT or session)
+$user = requireLogin($pdo);
 
-// Try JWT authentication first
-if (function_exists('validateJWTMiddleware')) {
-    try {
-        $user = validateJWTMiddleware($pdo);
-    } catch (Exception $e) {
-        // JWT validation failed, try session
-        error_log("JWT validation failed: " . $e->getMessage());
-    }
-}
-
-// Fallback to session authentication
-if (!$user) {
-    $user = isUserLoggedIn($pdo);
-    if (!$user) {
-        send_json_response(0, 0, 401, "Authentication required");
-    }
-}
-
-error_log("Authenticated user: " . $user['username'] . " (ID: " . $user['id'] . ")");
-
-// Component operations with extended fields
-if (in_array($module, ['cpu', 'ram', 'storage', 'motherboard', 'nic', 'caddy'])) {
-    
-    // Table mapping
+// Component operations
+$componentTypes = ['cpu', 'ram', 'storage', 'motherboard', 'nic', 'caddy'];
+if (in_array($module, $componentTypes)) {
     $tableMap = [
         'cpu' => 'cpuinventory',
-        'ram' => 'raminventory', 
+        'ram' => 'raminventory',
         'storage' => 'storageinventory',
         'motherboard' => 'motherboardinventory',
         'nic' => 'nicinventory',
@@ -262,12 +176,9 @@ if (in_array($module, ['cpu', 'ram', 'storage', 'motherboard', 'nic', 'caddy']))
     switch ($operation) {
         case 'get':
         case 'list':
-            // Check read permission
-            requireUserPermission($pdo, 'read', $module);
-            
             try {
                 $status = $_GET['status'] ?? 'all';
-                $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 100;
+                $limit = isset($_GET['limit']) ? min((int)$_GET['limit'], 1000) : 50;
                 $offset = isset($_GET['offset']) ? (int)$_GET['offset'] : 0;
                 $search = $_GET['search'] ?? '';
                 
@@ -275,22 +186,21 @@ if (in_array($module, ['cpu', 'ram', 'storage', 'motherboard', 'nic', 'caddy']))
                 $params = [];
                 $conditions = [];
                 
-                if ($status !== 'all') {
+                if ($status !== 'all' && in_array($status, ['0', '1', '2'])) {
                     $conditions[] = "Status = :status";
                     $params[':status'] = $status;
                 }
                 
-                // Add search functionality
                 if (!empty($search)) {
-                    $conditions[] = "(SerialNumber LIKE :search OR Notes LIKE :search OR Location LIKE :search OR RackPosition LIKE :search)";
+                    $conditions[] = "(SerialNumber LIKE :search OR Notes LIKE :search OR UUID LIKE :search)";
                     $params[':search'] = "%$search%";
                 }
                 
                 if (!empty($conditions)) {
-                    $query .= " WHERE " . implode(' AND ', $conditions);
+                    $query .= " WHERE " . implode(" AND ", $conditions);
                 }
                 
-                $query .= " ORDER BY CreatedAt DESC LIMIT :limit OFFSET :offset";
+                $query .= " ORDER BY ID DESC LIMIT :limit OFFSET :offset";
                 
                 $stmt = $pdo->prepare($query);
                 foreach ($params as $key => $value) {
@@ -302,13 +212,11 @@ if (in_array($module, ['cpu', 'ram', 'storage', 'motherboard', 'nic', 'caddy']))
                 
                 $components = $stmt->fetchAll();
                 
-                // Get total count
                 $countQuery = "SELECT COUNT(*) as total FROM $table";
                 if (!empty($conditions)) {
-                    $countQuery .= " WHERE " . implode(' AND ', array_filter($conditions, function($cond) {
-                        return strpos($cond, ':search') === false || !empty($_GET['search']);
-                    }));
+                    $countQuery .= " WHERE " . implode(" AND ", $conditions);
                 }
+                
                 $countStmt = $pdo->prepare($countQuery);
                 foreach ($params as $key => $value) {
                     if ($key !== ':limit' && $key !== ':offset') {
@@ -316,340 +224,210 @@ if (in_array($module, ['cpu', 'ram', 'storage', 'motherboard', 'nic', 'caddy']))
                     }
                 }
                 $countStmt->execute();
-                $total = $countStmt->fetch()['total'];
+                $totalCount = $countStmt->fetchColumn();
                 
-                send_json_response(1, 1, 200, "Components retrieved successfully", [
+                send_json_response(1, 1, 200, "Components retrieved", [
                     'components' => $components,
-                    'pagination' => [
-                        'total' => (int)$total,
-                        'limit' => $limit,
-                        'offset' => $offset,
-                        'has_more' => ($offset + $limit) < $total
-                    ]
+                    'total' => (int)$totalCount,
+                    'limit' => $limit,
+                    'offset' => $offset
                 ]);
             } catch (Exception $e) {
-                error_log("Error retrieving $module components: " . $e->getMessage());
-                send_json_response(0, 0, 500, "Failed to retrieve components");
+                error_log("Error getting $module components: " . $e->getMessage());
+                send_json_response(0, 1, 500, "Failed to retrieve components");
             }
             break;
             
         case 'add':
-        case 'create':
-            // Check create permission
-            requireUserPermission($pdo, 'create', $module);
-            
             try {
-                // Extended component fields
-                $uuid = $_POST['uuid'] ?? '';
-                $serialNumber = $_POST['serial_number'] ?? '';
-                $status = $_POST['status'] ?? '1';
-                $serverUuid = $_POST['server_uuid'] ?? null;
-                $location = $_POST['location'] ?? '';
-                $rackPosition = $_POST['rack_position'] ?? '';
-                $purchaseDate = $_POST['purchase_date'] ?? null;
-                $warrantyEndDate = $_POST['warranty_end_date'] ?? null;
-                $flag = $_POST['flag'] ?? '';
-                $notes = $_POST['notes'] ?? '';
-                
-                // Validate required fields
-                if (empty($uuid)) {
-                    send_json_response(0, 0, 400, "UUID is required");
+                $requiredFields = ['SerialNumber', 'Status'];
+                foreach ($requiredFields as $field) {
+                    if (empty($_POST[$field])) {
+                        send_json_response(0, 1, 400, "Required field missing: $field");
+                    }
                 }
                 
-                // Validate status
-                if (!in_array($status, ['0', '1', '2'])) {
-                    send_json_response(0, 0, 400, "Invalid status. Must be 0 (Failed), 1 (Available), or 2 (In Use)");
+                // Check for duplicate serial number
+                $stmt = $pdo->prepare("SELECT ID FROM $table WHERE SerialNumber = ?");
+                $stmt->execute([$_POST['SerialNumber']]);
+                if ($stmt->rowCount() > 0) {
+                    send_json_response(0, 1, 400, "Component with this serial number already exists");
                 }
                 
-                // Validate dates
-                if ($purchaseDate && !DateTime::createFromFormat('Y-m-d', $purchaseDate)) {
-                    send_json_response(0, 0, 400, "Invalid purchase date format. Use YYYY-MM-DD");
-                }
+                $uuid = generateUUID();
                 
-                if ($warrantyEndDate && !DateTime::createFromFormat('Y-m-d', $warrantyEndDate)) {
-                    send_json_response(0, 0, 400, "Invalid warranty end date format. Use YYYY-MM-DD");
-                }
+                // Basic fields that exist in all component tables
+                $fields = ['UUID', 'SerialNumber', 'Status', 'Notes', 'Location', 'RackPosition', 'Flag'];
+                $values = [
+                    $uuid, 
+                    $_POST['SerialNumber'], 
+                    $_POST['Status'], 
+                    $_POST['Notes'] ?? '', 
+                    $_POST['Location'] ?? '',
+                    $_POST['RackPosition'] ?? '',
+                    $_POST['Flag'] ?? ''
+                ];
                 
-                // Check for duplicate UUID
-                $checkStmt = $pdo->prepare("SELECT ID FROM $table WHERE UUID = :uuid");
-                $checkStmt->bindValue(':uuid', $uuid);
-                $checkStmt->execute();
+                $placeholders = str_repeat('?,', count($fields) - 1) . '?';
+                $query = "INSERT INTO $table (" . implode(', ', $fields) . ") VALUES ($placeholders)";
                 
-                if ($checkStmt->fetch()) {
-                    send_json_response(0, 0, 409, "Component with this UUID already exists");
-                }
-                
-                // Insert new component with extended fields
-                $insertQuery = "INSERT INTO $table (
-                    UUID, SerialNumber, Status, ServerUUID, Location, RackPosition, 
-                    PurchaseDate, WarrantyEndDate, Flag, Notes, CreatedAt, UpdatedAt
-                ) VALUES (
-                    :uuid, :serial, :status, :server_uuid, :location, :rack_position,
-                    :purchase_date, :warranty_end_date, :flag, :notes, NOW(), NOW()
-                )";
-                
-                $stmt = $pdo->prepare($insertQuery);
-                $stmt->bindValue(':uuid', $uuid);
-                $stmt->bindValue(':serial', $serialNumber);
-                $stmt->bindValue(':status', $status, PDO::PARAM_INT);
-                $stmt->bindValue(':server_uuid', $serverUuid);
-                $stmt->bindValue(':location', $location);
-                $stmt->bindValue(':rack_position', $rackPosition);
-                $stmt->bindValue(':purchase_date', $purchaseDate);
-                $stmt->bindValue(':warranty_end_date', $warrantyEndDate);
-                $stmt->bindValue(':flag', $flag);
-                $stmt->bindValue(':notes', $notes);
-                
-                if ($stmt->execute()) {
+                $stmt = $pdo->prepare($query);
+                if ($stmt->execute($values)) {
                     $newId = $pdo->lastInsertId();
-                    
-                    // Log the action
-                    logAPIAction($pdo, "Component added", $module, $newId, null, [
-                        'uuid' => $uuid,
-                        'serial_number' => $serialNumber,
-                        'status' => $status,
-                        'location' => $location,
-                        'rack_position' => $rackPosition
-                    ]);
-                    
-                    send_json_response(1, 1, 201, "Component added successfully", [
-                        'id' => (int)$newId,
-                        'uuid' => $uuid
-                    ]);
+                    logActivity($pdo, $user['id'], 'create', $module, $newId, "Added new $module component");
+                    send_json_response(1, 1, 200, "Component added successfully", ['id' => $newId, 'uuid' => $uuid]);
                 } else {
-                    send_json_response(0, 0, 500, "Failed to add component");
+                    send_json_response(0, 1, 500, "Failed to add component");
                 }
             } catch (Exception $e) {
                 error_log("Error adding $module component: " . $e->getMessage());
-                send_json_response(0, 0, 500, "Failed to add component: " . $e->getMessage());
+                send_json_response(0, 1, 500, "Failed to add component: " . $e->getMessage());
             }
             break;
             
         case 'update':
-        case 'edit':
-            // Check update permission
-            requireUserPermission($pdo, 'update', $module);
+            $id = $_POST['id'] ?? '';
+            if (empty($id)) {
+                send_json_response(0, 1, 400, "Component ID is required");
+            }
             
             try {
-                $id = $_POST['id'] ?? '';
-                if (empty($id)) {
-                    send_json_response(0, 0, 400, "Component ID is required");
+                // Check if component exists
+                $stmt = $pdo->prepare("SELECT ID FROM $table WHERE ID = ?");
+                $stmt->execute([$id]);
+                if ($stmt->rowCount() === 0) {
+                    send_json_response(0, 1, 404, "Component not found");
                 }
                 
-                // Get current component data for logging
-                $currentStmt = $pdo->prepare("SELECT * FROM $table WHERE ID = :id");
-                $currentStmt->bindValue(':id', $id, PDO::PARAM_INT);
-                $currentStmt->execute();
-                $currentData = $currentStmt->fetch();
-                
-                if (!$currentData) {
-                    send_json_response(0, 0, 404, "Component not found");
-                }
-                
-                // Build update query dynamically for extended fields
                 $updateFields = [];
-                $params = [':id' => $id];
-                $newValues = [];
+                $params = [];
                 
-                $allowedFields = [
-                    'serial_number' => 'SerialNumber',
-                    'status' => 'Status',
-                    'server_uuid' => 'ServerUUID',
-                    'location' => 'Location',
-                    'rack_position' => 'RackPosition',
-                    'purchase_date' => 'PurchaseDate',
-                    'warranty_end_date' => 'WarrantyEndDate',
-                    'flag' => 'Flag',
-                    'notes' => 'Notes'
-                ];
+                $allowedFields = ['SerialNumber', 'Status', 'Notes', 'Location', 'RackPosition', 'Flag'];
                 
-                foreach ($allowedFields as $postKey => $dbField) {
-                    if (isset($_POST[$postKey])) {
-                        $value = $_POST[$postKey];
-                        
-                        // Validate status if being updated
-                        if ($postKey === 'status' && !in_array($value, ['0', '1', '2'])) {
-                            send_json_response(0, 0, 400, "Invalid status. Must be 0, 1, or 2");
-                        }
-                        
-                        // Validate dates
-                        if (in_array($postKey, ['purchase_date', 'warranty_end_date']) && 
-                            $value && !DateTime::createFromFormat('Y-m-d', $value)) {
-                            send_json_response(0, 0, 400, "Invalid date format for $postKey. Use YYYY-MM-DD");
-                        }
-                        
-                        $updateFields[] = "$dbField = :$postKey";
-                        $params[":$postKey"] = $value ?: null;
-                        $newValues[$postKey] = $value;
+                foreach ($allowedFields as $field) {
+                    if (isset($_POST[$field])) {
+                        $updateFields[] = "$field = ?";
+                        $params[] = $_POST[$field];
                     }
                 }
                 
                 if (empty($updateFields)) {
-                    send_json_response(0, 0, 400, "No fields to update");
+                    send_json_response(0, 1, 400, "No fields to update");
                 }
                 
-                // Add UpdatedAt
-                $updateFields[] = "UpdatedAt = NOW()";
+                $params[] = $id; // Add ID for WHERE clause
+                $query = "UPDATE $table SET " . implode(', ', $updateFields) . " WHERE ID = ?";
                 
-                $query = "UPDATE $table SET " . implode(', ', $updateFields) . " WHERE ID = :id";
                 $stmt = $pdo->prepare($query);
-                
                 if ($stmt->execute($params)) {
-                    // Log the action
-                    logAPIAction($pdo, "Component updated", $module, $id, 
-                        array_intersect_key($currentData, $newValues), $newValues);
-                    
+                    logActivity($pdo, $user['id'], 'update', $module, $id, "Updated $module component");
                     send_json_response(1, 1, 200, "Component updated successfully");
                 } else {
-                    send_json_response(0, 0, 500, "Failed to update component");
+                    send_json_response(0, 1, 500, "Failed to update component");
                 }
             } catch (Exception $e) {
                 error_log("Error updating $module component: " . $e->getMessage());
-                send_json_response(0, 0, 500, "Failed to update component");
+                send_json_response(0, 1, 500, "Failed to update component");
             }
             break;
             
         case 'delete':
-            // Check delete permission
-            requireUserPermission($pdo, 'delete', $module);
+            $id = $_POST['id'] ?? $_GET['id'] ?? '';
+            if (empty($id)) {
+                send_json_response(0, 1, 400, "Component ID is required");
+            }
             
             try {
-                $id = $_POST['id'] ?? '';
-                if (empty($id)) {
-                    send_json_response(0, 0, 400, "Component ID is required");
-                }
-                
-                // Get component data for logging before deletion
-                $stmt = $pdo->prepare("SELECT * FROM $table WHERE ID = :id");
-                $stmt->bindValue(':id', $id, PDO::PARAM_INT);
-                $stmt->execute();
-                $componentData = $stmt->fetch();
-                
-                if (!$componentData) {
-                    send_json_response(0, 0, 404, "Component not found");
-                }
-                
-                // Delete the component
-                $deleteStmt = $pdo->prepare("DELETE FROM $table WHERE ID = :id");
-                $deleteStmt->bindValue(':id', $id, PDO::PARAM_INT);
-                
-                if ($deleteStmt->execute()) {
-                    // Log the action
-                    logAPIAction($pdo, "Component deleted", $module, $id, $componentData, null);
-                    
+                $stmt = $pdo->prepare("DELETE FROM $table WHERE ID = ?");
+                if ($stmt->execute([$id])) {
+                    logActivity($pdo, $user['id'], 'delete', $module, $id, "Deleted $module component");
                     send_json_response(1, 1, 200, "Component deleted successfully");
                 } else {
-                    send_json_response(0, 0, 500, "Failed to delete component");
+                    send_json_response(0, 1, 500, "Failed to delete component");
                 }
             } catch (Exception $e) {
                 error_log("Error deleting $module component: " . $e->getMessage());
-                send_json_response(0, 0, 500, "Failed to delete component");
+                send_json_response(0, 1, 500, "Failed to delete component");
             }
             break;
             
         default:
-            send_json_response(0, 0, 400, "Invalid component operation");
+            send_json_response(0, 1, 400, "Invalid component operation: $operation");
     }
     exit();
 }
 
 // Dashboard operations
 if ($module === 'dashboard') {
-    requireUserPermission($pdo, 'read');
-    
     switch ($operation) {
+        case 'get_data':
         case 'stats':
-        case 'get':
             try {
-                $stats = [];
-                $componentTypes = ['cpu', 'ram', 'storage', 'motherboard', 'nic', 'caddy'];
-                
-                foreach ($componentTypes as $type) {
-                    $table = $tableMap[$type] ?? $type . 'inventory';
-                    
-                    // Get counts by status
-                    $query = "SELECT Status, COUNT(*) as count FROM $table GROUP BY Status";
-                    $stmt = $pdo->prepare($query);
-                    $stmt->execute();
-                    $statusCounts = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
-                    
-                    $stats[$type] = [
-                        'total' => array_sum($statusCounts),
-                        'available' => $statusCounts[1] ?? 0,
-                        'in_use' => $statusCounts[2] ?? 0,
-                        'failed' => $statusCounts[0] ?? 0
-                    ];
-                }
-                
+                $stats = getSystemStats($pdo);
                 send_json_response(1, 1, 200, "Dashboard stats retrieved", ['stats' => $stats]);
             } catch (Exception $e) {
                 error_log("Error getting dashboard stats: " . $e->getMessage());
-                send_json_response(0, 0, 500, "Failed to retrieve dashboard stats");
+                send_json_response(0, 1, 500, "Failed to retrieve dashboard stats");
             }
             break;
             
         default:
-            send_json_response(0, 0, 400, "Invalid dashboard operation");
+            send_json_response(0, 1, 400, "Invalid dashboard operation: $operation");
     }
     exit();
 }
 
-// ACL operations (admin only)
-if ($module === 'acl') {
-    if (class_exists('SimpleACL')) {
-        $acl = new SimpleACL($pdo, $user['id']);
-        
-        if (!$acl->isAdmin()) {
-            send_json_response(0, 0, 403, "Admin access required");
-        }
-        
-        // Handle ACL operations
-        switch ($operation) {
-            case 'get_user_permissions':
-                $userId = $_POST['user_id'] ?? $_GET['user_id'] ?? '';
-                
-                if (empty($userId)) {
-                    send_json_response(0, 0, 400, "User ID is required");
+// User management (simplified)
+if ($module === 'users') {
+    switch ($operation) {
+        case 'list':
+            try {
+                $stmt = $pdo->prepare("SELECT id, username, email, firstname, lastname, created_at FROM users ORDER BY id");
+                $stmt->execute();
+                $users = $stmt->fetchAll();
+                send_json_response(1, 1, 200, "Users retrieved", ['users' => $users]);
+            } catch (Exception $e) {
+                error_log("Error getting users: " . $e->getMessage());
+                send_json_response(0, 1, 500, "Failed to retrieve users");
+            }
+            break;
+            
+        case 'add':
+            // Only allow admin to add users
+            if (!isAdmin($pdo, $user['id'])) {
+                send_json_response(0, 1, 403, "Admin access required");
+            }
+            
+            $username = trim($_POST['username'] ?? '');
+            $email = trim($_POST['email'] ?? '');
+            $password = $_POST['password'] ?? '';
+            $firstname = trim($_POST['firstname'] ?? '');
+            $lastname = trim($_POST['lastname'] ?? '');
+            
+            if (empty($username) || empty($email) || empty($password)) {
+                send_json_response(0, 1, 400, "Username, email, and password are required");
+            }
+            
+            try {
+                $newId = createUser($pdo, $username, $email, $password, $firstname, $lastname);
+                if ($newId) {
+                    send_json_response(1, 1, 200, "User created successfully", ['id' => $newId]);
+                } else {
+                    send_json_response(0, 1, 500, "Failed to create user");
                 }
-                
-                try {
-                    $userAcl = new SimpleACL($pdo, $userId);
-                    $permissions = $userAcl->getPermissionsSummary();
-                    $role = $userAcl->getUserRole();
-                    
-                    send_json_response(1, 1, 200, "User permissions retrieved", [
-                        'user_id' => $userId,
-                        'role' => $role,
-                        'permissions' => $permissions
-                    ]);
-                } catch (Exception $e) {
-                    error_log("Error getting user permissions: " . $e->getMessage());
-                    send_json_response(0, 0, 500, "Failed to retrieve user permissions");
-                }
-                break;
-                
-            case 'get_all_roles':
-                try {
-                    $query = "SELECT * FROM roles ORDER BY id";
-                    $stmt = $pdo->prepare($query);
-                    $stmt->execute();
-                    $roles = $stmt->fetchAll();
-                    
-                    send_json_response(1, 1, 200, "Roles retrieved", ['roles' => $roles]);
-                } catch (Exception $e) {
-                    error_log("Error getting roles: " . $e->getMessage());
-                    send_json_response(0, 0, 500, "Failed to retrieve roles");
-                }
-                break;
-                
-            default:
-                send_json_response(0, 0, 400, "Invalid ACL operation");
-        }
-    } else {
-        send_json_response(0, 0, 500, "ACL system not available");
+            } catch (Exception $e) {
+                error_log("Error creating user: " . $e->getMessage());
+                send_json_response(0, 1, 500, "Failed to create user");
+            }
+            break;
+            
+        default:
+            send_json_response(0, 1, 400, "Invalid user operation: $operation");
     }
     exit();
 }
 
 // Invalid module
-send_json_response(0, 0, 400, "Invalid module: $module");
+error_log("Invalid module requested: $module");
+send_json_response(0, 1, 400, "Invalid module: $module");
+?>

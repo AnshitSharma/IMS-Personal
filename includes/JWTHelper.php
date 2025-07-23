@@ -1,233 +1,211 @@
 <?php
 /**
- * JWT Helper Class - FIXED VERSION
- * Simple JWT implementation without external dependencies
- * 
- * File: includes/JWTHelper.php
+ * JWT Helper Class
+ * Create this as includes/JWTHelper.php
  */
 
-class JWTHelper 
-{
-    private static $secret_key = null;
+class JWTHelper {
+    private static $secret = null;
     private static $algorithm = 'HS256';
-    private static $token_expiry = 24 * 60 * 60; // 24 hours in seconds
-
+    
     /**
      * Initialize JWT with secret key
      */
-    public static function init($secret_key = null) {
-        if ($secret_key) {
-            self::$secret_key = $secret_key;
-        } else {
-            // Load from environment or use default (should be in config)
-            self::$secret_key = getenv('JWT_SECRET') ?: 'your-very-secure-secret-key-change-this-in-production';
-        }
+    public static function init($secret) {
+        self::$secret = $secret;
     }
-
-    /**
-     * Set token expiry time
-     */
-    public static function setExpiry($seconds) {
-        self::$token_expiry = $seconds;
-    }
-
+    
     /**
      * Base64 URL encode
      */
     private static function base64UrlEncode($data) {
         return rtrim(strtr(base64_encode($data), '+/', '-_'), '=');
     }
-
+    
     /**
      * Base64 URL decode
      */
     private static function base64UrlDecode($data) {
         return base64_decode(str_pad(strtr($data, '-_', '+/'), strlen($data) % 4, '=', STR_PAD_RIGHT));
     }
-
+    
     /**
      * Generate JWT token
      */
-    public static function generateToken($payload) {
-        if (self::$secret_key === null) {
-            self::init();
+    public static function generateToken($payload, $expiresIn = 3600) {
+        if (!self::$secret) {
+            throw new Exception('JWT secret not initialized');
         }
-
+        
         // Header
         $header = json_encode([
             'typ' => 'JWT',
             'alg' => self::$algorithm
         ]);
-
-        // Add standard claims to payload
+        
+        // Payload with standard claims
         $now = time();
-        $payload['iat'] = $now; // Issued at
-        $payload['exp'] = $now + self::$token_expiry; // Expiration
-        $payload['nbf'] = $now; // Not before
-
-        $payload = json_encode($payload);
-
-        // Encode
+        $payload = array_merge($payload, [
+            'iat' => $now,              // Issued at
+            'exp' => $now + $expiresIn, // Expires at
+            'iss' => 'bdc-ims',         // Issuer
+        ]);
+        
+        $payloadJson = json_encode($payload);
+        
+        // Encode header and payload
         $headerEncoded = self::base64UrlEncode($header);
-        $payloadEncoded = self::base64UrlEncode($payload);
-
+        $payloadEncoded = self::base64UrlEncode($payloadJson);
+        
         // Create signature
-        $signature = hash_hmac('sha256', $headerEncoded . '.' . $payloadEncoded, self::$secret_key, true);
+        $signature = hash_hmac('sha256', $headerEncoded . '.' . $payloadEncoded, self::$secret, true);
         $signatureEncoded = self::base64UrlEncode($signature);
-
-        // Create JWT
+        
         return $headerEncoded . '.' . $payloadEncoded . '.' . $signatureEncoded;
     }
-
+    
     /**
      * Verify and decode JWT token
      */
     public static function verifyToken($token) {
-        if (self::$secret_key === null) {
-            self::init();
+        if (!self::$secret) {
+            throw new Exception('JWT secret not initialized');
         }
-
+        
         $parts = explode('.', $token);
         if (count($parts) !== 3) {
-            return false;
+            throw new Exception('Invalid token format');
         }
-
+        
         list($headerEncoded, $payloadEncoded, $signatureEncoded) = $parts;
-
+        
         // Verify signature
         $signature = self::base64UrlDecode($signatureEncoded);
-        $expectedSignature = hash_hmac('sha256', $headerEncoded . '.' . $payloadEncoded, self::$secret_key, true);
-
+        $expectedSignature = hash_hmac('sha256', $headerEncoded . '.' . $payloadEncoded, self::$secret, true);
+        
         if (!hash_equals($signature, $expectedSignature)) {
-            return false;
+            throw new Exception('Invalid token signature');
         }
-
+        
         // Decode payload
         $payload = json_decode(self::base64UrlDecode($payloadEncoded), true);
+        
         if (!$payload) {
-            return false;
+            throw new Exception('Invalid token payload');
         }
-
+        
         // Check expiration
-        $now = time();
-        if (isset($payload['exp']) && $payload['exp'] < $now) {
-            return false;
+        if (isset($payload['exp']) && $payload['exp'] < time()) {
+            throw new Exception('Token has expired');
         }
-
-        // Check not before
-        if (isset($payload['nbf']) && $payload['nbf'] > $now) {
-            return false;
-        }
-
+        
         return $payload;
     }
-
+    
     /**
-     * Extract token from Authorization header - FIXED VERSION
+     * Get token from Authorization header
      */
-    public static function extractTokenFromHeader() {
-        // Try multiple ways to get headers
-        $headers = null;
+    public static function getTokenFromHeader() {
+        $headers = getallheaders();
         
-        // Method 1: apache_request_headers (if available)
-        if (function_exists('apache_request_headers')) {
-            $headers = apache_request_headers();
-        }
-        
-        // Method 2: getallheaders (if available)
-        if (!$headers && function_exists('getallheaders')) {
-            $headers = getallheaders();
-        }
-        
-        // Method 3: $_SERVER variables
-        if (!$headers) {
-            $headers = [];
-            foreach ($_SERVER as $key => $value) {
-                if (strpos($key, 'HTTP_') === 0) {
-                    $header = str_replace(' ', '-', ucwords(str_replace('_', ' ', strtolower(substr($key, 5)))));
-                    $headers[$header] = $value;
-                }
+        if (isset($headers['Authorization'])) {
+            if (preg_match('/Bearer\s+(.*)$/i', $headers['Authorization'], $matches)) {
+                return $matches[1];
             }
         }
         
-        // Check for Authorization header (case insensitive)
-        $authHeader = null;
-        foreach ($headers as $key => $value) {
-            if (strtolower($key) === 'authorization') {
-                $authHeader = $value;
-                break;
-            }
-        }
-        
-        // Also check $_SERVER directly
-        if (!$authHeader) {
-            $authHeader = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
-        }
-        
-        if ($authHeader && preg_match('/Bearer\s+(.*)$/i', $authHeader, $matches)) {
-            return trim($matches[1]);
-        }
-
         return null;
     }
-
+    
     /**
-     * Get user ID from token
+     * Middleware to validate JWT token
      */
-    public static function getUserIdFromToken($token = null) {
-        if ($token === null) {
-            $token = self::extractTokenFromHeader();
-        }
-
+    public static function validateRequest($pdo) {
+        $token = self::getTokenFromHeader();
+        
         if (!$token) {
-            return null;
+            throw new Exception('No token provided');
         }
-
-        $payload = self::verifyToken($token);
-        if ($payload && isset($payload['user_id'])) {
-            return $payload['user_id'];
+        
+        try {
+            $payload = self::verifyToken($token);
+            
+            // Get user from database to ensure they still exist
+            $stmt = $pdo->prepare("SELECT id, username, email, firstname, lastname FROM users WHERE id = ?");
+            $stmt->execute([$payload['user_id']]);
+            $user = $stmt->fetch(PDO::FETCH_ASSOC);
+            
+            if (!$user) {
+                throw new Exception('User not found');
+            }
+            
+            return $user;
+        } catch (Exception $e) {
+            throw new Exception('Invalid token: ' . $e->getMessage());
         }
-
-        return null;
     }
-
+    
     /**
-     * Refresh token (generate new token with updated expiry)
+     * Generate refresh token
      */
-    public static function refreshToken($token) {
-        $payload = self::verifyToken($token);
-        if (!$payload) {
+    public static function generateRefreshToken() {
+        return bin2hex(random_bytes(32));
+    }
+    
+    /**
+     * Store refresh token in database
+     */
+    public static function storeRefreshToken($pdo, $userId, $refreshToken, $expiresIn = 2592000) {
+        try {
+            $expiresAt = date('Y-m-d H:i:s', time() + $expiresIn);
+            
+            $stmt = $pdo->prepare("
+                INSERT INTO auth_tokens (user_id, token, created_at, expires_at) 
+                VALUES (?, ?, NOW(), ?)
+                ON DUPLICATE KEY UPDATE 
+                token = VALUES(token), 
+                created_at = NOW(), 
+                expires_at = VALUES(expires_at)
+            ");
+            
+            return $stmt->execute([$userId, $refreshToken, $expiresAt]);
+        } catch (PDOException $e) {
+            error_log("Error storing refresh token: " . $e->getMessage());
             return false;
         }
-
-        // Remove old timestamps
-        unset($payload['iat'], $payload['exp'], $payload['nbf']);
-
-        // Generate new token
-        return self::generateToken($payload);
     }
-
+    
     /**
-     * Check if token is expired
+     * Verify refresh token
      */
-    public static function isTokenExpired($token) {
-        $payload = self::verifyToken($token);
-        if (!$payload) {
-            return true;
+    public static function verifyRefreshToken($pdo, $refreshToken) {
+        try {
+            $stmt = $pdo->prepare("
+                SELECT at.user_id, u.username, u.email, u.firstname, u.lastname
+                FROM auth_tokens at
+                JOIN users u ON at.user_id = u.id
+                WHERE at.token = ? AND at.expires_at > NOW()
+            ");
+            $stmt->execute([$refreshToken]);
+            
+            return $stmt->fetch(PDO::FETCH_ASSOC);
+        } catch (PDOException $e) {
+            error_log("Error verifying refresh token: " . $e->getMessage());
+            return false;
         }
-
-        $now = time();
-        return isset($payload['exp']) && $payload['exp'] < $now;
     }
-
+    
     /**
-     * Get token expiry time
+     * Clean up expired tokens
      */
-    public static function getTokenExpiry($token) {
-        $payload = self::verifyToken($token);
-        if ($payload && isset($payload['exp'])) {
-            return $payload['exp'];
+    public static function cleanupExpiredTokens($pdo) {
+        try {
+            $stmt = $pdo->prepare("DELETE FROM auth_tokens WHERE expires_at <= NOW()");
+            return $stmt->execute();
+        } catch (PDOException $e) {
+            error_log("Error cleaning up expired tokens: " . $e->getMessage());
+            return false;
         }
-        return null;
     }
 }
+?>

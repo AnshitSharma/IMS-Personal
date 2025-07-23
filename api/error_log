@@ -479,3 +479,150 @@ Stack trace:
 [22-Jul-2025 19:50:05 UTC] API called with action: cpu-add
 [22-Jul-2025 19:50:05 UTC] Module: cpu, Operation: add
 [22-Jul-2025 19:50:05 UTC] Authenticated user: johnadmin (ID: 37)
+[22-Jul-2025 21:01:00 UTC] API called with action: search-components
+[22-Jul-2025 21:01:00 UTC] Module: search, Operation: components
+[22-Jul-2025 21:01:00 UTC] Authenticated user: johnadmin (ID: 37)
+[22-Jul-2025 22:47:09 UTC] API called with action: auth-login
+[22-Jul-2025 22:47:09 UTC] Module: auth, Operation: login
+[22-Jul-2025 22:47:09 UTC] Auth operation: login
+[22-Jul-2025 22:47:09 UTC] Login attempt for username: johnadmin
+[22-Jul-2025 22:47:09 UTC] Login successful for user: johnadmin with role: admin
+[22-Jul-2025 22:47:54 UTC] API called with action: cpu-list
+[22-Jul-2025 22:47:54 UTC] Module: cpu, Operation: list
+[22-Jul-2025 22:47:54 UTC] Authenticated user: johnadmin (ID: 37)
+[22-Jul-2025 22:49:35 UTC] API called with action: roles
+[22-Jul-2025 22:49:35 UTC] Module: roles, Operation: 
+[22-Jul-2025 22:49:35 UTC] Authenticated user: johnadmin (ID: 37)
+[22-Jul-2025 22:54:39 UTC] API called with action: acl-get_all_roles
+[22-Jul-2025 22:54:39 UTC] Module: acl, Operation: get_all_roles
+[22-Jul-2025 22:54:45 UTC] API called with action: permissions
+[22-Jul-2025 22:54:45 UTC] Module: permissions, Operation: 
+[22-Jul-2025 22:54:57 UTC] API called with action: auth-login
+[22-Jul-2025 22:54:57 UTC] Module: auth, Operation: login
+[22-Jul-2025 22:54:57 UTC] Auth operation: login
+[22-Jul-2025 22:54:57 UTC] Login attempt for username: johnadmin
+[22-Jul-2025 22:54:57 UTC] Login successful for user: johnadmin with role: admin
+[22-Jul-2025 22:56:45 UTC] API called with action: permissions
+[22-Jul-2025 22:56:45 UTC] Module: permissions, Operation: 
+[22-Jul-2025 22:56:53 UTC] API called with action: permissions
+[22-Jul-2025 22:56:53 UTC] Module: permissions, Operation: 
+[22-Jul-2025 22:56:53 UTC] Authenticated user: johnadmin (ID: 37)
+[22-Jul-2025 22:58:30 UTC] API called with action: roles
+[22-Jul-2025 22:58:30 UTC] Module: roles, Operation: 
+[22-Jul-2025 22:58:30 UTC] Authenticated user: johnadmin (ID: 37)
+[22-Jul-2025 23:02:17 UTC] API called with action: acl-permissions
+[22-Jul-2025 23:02:17 UTC] Module: acl, Operation: permissions
+[22-Jul-2025 23:02:17 UTC] Authenticated user: johnadmin (ID: 37)
+[22-Jul-2025 23:02:39 UTC] API called with action: acl-permissions
+[22-Jul-2025 23:02:39 UTC] Module: acl, Operation: permissions
+[22-Jul-2025 23:02:39 UTC] Authenticated user: johnadmin (ID: 37)
+[22-Jul-2025 23:03:03 UTC] API called with action: acl-roles
+[22-Jul-2025 23:03:03 UTC] Module: acl, Operation: roles
+[22-Jul-2025 23:03:03 UTC] Authenticated user: johnadmin (ID: 37)
+[23-Jul-2025 02:34:15 UTC] API called with action: auth-login
+[23-Jul-2025 02:34:15 UTC] Error authenticating user: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'password_hash' in 'SELECT'
+[23-Jul-2025 02:34:15 UTC] Invalid credentials for username: johnadmin
+[23-Jul-2025 17:06:18 UTC] API called with action: auth-login
+[23-Jul-2025 17:06:18 UTC] Error authenticating user: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'password_hash' in 'SELECT'
+[23-Jul-2025 17:06:18 UTC] Invalid credentials for username: johnadmin
+[23-Jul-2025 17:06:36 UTC] API called with action: auth-login
+[23-Jul-2025 17:06:36 UTC] Error authenticating user: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'password_hash' in 'SELECT'
+[23-Jul-2025 17:06:36 UTC] Invalid credentials for username: a
+[23-Jul-2025 17:14:14 UTC] API called with action: auth-login
+[23-Jul-2025 17:14:14 UTC] Error authenticating user: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'password_hash' in 'SELECT'
+[23-Jul-2025 17:14:14 UTC] Invalid credentials for username: johnadmin
+[23-Jul-2025 17:14:19 UTC] API called with action: auth-login
+[23-Jul-2025 17:14:19 UTC] Error authenticating user: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'password_hash' in 'SELECT'
+[23-Jul-2025 17:14:19 UTC] Invalid credentials for username: johnadmin
+[23-Jul-2025 18:42:47 UTC] API called with action: auth-login
+[23-Jul-2025 18:42:47 UTC] Error authenticating user: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'password_hash' in 'SELECT'
+[23-Jul-2025 18:42:47 UTC] Invalid credentials for username: johnadmin
+[23-Jul-2025 18:46:46 UTC] API called with action: auth-login
+[23-Jul-2025 18:46:46 UTC] User found: johnadmin
+[23-Jul-2025 18:46:46 UTC] Has password: yes
+[23-Jul-2025 18:46:46 UTC] Password verification failed for user: johnadmin
+[23-Jul-2025 18:46:46 UTC] Invalid credentials for username: johnadmin
+[23-Jul-2025 18:47:41 UTC] API called with action: auth-login
+[23-Jul-2025 18:47:41 UTC] User found: johnadmin
+[23-Jul-2025 18:47:41 UTC] Has password: yes
+[23-Jul-2025 18:47:41 UTC] Password verification failed for user: johnadmin
+[23-Jul-2025 18:47:41 UTC] Invalid credentials for username: johnadmin
+[23-Jul-2025 18:47:56 UTC] API called with action: auth-login
+[23-Jul-2025 18:47:56 UTC] User found: johnadmin
+[23-Jul-2025 18:47:56 UTC] Has password: yes
+[23-Jul-2025 18:47:56 UTC] Password verification failed for user: johnadmin
+[23-Jul-2025 18:47:56 UTC] Invalid credentials for username: johnadmin
+[23-Jul-2025 18:58:13 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[23-Jul-2025 18:58:13 UTC] Login attempt - Username: 'johnadmin', Password length: 8
+[23-Jul-2025 18:58:13 UTC] Authentication attempt for: johnadmin
+[23-Jul-2025 18:58:13 UTC] User found: johnadmin (ID: 37)
+[23-Jul-2025 18:58:13 UTC] Stored password hash: $2y$10$TKh8H1.PfQx37...
+[23-Jul-2025 18:58:13 UTC] Provided password: admin123
+[23-Jul-2025 18:58:13 UTC] Password verification result: FAILED
+[23-Jul-2025 18:58:13 UTC] Password verification failed for user: johnadmin
+[23-Jul-2025 18:58:13 UTC] Testing with known hash for admin123
+[23-Jul-2025 18:58:13 UTC] Test verification with known hash: FAILED
+[23-Jul-2025 18:58:13 UTC] Login failed for username: johnadmin
+[23-Jul-2025 18:58:29 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[23-Jul-2025 18:58:29 UTC] Login attempt - Username: 'johnadmin', Password length: 8
+[23-Jul-2025 18:58:29 UTC] Authentication attempt for: johnadmin
+[23-Jul-2025 18:58:29 UTC] User found: johnadmin (ID: 37)
+[23-Jul-2025 18:58:29 UTC] Stored password hash: $2y$10$TKh8H1.PfQx37...
+[23-Jul-2025 18:58:29 UTC] Provided password: admin123
+[23-Jul-2025 18:58:29 UTC] Password verification result: FAILED
+[23-Jul-2025 18:58:29 UTC] Password verification failed for user: johnadmin
+[23-Jul-2025 18:58:29 UTC] Testing with known hash for admin123
+[23-Jul-2025 18:58:29 UTC] Test verification with known hash: FAILED
+[23-Jul-2025 18:58:29 UTC] Login failed for username: johnadmin
+[23-Jul-2025 18:58:54 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[23-Jul-2025 18:58:54 UTC] Login attempt - Username: 'johnadmin', Password length: 8
+[23-Jul-2025 18:58:54 UTC] Authentication attempt for: johnadmin
+[23-Jul-2025 18:58:54 UTC] User found: johnadmin (ID: 37)
+[23-Jul-2025 18:58:54 UTC] Stored password hash: $2y$10$TKh8H1.PfQx37...
+[23-Jul-2025 18:58:54 UTC] Provided password: admin123
+[23-Jul-2025 18:58:54 UTC] Password verification result: FAILED
+[23-Jul-2025 18:58:54 UTC] Password verification failed for user: johnadmin
+[23-Jul-2025 18:58:54 UTC] Testing with known hash for admin123
+[23-Jul-2025 18:58:54 UTC] Test verification with known hash: FAILED
+[23-Jul-2025 18:58:54 UTC] Login failed for username: johnadmin
+[23-Jul-2025 19:45:35 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[23-Jul-2025 19:45:35 UTC] Login attempt - Username: 'johnadmin', Password length: 8
+[23-Jul-2025 19:45:35 UTC] Authentication attempt for: johnadmin
+[23-Jul-2025 19:45:35 UTC] User found: johnadmin (ID: 37)
+[23-Jul-2025 19:45:35 UTC] Stored password hash: $2y$10$TKh8H1.PfQx37...
+[23-Jul-2025 19:45:35 UTC] Provided password: admin123
+[23-Jul-2025 19:45:35 UTC] Password verification result: FAILED
+[23-Jul-2025 19:45:35 UTC] Password verification failed for user: johnadmin
+[23-Jul-2025 19:45:35 UTC] Testing with known hash for admin123
+[23-Jul-2025 19:45:35 UTC] Test verification with known hash: FAILED
+[23-Jul-2025 19:45:35 UTC] Login failed for username: johnadmin
+[23-Jul-2025 19:46:39 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[23-Jul-2025 19:46:39 UTC] Login attempt - Username: 'johnadmin', Password length: 8
+[23-Jul-2025 19:46:39 UTC] Authentication attempt for: johnadmin
+[23-Jul-2025 19:46:39 UTC] User found: johnadmin (ID: 37)
+[23-Jul-2025 19:46:39 UTC] Stored password hash: $2y$10$Nt9hDYBtz2H/Y...
+[23-Jul-2025 19:46:39 UTC] Provided password: admin123
+[23-Jul-2025 19:46:39 UTC] Password verification result: SUCCESS
+[23-Jul-2025 19:46:39 UTC] Authentication successful for user: johnadmin
+[23-Jul-2025 19:46:39 UTC] Login successful for user: johnadmin (ID: 37)
+[23-Jul-2025 21:03:30 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[23-Jul-2025 21:03:30 UTC] Login attempt - Username: 'johnadmin'
+[23-Jul-2025 21:03:30 UTC] Authentication attempt for: johnadmin
+[23-Jul-2025 21:03:30 UTC] User found: johnadmin (ID: 37)
+[23-Jul-2025 21:03:30 UTC] Authentication successful for user: johnadmin
+[23-Jul-2025 21:03:30 UTC] Login successful for user: johnadmin (ID: 37)
+[23-Jul-2025 21:03:55 UTC] API called with action: auth-verify (Module: auth, Operation: verify)
+[23-Jul-2025 21:03:55 UTC] Invalid auth operation: verify
+[23-Jul-2025 21:05:21 UTC] API called with action: auth-refresh (Module: auth, Operation: refresh)
+[23-Jul-2025 21:05:35 UTC] API called with action: auth-refresh (Module: auth, Operation: refresh)
+[23-Jul-2025 21:07:47 UTC] API called with action: auth-refresh (Module: auth, Operation: refresh)
+[23-Jul-2025 21:08:08 UTC] API called with action: auth-refresh (Module: auth, Operation: refresh)
+[23-Jul-2025 21:08:08 UTC] Token refresh successful for user: johnadmin
+[23-Jul-2025 21:08:37 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[23-Jul-2025 21:09:04 UTC] API called with action: auth-logout (Module: auth, Operation: logout)
+[23-Jul-2025 21:09:04 UTC] JWT logout for user: johnadmin
+[23-Jul-2025 21:09:04 UTC] User logged out
+[23-Jul-2025 21:09:10 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[23-Jul-2025 21:09:22 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[23-Jul-2025 21:09:22 UTC] JWT Authentication failed: No token provided
+[23-Jul-2025 21:09:49 UTC] API called with action: cpu-list (Module: cpu, Operation: list)

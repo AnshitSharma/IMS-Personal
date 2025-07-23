@@ -1,172 +1,25 @@
 <?php
 /**
- * Updated BaseFunctions.php with JWT Support - FIXED VERSION
- * This file now includes both session-based and JWT-based authentication functions
- * for backward compatibility during migration
+ * BaseFunctions.php with JWT functionality
+ * Replace your existing BaseFunctions.php with this version
  */
 
-// Include JWT components only if they exist
-if (file_exists(__DIR__ . '/JWTHelper.php')) {
-    require_once __DIR__ . '/JWTHelper.php';
-}
-
-if (file_exists(__DIR__ . '/JWTAuthFunctions.php')) {
-    require_once __DIR__ . '/JWTAuthFunctions.php';
-}
-
-if (file_exists(__DIR__ . '/SimpleACL.php')) {
-    require_once __DIR__ . '/SimpleACL.php';
-}
+// Include JWT Helper
+require_once(__DIR__ . '/JWTHelper.php');
 
 /**
- * Enhanced database connection with error handling
+ * Initialize JWT with secret key
  */
-if (!function_exists('getDatabaseConnection')) {
-    function getDatabaseConnection() {
-        try {
-            $dsn = "mysql:host=" . DB_HOST . ";dbname=" . DB_NAME . ";charset=utf8mb4";
-            $options = [
-                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-                PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-                PDO::ATTR_EMULATE_PREPARES => false,
-            ];
-            return new PDO($dsn, DB_USER, DB_PASS, $options);
-        } catch (PDOException $e) {
-            error_log("Database connection failed: " . $e->getMessage());
-            return null;
-        }
-    }
+function initializeJWT() {
+    $jwtSecret = getenv('JWT_SECRET') ?: 'bdc-ims-jwt-secret-key-change-in-production-2025';
+    JWTHelper::init($jwtSecret);
 }
 
-/**
- * Send JSON response with consistent format
- */
-if (!function_exists('send_json_response')) {
-    function send_json_response($success, $status, $http_code, $message, $data = null) {
-        // Prevent any previous output
-        if (ob_get_level()) {
-            ob_clean();
-        }
-        
-        // Set headers
-        header('Content-Type: application/json', true, $http_code);
-        
-        $response = [
-            'success' => (bool)$success,
-            'status' => (int)$status,
-            'message' => $message,
-            'timestamp' => date('Y-m-d H:i:s'),
-            'http_code' => $http_code
-        ];
-        
-        if ($data !== null) {
-            $response['data'] = $data;
-        }
-        
-        echo json_encode($response, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
-        exit();
-    }
-}
+// Initialize JWT on file load
+initializeJWT();
 
 /**
- * Universal authentication function
- * Tries JWT first, then falls back to session-based auth
- */
-if (!function_exists('authenticateUser')) {
-    function authenticateUser($pdo) {
-        // Try JWT authentication first if JWT functions are available
-        if (function_exists('authenticateWithJWT')) {
-            $jwtUser = authenticateWithJWT($pdo);
-            if ($jwtUser) {
-                return $jwtUser;
-            }
-        }
-        
-        // Fall back to session-based authentication
-        return isUserLoggedIn($pdo);
-    }
-}
-
-/**
- * Universal authentication with ACL
- */
-if (!function_exists('authenticateUserWithACL')) {
-    function authenticateUserWithACL($pdo) {
-        // Try JWT authentication first if JWT functions are available
-        if (function_exists('authenticateWithJWTAndACL')) {
-            $jwtUser = authenticateWithJWTAndACL($pdo);
-            if ($jwtUser) {
-                return $jwtUser;
-            }
-        }
-        
-        // Fall back to session-based authentication
-        return isUserLoggedInWithACL($pdo);
-    }
-}
-
-/**
- * Universal permission check
- */
-if (!function_exists('checkUserPermission')) {
-    function checkUserPermission($pdo, $action, $componentType = null) {
-        // Try JWT permission check first if JWT functions are available
-        if (function_exists('hasJWTPermission') && class_exists('JWTHelper')) {
-            $token = JWTHelper::extractTokenFromHeader();
-            if ($token) {
-                return hasJWTPermission($pdo, $action, $componentType);
-            }
-        }
-        
-        // Fall back to session-based permission check
-        return hasPermission($pdo, $action, $componentType);
-    }
-}
-
-/**
- * Universal permission requirement
- */
-if (!function_exists('requireUserPermission')) {
-    function requireUserPermission($pdo, $action, $componentType = null) {
-        // Try JWT permission check first if JWT functions are available
-        if (function_exists('requireJWTPermission') && class_exists('JWTHelper')) {
-            $token = JWTHelper::extractTokenFromHeader();
-            if ($token) {
-                requireJWTPermission($pdo, $action, $componentType);
-                return;
-            }
-        }
-        
-        // Fall back to session-based permission check
-        requirePermission($pdo, $action, $componentType);
-    }
-}
-
-/**
- * Get current user ID (works with both JWT and sessions)
- */
-if (!function_exists('getCurrentUserId')) {
-    function getCurrentUserId($pdo = null) {
-        // Try JWT first if available
-        if (function_exists('getUserIdFromJWT')) {
-            $userId = getUserIdFromJWT();
-            if ($userId) {
-                return $userId;
-            }
-        }
-        
-        // Fall back to session
-        safeSessionStart();
-        return $_SESSION['id'] ?? null;
-    }
-}
-
-/**
- * Legacy session-based functions (kept for backward compatibility)
- */
-
-/**
- * Safe session start to avoid warnings
+ * Safe session start
  */
 if (!function_exists('safeSessionStart')) {
     function safeSessionStart() {
@@ -177,28 +30,85 @@ if (!function_exists('safeSessionStart')) {
 }
 
 /**
- * Check if user is logged in (session-based - legacy)
+ * Generate UUID v4
+ */
+if (!function_exists('generateUUID')) {
+    function generateUUID() {
+        $data = random_bytes(16);
+        $data[6] = chr(ord($data[6]) & 0x0f | 0x40);
+        $data[8] = chr(ord($data[8]) & 0x3f | 0x80);
+        return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($data), 4));
+    }
+}
+
+/**
+ * Send JSON response
+ */
+if (!function_exists('send_json_response')) {
+    function send_json_response($success, $authenticated, $code, $message, $data = null) {
+        http_response_code($code);
+        
+        $response = [
+            'success' => (bool)$success,
+            'authenticated' => (bool)$authenticated,
+            'message' => $message,
+            'timestamp' => date('Y-m-d H:i:s')
+        ];
+        
+        if ($data !== null) {
+            $response['data'] = $data;
+        }
+        
+        echo json_encode($response, JSON_PRETTY_PRINT);
+        exit();
+    }
+}
+
+/**
+ * JWT Authentication - Get authenticated user from JWT token
+ */
+if (!function_exists('authenticateWithJWT')) {
+    function authenticateWithJWT($pdo) {
+        try {
+            return JWTHelper::validateRequest($pdo);
+        } catch (Exception $e) {
+            error_log("JWT Authentication failed: " . $e->getMessage());
+            return false;
+        }
+    }
+}
+
+/**
+ * Require JWT authentication
+ */
+if (!function_exists('requireJWTAuth')) {
+    function requireJWTAuth($pdo) {
+        $user = authenticateWithJWT($pdo);
+        if (!$user) {
+            http_response_code(401);
+            send_json_response(0, 0, 401, "Authentication required - invalid or missing token");
+        }
+        return $user;
+    }
+}
+
+/**
+ * Session-based authentication check (for backward compatibility)
  */
 if (!function_exists('isUserLoggedIn')) {
     function isUserLoggedIn($pdo) {
         safeSessionStart();
         
-        if (!isset($_SESSION["loggedin"]) || $_SESSION["loggedin"] !== true) {
+        if (!isset($_SESSION['id'])) {
             return false;
         }
         
-        if (!isset($_SESSION["id"])) {
-            return false;
-        }
-        
-        // Verify user still exists in database
         try {
-            $stmt = $pdo->prepare("SELECT id, username, email, firstname, lastname FROM users WHERE id = ?");
+            $stmt = $pdo->prepare("SELECT id, username, email, created_at FROM users WHERE id = ?");
             $stmt->execute([$_SESSION["id"]]);
             $user = $stmt->fetch();
             
             if (!$user) {
-                // User no longer exists, clear session
                 session_destroy();
                 return false;
             }
@@ -212,28 +122,21 @@ if (!function_exists('isUserLoggedIn')) {
 }
 
 /**
- * Enhanced session validation with Simple ACL (legacy)
+ * Hybrid authentication - Try JWT first, then session
  */
-if (!function_exists('isUserLoggedInWithACL')) {
-    function isUserLoggedInWithACL($pdo) {
-        $user = isUserLoggedIn($pdo);
+if (!function_exists('requireLogin')) {
+    function requireLogin($pdo) {
+        // Try JWT authentication first
+        $user = authenticateWithJWT($pdo);
+        
         if (!$user) {
-            return false;
+            // Fallback to session authentication
+            $user = isUserLoggedIn($pdo);
         }
         
-        // Add Simple ACL information to user data
-        if (class_exists('SimpleACL')) {
-            $acl = new SimpleACL($pdo, $user['id']);
-            $user['role'] = $acl->getUserRole();
-            $user['permissions'] = $acl->getPermissionsSummary();
-            $user['is_admin'] = $acl->isAdmin();
-            $user['is_manager'] = $acl->isManagerOrAdmin();
-        } else {
-            // Fallback if ACL is not available
-            $user['role'] = 'viewer';
-            $user['permissions'] = [];
-            $user['is_admin'] = false;
-            $user['is_manager'] = false;
+        if (!$user) {
+            http_response_code(401);
+            send_json_response(0, 0, 401, "Authentication required");
         }
         
         return $user;
@@ -241,99 +144,38 @@ if (!function_exists('isUserLoggedInWithACL')) {
 }
 
 /**
- * Check if current user has permission (session-based - legacy)
+ * Simple admin check
  */
-if (!function_exists('hasPermission')) {
-    function hasPermission($pdo, $action, $componentType = null) {
-        safeSessionStart();
-        if (!isset($_SESSION['id'])) {
+if (!function_exists('isAdmin')) {
+    function isAdmin($pdo, $userId = null) {
+        if (!$userId) {
+            // Try to get user ID from JWT or session
+            $user = authenticateWithJWT($pdo);
+            if (!$user) {
+                safeSessionStart();
+                $userId = $_SESSION['id'] ?? null;
+            } else {
+                $userId = $user['id'];
+            }
+        }
+        
+        if (!$userId) {
             return false;
         }
         
-        if (!class_exists('SimpleACL')) {
-            // Allow basic read access but deny all other actions
-            return ($action === 'read');
-        }
-        
-        $acl = new SimpleACL($pdo, $_SESSION['id']);
-        return $acl->hasPermission($action, $componentType);
-    }
-}
-
-/**
- * Require permission or exit with error (session-based - legacy)
- */
-if (!function_exists('requirePermission')) {
-    function requirePermission($pdo, $action, $componentType = null) {
-        if (!hasPermission($pdo, $action, $componentType)) {
-            http_response_code(403);
-            send_json_response(0, 0, 403, "Access denied. Insufficient permissions.");
-            exit();
+        try {
+            $stmt = $pdo->prepare("SELECT id FROM users WHERE id = ? AND (id = 1 OR username = 'admin')");
+            $stmt->execute([$userId]);
+            return $stmt->rowCount() > 0;
+        } catch (PDOException $e) {
+            error_log("Error checking admin status: " . $e->getMessage());
+            return false;
         }
     }
 }
 
 /**
- * Get user dashboard data with permission filtering
- */
-if (!function_exists('getDashboardDataWithACL')) {
-    function getDashboardDataWithACL($pdo) {
-        $user = authenticateUserWithACL($pdo);
-        if (!$user) {
-            return null;
-        }
-        
-        $dashboardData = [];
-        $componentTypes = ['cpu', 'ram', 'storage', 'motherboard', 'nic', 'caddy'];
-        
-        if (class_exists('SimpleACL')) {
-            $acl = new SimpleACL($pdo, $user['id']);
-            
-            foreach ($componentTypes as $type) {
-                $dashboardData['components'][$type] = [
-                    'can_read' => $acl->hasPermission('read'),
-                    'can_create' => $acl->hasPermission('create'),
-                    'can_update' => $acl->hasPermission('update'),
-                    'can_delete' => $acl->hasPermission('delete'),
-                    'can_export' => $acl->hasPermission('export')
-                ];
-            }
-            
-            // System permissions
-            $dashboardData['system'] = [
-                'can_manage_users' => $acl->canManageUsers(),
-                'can_view_audit_log' => $acl->isAdmin(),
-                'is_admin' => $acl->isAdmin(),
-                'is_manager' => $acl->isManagerOrAdmin(),
-                'role' => $acl->getUserRole()
-            ];
-        } else {
-            // Fallback permissions if ACL is not available
-            foreach ($componentTypes as $type) {
-                $dashboardData['components'][$type] = [
-                    'can_read' => true,
-                    'can_create' => false,
-                    'can_update' => false,
-                    'can_delete' => false,
-                    'can_export' => false
-                ];
-            }
-            
-            $dashboardData['system'] = [
-                'can_manage_users' => false,
-                'can_view_audit_log' => false,
-                'is_admin' => false,
-                'is_manager' => false,
-                'role' => 'viewer'
-            ];
-        }
-        
-        return $dashboardData;
-    }
-}
-
-/**
- * Password hashing wrapper
+ * Password hashing
  */
 if (!function_exists('hashPassword')) {
     function hashPassword($password) {
@@ -342,11 +184,119 @@ if (!function_exists('hashPassword')) {
 }
 
 /**
- * Password verification wrapper
+ * Password verification
  */
 if (!function_exists('verifyPassword')) {
     function verifyPassword($password, $hash) {
         return password_verify($password, $hash);
+    }
+}
+
+/**
+ * User authentication with JWT token generation
+ */
+if (!function_exists('authenticateUser')) {
+    function authenticateUser($pdo, $username, $password) {
+        try {
+            error_log("Authentication attempt for: $username");
+            
+            $stmt = $pdo->prepare("SELECT id, username, email, password, firstname, lastname FROM users WHERE username = ?");
+            $stmt->execute([$username]);
+            $user = $stmt->fetch(PDO::FETCH_ASSOC);
+            
+            if (!$user) {
+                error_log("User not found: $username");
+                return false;
+            }
+            
+            error_log("User found: " . $user['username'] . " (ID: " . $user['id'] . ")");
+            
+            if (password_verify($password, $user['password'])) {
+                error_log("Authentication successful for user: $username");
+                
+                // Generate JWT token
+                $tokenPayload = [
+                    'user_id' => $user['id'],
+                    'username' => $user['username'],
+                    'email' => $user['email']
+                ];
+                
+                $accessToken = JWTHelper::generateToken($tokenPayload, 3600); // 1 hour
+                $refreshToken = JWTHelper::generateRefreshToken();
+                
+                // Store refresh token in database
+                JWTHelper::storeRefreshToken($pdo, $user['id'], $refreshToken, 2592000); // 30 days
+                
+                return [
+                    'user' => [
+                        'id' => $user['id'],
+                        'username' => $user['username'],
+                        'email' => $user['email'],
+                        'firstname' => $user['firstname'],
+                        'lastname' => $user['lastname']
+                    ],
+                    'tokens' => [
+                        'access_token' => $accessToken,
+                        'refresh_token' => $refreshToken,
+                        'token_type' => 'Bearer',
+                        'expires_in' => 3600
+                    ]
+                ];
+            } else {
+                error_log("Password verification failed for user: $username");
+                return false;
+            }
+        } catch (Exception $e) {
+            error_log("Authentication error: " . $e->getMessage());
+            return false;
+        }
+    }
+}
+
+/**
+ * Refresh JWT token
+ */
+if (!function_exists('refreshJWTToken')) {
+    function refreshJWTToken($pdo, $refreshToken) {
+        try {
+            $user = JWTHelper::verifyRefreshToken($pdo, $refreshToken);
+            
+            if (!$user) {
+                return false;
+            }
+            
+            // Generate new access token
+            $tokenPayload = [
+                'user_id' => $user['user_id'],
+                'username' => $user['username'],
+                'email' => $user['email']
+            ];
+            
+            $newAccessToken = JWTHelper::generateToken($tokenPayload, 3600);
+            $newRefreshToken = JWTHelper::generateRefreshToken();
+            
+            // Update refresh token in database
+            JWTHelper::storeRefreshToken($pdo, $user['user_id'], $newRefreshToken, 2592000);
+            
+            return [
+                'user' => [
+                    'id' => $user['user_id'],
+                    'username' => $user['username'],
+                    'email' => $user['email'],
+                    'firstname' => $user['firstname'],
+                    'lastname' => $user['lastname']
+                ],
+                'tokens' => [
+                    'access_token' => $newAccessToken,
+                    'refresh_token' => $newRefreshToken,
+                    'token_type' => 'Bearer',
+                    'expires_in' => 3600
+                ]
+            ];
+        } catch (Exception $e) {
+            error_log("Token refresh error: " . $e->getMessage());
+            return false;
+        }
     }
 }
 
@@ -378,44 +328,153 @@ if (!function_exists('isValidEmail')) {
 }
 
 /**
- * Generate secure random string
+ * Generate secure random token
  */
-if (!function_exists('generateRandomString')) {
-    function generateRandomString($length = 32) {
-        return bin2hex(random_bytes($length / 2));
+if (!function_exists('generateSecureToken')) {
+    function generateSecureToken($length = 32) {
+        return bin2hex(random_bytes($length));
     }
 }
 
 /**
- * Log API actions
+ * Simple activity logging
  */
-if (!function_exists('logAPIAction')) {
-    function logAPIAction($pdo, $action, $componentType = null, $componentId = null, $oldValues = null, $newValues = null) {
-        $userId = getCurrentUserId($pdo);
-        if (!$userId) {
-            return false;
-        }
-        
+if (!function_exists('logActivity')) {
+    function logActivity($pdo, $userId, $action, $componentType = null, $componentId = null, $details = null) {
         try {
             $stmt = $pdo->prepare("
-                INSERT INTO simple_audit_log 
-                (user_id, action, component_type, component_id, old_values, new_values, ip_address, user_agent, created_at) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())
+                INSERT INTO inventory_log (component_type, component_id, new_status, changed_by, notes, created_at) 
+                VALUES (?, ?, ?, ?, ?, NOW())
             ");
-            
-            return $stmt->execute([
-                $userId,
-                $action,
-                $componentType,
-                $componentId,
-                $oldValues ? json_encode($oldValues) : null,
-                $newValues ? json_encode($newValues) : null,
-                $_SERVER['REMOTE_ADDR'] ?? null,
-                $_SERVER['HTTP_USER_AGENT'] ?? null
-            ]);
+            $stmt->execute([$componentType ?: 'system', $componentId, $action, $userId, $details]);
         } catch (PDOException $e) {
-            error_log("Failed to log API action: " . $e->getMessage());
+            error_log("Error logging activity: " . $e->getMessage());
+        }
+    }
+}
+
+/**
+ * Get component status text
+ */
+if (!function_exists('getStatusText')) {
+    function getStatusText($status) {
+        switch ($status) {
+            case 0: return 'Failed';
+            case 1: return 'Available';
+            case 2: return 'In Use';
+            default: return 'Unknown';
+        }
+    }
+}
+
+/**
+ * Get component status color
+ */
+if (!function_exists('getStatusColor')) {
+    function getStatusColor($status) {
+        switch ($status) {
+            case 0: return 'danger';
+            case 1: return 'success';
+            case 2: return 'warning';
+            default: return 'secondary';
+        }
+    }
+}
+
+/**
+ * Format bytes to human readable
+ */
+if (!function_exists('formatBytes')) {
+    function formatBytes($bytes, $precision = 2) {
+        $units = array('B', 'KB', 'MB', 'GB', 'TB');
+        
+        for ($i = 0; $bytes > 1024 && $i < count($units) - 1; $i++) {
+            $bytes /= 1024;
+        }
+        
+        return round($bytes, $precision) . ' ' . $units[$i];
+    }
+}
+
+/**
+ * Get user info by ID
+ */
+if (!function_exists('getUserInfo')) {
+    function getUserInfo($pdo, $userId) {
+        try {
+            $stmt = $pdo->prepare("SELECT id, username, email, firstname, lastname, created_at FROM users WHERE id = ?");
+            $stmt->execute([$userId]);
+            return $stmt->fetch();
+        } catch (PDOException $e) {
+            error_log("Error getting user info: " . $e->getMessage());
             return false;
         }
     }
 }
+
+/**
+ * Simple user creation
+ */
+if (!function_exists('createUser')) {
+    function createUser($pdo, $username, $email, $password, $firstname = null, $lastname = null) {
+        try {
+            $passwordHash = hashPassword($password);
+            $stmt = $pdo->prepare("INSERT INTO users (username, email, password, firstname, lastname, created_at) VALUES (?, ?, ?, ?, ?, NOW())");
+            
+            if ($stmt->execute([$username, $email, $passwordHash, $firstname, $lastname])) {
+                return $pdo->lastInsertId();
+            }
+            return false;
+        } catch (PDOException $e) {
+            error_log("Error creating user: " . $e->getMessage());
+            return false;
+        }
+    }
+}
+
+/**
+ * Get system statistics
+ */
+if (!function_exists('getSystemStats')) {
+    function getSystemStats($pdo) {
+        $stats = [];
+        
+        try {
+            $componentTypes = [
+                'cpu' => 'cpuinventory',
+                'ram' => 'raminventory',
+                'storage' => 'storageinventory',
+                'motherboard' => 'motherboardinventory',
+                'nic' => 'nicinventory',
+                'caddy' => 'caddyinventory'
+            ];
+            
+            foreach ($componentTypes as $type => $table) {
+                $stmt = $pdo->prepare("SELECT Status, COUNT(*) as count FROM $table GROUP BY Status");
+                $stmt->execute();
+                
+                $statusCounts = [];
+                while ($row = $stmt->fetch()) {
+                    $statusCounts[$row['Status']] = $row['count'];
+                }
+                
+                $stats[$type] = [
+                    'total' => array_sum($statusCounts),
+                    'available' => $statusCounts[1] ?? 0,
+                    'in_use' => $statusCounts[2] ?? 0,
+                    'failed' => $statusCounts[0] ?? 0
+                ];
+            }
+            
+            $stmt = $pdo->query("SELECT COUNT(*) FROM users");
+            $stats['users'] = ['total' => $stmt->fetchColumn()];
+            
+        } catch (PDOException $e) {
+            error_log("Error getting system stats: " . $e->getMessage());
+        }
+        
+        return $stats;
+    }
+}
+
+?>
