@@ -1,165 +1,372 @@
 <?php
 /**
- * Access Control List (ACL) Class
- * 
- * This class handles role-based access control for the BDC IMS system.
+ * Advanced Access Control List (ACL) System
+ * File: includes/ACL.php
  */
 
 class ACL {
     private $pdo;
-    private $userId;
-    private $userRoles = null;
-    private $userPermissions = null;
+    private $userPermissions = [];
+    private $userRoles = [];
     
-    public function __construct($pdo, $userId = null) {
+    public function __construct($pdo) {
         $this->pdo = $pdo;
-        $this->userId = $userId;
     }
     
     /**
-     * Set the current user ID
+     * Create ACL tables if they don't exist
      */
-    public function setUserId($userId) {
-        $this->userId = $userId;
-        $this->clearCache();
-    }
-    
-    /**
-     * Clear the permissions cache
-     */
-    public function clearCache() {
-        $this->userRoles = null;
-        $this->userPermissions = null;
-    }
-    
-    /**
-     * Check if user has a specific permission
-     */
-    public function hasPermission($resource, $action, $resourceId = null) {
-        if (!$this->userId) {
-            return false;
-        }
-        
-        // Check if user is super admin
-        if ($this->isSuperAdmin()) {
-            return true;
-        }
-        
-        // For basic functionality, return true for logged-in users
-        // This can be enhanced when ACL tables are properly set up
-        return true;
-    }
-    
-    /**
-     * Check if user has a specific role
-     */
-    public function hasRole($roleName) {
-        $roles = $this->getUserRoles();
-        return in_array($roleName, array_column($roles, 'name'));
-    }
-    
-    /**
-     * Check if user is super admin
-     */
-    public function isSuperAdmin() {
-        // For basic functionality, check if user ID is 1 or has admin flag
-        if ($this->userId == 1) {
-            return true;
-        }
-        
+    public function createTables() {
         try {
-            $stmt = $this->pdo->prepare("SELECT acl FROM users WHERE id = :user_id");
-            $stmt->bindParam(':user_id', $this->userId, PDO::PARAM_INT);
-            $stmt->execute();
-            $user = $stmt->fetch();
+            // Permissions table
+            $this->pdo->exec("
+                CREATE TABLE IF NOT EXISTS permissions (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    name VARCHAR(100) NOT NULL UNIQUE,
+                    display_name VARCHAR(200) NOT NULL,
+                    description TEXT,
+                    category VARCHAR(50) NOT NULL DEFAULT 'general',
+                    is_basic BOOLEAN DEFAULT FALSE,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ");
             
-            return $user && $user['acl'] == 1;
+            // Roles table
+            $this->pdo->exec("
+                CREATE TABLE IF NOT EXISTS roles (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    name VARCHAR(50) NOT NULL UNIQUE,
+                    display_name VARCHAR(100) NOT NULL,
+                    description TEXT,
+                    is_system BOOLEAN DEFAULT FALSE,
+                    is_default BOOLEAN DEFAULT FALSE,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ");
+            
+            // Role permissions table
+            $this->pdo->exec("
+                CREATE TABLE IF NOT EXISTS role_permissions (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    role_id INT NOT NULL,
+                    permission_id INT NOT NULL,
+                    granted BOOLEAN DEFAULT TRUE,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE,
+                    FOREIGN KEY (permission_id) REFERENCES permissions(id) ON DELETE CASCADE,
+                    UNIQUE KEY unique_role_permission (role_id, permission_id)
+                )
+            ");
+            
+            // User roles table
+            $this->pdo->exec("
+                CREATE TABLE IF NOT EXISTS user_roles (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    user_id INT UNSIGNED NOT NULL,
+                    role_id INT NOT NULL,
+                    assigned_by INT UNSIGNED NULL,
+                    assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                    FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE,
+                    FOREIGN KEY (assigned_by) REFERENCES users(id) ON DELETE SET NULL,
+                    UNIQUE KEY unique_user_role (user_id, role_id)
+                )
+            ");
+            
+            return true;
         } catch (PDOException $e) {
+            error_log("Error creating ACL tables: " . $e->getMessage());
             return false;
         }
     }
     
     /**
-     * Get all user roles
+     * Initialize default permissions
      */
-    public function getUserRoles() {
-        if ($this->userRoles !== null) {
-            return $this->userRoles;
-        }
-        
-        if (!$this->userId) {
-            return [];
-        }
+    public function initializeDefaultPermissions() {
+        $permissions = [
+            // Authentication permissions
+            ['name' => 'auth.login', 'display_name' => 'Login to System', 'category' => 'authentication', 'is_basic' => true],
+            ['name' => 'auth.logout', 'display_name' => 'Logout from System', 'category' => 'authentication', 'is_basic' => true],
+            ['name' => 'auth.change_password', 'display_name' => 'Change Own Password', 'category' => 'authentication', 'is_basic' => true],
+            
+            // Dashboard permissions
+            ['name' => 'dashboard.view', 'display_name' => 'View Dashboard', 'category' => 'dashboard', 'is_basic' => true],
+            ['name' => 'dashboard.admin', 'display_name' => 'Admin Dashboard Access', 'category' => 'dashboard', 'is_basic' => false],
+            
+            // CPU permissions
+            ['name' => 'cpu.view', 'display_name' => 'View CPU Components', 'category' => 'inventory', 'is_basic' => true],
+            ['name' => 'cpu.create', 'display_name' => 'Create CPU Components', 'category' => 'inventory', 'is_basic' => false],
+            ['name' => 'cpu.edit', 'display_name' => 'Edit CPU Components', 'category' => 'inventory', 'is_basic' => false],
+            ['name' => 'cpu.delete', 'display_name' => 'Delete CPU Components', 'category' => 'inventory', 'is_basic' => false],
+            
+            // RAM permissions
+            ['name' => 'ram.view', 'display_name' => 'View RAM Components', 'category' => 'inventory', 'is_basic' => true],
+            ['name' => 'ram.create', 'display_name' => 'Create RAM Components', 'category' => 'inventory', 'is_basic' => false],
+            ['name' => 'ram.edit', 'display_name' => 'Edit RAM Components', 'category' => 'inventory', 'is_basic' => false],
+            ['name' => 'ram.delete', 'display_name' => 'Delete RAM Components', 'category' => 'inventory', 'is_basic' => false],
+            
+            // Storage permissions
+            ['name' => 'storage.view', 'display_name' => 'View Storage Components', 'category' => 'inventory', 'is_basic' => true],
+            ['name' => 'storage.create', 'display_name' => 'Create Storage Components', 'category' => 'inventory', 'is_basic' => false],
+            ['name' => 'storage.edit', 'display_name' => 'Edit Storage Components', 'category' => 'inventory', 'is_basic' => false],
+            ['name' => 'storage.delete', 'display_name' => 'Delete Storage Components', 'category' => 'inventory', 'is_basic' => false],
+            
+            // Motherboard permissions
+            ['name' => 'motherboard.view', 'display_name' => 'View Motherboard Components', 'category' => 'inventory', 'is_basic' => true],
+            ['name' => 'motherboard.create', 'display_name' => 'Create Motherboard Components', 'category' => 'inventory', 'is_basic' => false],
+            ['name' => 'motherboard.edit', 'display_name' => 'Edit Motherboard Components', 'category' => 'inventory', 'is_basic' => false],
+            ['name' => 'motherboard.delete', 'display_name' => 'Delete Motherboard Components', 'category' => 'inventory', 'is_basic' => false],
+            
+            // NIC permissions
+            ['name' => 'nic.view', 'display_name' => 'View NIC Components', 'category' => 'inventory', 'is_basic' => true],
+            ['name' => 'nic.create', 'display_name' => 'Create NIC Components', 'category' => 'inventory', 'is_basic' => false],
+            ['name' => 'nic.edit', 'display_name' => 'Edit NIC Components', 'category' => 'inventory', 'is_basic' => false],
+            ['name' => 'nic.delete', 'display_name' => 'Delete NIC Components', 'category' => 'inventory', 'is_basic' => false],
+            
+            // Caddy permissions
+            ['name' => 'caddy.view', 'display_name' => 'View Caddy Components', 'category' => 'inventory', 'is_basic' => true],
+            ['name' => 'caddy.create', 'display_name' => 'Create Caddy Components', 'category' => 'inventory', 'is_basic' => false],
+            ['name' => 'caddy.edit', 'display_name' => 'Edit Caddy Components', 'category' => 'inventory', 'is_basic' => false],
+            ['name' => 'caddy.delete', 'display_name' => 'Delete Caddy Components', 'category' => 'inventory', 'is_basic' => false],
+            
+            // User management permissions
+            ['name' => 'users.view', 'display_name' => 'View Users', 'category' => 'user_management', 'is_basic' => false],
+            ['name' => 'users.create', 'display_name' => 'Create Users', 'category' => 'user_management', 'is_basic' => false],
+            ['name' => 'users.edit', 'display_name' => 'Edit Users', 'category' => 'user_management', 'is_basic' => false],
+            ['name' => 'users.delete', 'display_name' => 'Delete Users', 'category' => 'user_management', 'is_basic' => false],
+            
+            // Role management permissions
+            ['name' => 'roles.view', 'display_name' => 'View Roles', 'category' => 'user_management', 'is_basic' => false],
+            ['name' => 'roles.create', 'display_name' => 'Create Roles', 'category' => 'user_management', 'is_basic' => false],
+            ['name' => 'roles.edit', 'display_name' => 'Edit Roles', 'category' => 'user_management', 'is_basic' => false],
+            ['name' => 'roles.delete', 'display_name' => 'Delete Roles', 'category' => 'user_management', 'is_basic' => false],
+            ['name' => 'roles.assign', 'display_name' => 'Assign Roles to Users', 'category' => 'user_management', 'is_basic' => false],
+            
+            // Search permissions
+            ['name' => 'search.global', 'display_name' => 'Global Search', 'category' => 'search', 'is_basic' => true],
+            ['name' => 'search.advanced', 'display_name' => 'Advanced Search', 'category' => 'search', 'is_basic' => false],
+            
+            // Reports permissions
+            ['name' => 'reports.view', 'display_name' => 'View Reports', 'category' => 'reports', 'is_basic' => false],
+            ['name' => 'reports.export', 'display_name' => 'Export Reports', 'category' => 'reports', 'is_basic' => false],
+            
+            // System permissions
+            ['name' => 'system.settings', 'display_name' => 'System Settings', 'category' => 'system', 'is_basic' => false],
+            ['name' => 'system.logs', 'display_name' => 'View System Logs', 'category' => 'system', 'is_basic' => false],
+            ['name' => 'system.backup', 'display_name' => 'System Backup', 'category' => 'system', 'is_basic' => false]
+        ];
         
         try {
-            // Check if roles table exists
-            $checkTable = $this->pdo->query("SHOW TABLES LIKE 'user_roles'");
-            if ($checkTable->rowCount() == 0) {
-                // Return basic role based on user data
-                $this->userRoles = [
-                    ['name' => $this->isSuperAdmin() ? 'admin' : 'user']
-                ];
-                return $this->userRoles;
+            $stmt = $this->pdo->prepare("
+                INSERT IGNORE INTO permissions (name, display_name, description, category, is_basic) 
+                VALUES (?, ?, ?, ?, ?)
+            ");
+            
+            foreach ($permissions as $permission) {
+                $stmt->execute([
+                    $permission['name'],
+                    $permission['display_name'],
+                    $permission['description'] ?? null,
+                    $permission['category'],
+                    $permission['is_basic']
+                ]);
             }
             
+            return true;
+        } catch (PDOException $e) {
+            error_log("Error initializing permissions: " . $e->getMessage());
+            return false;
+        }
+    }
+    
+    /**
+     * Initialize default roles
+     */
+    public function initializeDefaultRoles() {
+        $roles = [
+            [
+                'name' => 'admin',
+                'display_name' => 'Administrator',
+                'description' => 'Full system access with all permissions',
+                'is_system' => true,
+                'is_default' => false
+            ],
+            [
+                'name' => 'manager',
+                'display_name' => 'Manager',
+                'description' => 'Can manage inventory and view reports',
+                'is_system' => true,
+                'is_default' => false
+            ],
+            [
+                'name' => 'technician',
+                'display_name' => 'Technician',
+                'description' => 'Can create and edit inventory components',
+                'is_system' => true,
+                'is_default' => false
+            ],
+            [
+                'name' => 'viewer',
+                'display_name' => 'Viewer',
+                'description' => 'Read-only access to inventory',
+                'is_system' => true,
+                'is_default' => true
+            ]
+        ];
+        
+        try {
+            $this->pdo->beginTransaction();
+            
+            foreach ($roles as $role) {
+                // Insert role
+                $stmt = $this->pdo->prepare("
+                    INSERT IGNORE INTO roles (name, display_name, description, is_system, is_default) 
+                    VALUES (?, ?, ?, ?, ?)
+                ");
+                $stmt->execute([
+                    $role['name'],
+                    $role['display_name'],
+                    $role['description'],
+                    $role['is_system'],
+                    $role['is_default']
+                ]);
+                
+                // Get role ID
+                $stmt = $this->pdo->prepare("SELECT id FROM roles WHERE name = ?");
+                $stmt->execute([$role['name']]);
+                $roleId = $stmt->fetchColumn();
+                
+                if ($roleId) {
+                    // Assign permissions based on role
+                    $this->assignRolePermissions($roleId, $role['name']);
+                }
+            }
+            
+            $this->pdo->commit();
+            return true;
+        } catch (PDOException $e) {
+            $this->pdo->rollBack();
+            error_log("Error initializing roles: " . $e->getMessage());
+            return false;
+        }
+    }
+    
+    /**
+     * Assign permissions to roles based on role type
+     */
+    private function assignRolePermissions($roleId, $roleName) {
+        $permissionSets = [
+            'admin' => ['*'], // All permissions
+            'manager' => [
+                'auth.*', 'dashboard.*', 'search.*', 'reports.*',
+                '*.view', '*.create', '*.edit', 'users.view', 'roles.view'
+            ],
+            'technician' => [
+                'auth.*', 'dashboard.view', 'search.*',
+                '*.view', '*.create', '*.edit'
+            ],
+            'viewer' => [
+                'auth.*', 'dashboard.view', 'search.global',
+                '*.view'
+            ]
+        ];
+        
+        $permissions = $permissionSets[$roleName] ?? [];
+        
+        if (in_array('*', $permissions)) {
+            // Grant all permissions
             $stmt = $this->pdo->prepare("
-                SELECT r.id, r.name, r.display_name, r.description, ur.expires_at
-                FROM user_roles ur
+                INSERT IGNORE INTO role_permissions (role_id, permission_id, granted)
+                SELECT ?, id, 1 FROM permissions
+            ");
+            $stmt->execute([$roleId]);
+        } else {
+            foreach ($permissions as $permission) {
+                if (strpos($permission, '*') !== false) {
+                    // Wildcard permission
+                    $pattern = str_replace('*', '%', $permission);
+                    $stmt = $this->pdo->prepare("
+                        INSERT IGNORE INTO role_permissions (role_id, permission_id, granted)
+                        SELECT ?, id, 1 FROM permissions WHERE name LIKE ?
+                    ");
+                    $stmt->execute([$roleId, $pattern]);
+                } else {
+                    // Specific permission
+                    $stmt = $this->pdo->prepare("
+                        INSERT IGNORE INTO role_permissions (role_id, permission_id, granted)
+                        SELECT ?, id, 1 FROM permissions WHERE name = ?
+                    ");
+                    $stmt->execute([$roleId, $permission]);
+                }
+            }
+        }
+    }
+    
+    /**
+     * Check if user has specific permission
+     */
+    public function hasPermission($userId, $permission) {
+        try {
+            // Check cache first
+            if (!isset($this->userPermissions[$userId])) {
+                $this->loadUserPermissions($userId);
+            }
+            
+            return isset($this->userPermissions[$userId][$permission]) && 
+                   $this->userPermissions[$userId][$permission] == 1;
+        } catch (Exception $e) {
+            error_log("ACL hasPermission error: " . $e->getMessage());
+            return false;
+        }
+    }
+    
+    /**
+     * Load user permissions into cache
+     */
+    private function loadUserPermissions($userId) {
+        try {
+            $stmt = $this->pdo->prepare("
+                SELECT DISTINCT p.name, rp.granted
+                FROM users u
+                JOIN user_roles ur ON u.id = ur.user_id
                 JOIN roles r ON ur.role_id = r.id
-                WHERE ur.user_id = :user_id 
-                AND (ur.expires_at IS NULL OR ur.expires_at > NOW())
-                ORDER BY r.name
+                JOIN role_permissions rp ON r.id = rp.role_id
+                JOIN permissions p ON rp.permission_id = p.id
+                WHERE u.id = ? AND rp.granted = 1
             ");
-            $stmt->bindParam(':user_id', $this->userId, PDO::PARAM_INT);
-            $stmt->execute();
+            $stmt->execute([$userId]);
             
-            $this->userRoles = $stmt->fetchAll(PDO::FETCH_ASSOC);
-            return $this->userRoles;
+            $this->userPermissions[$userId] = [];
+            while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                $this->userPermissions[$userId][$row['name']] = $row['granted'];
+            }
+            
         } catch (PDOException $e) {
-            error_log("ACL Error getting user roles: " . $e->getMessage());
-            return [['name' => 'user']];
+            error_log("Error loading user permissions: " . $e->getMessage());
+            $this->userPermissions[$userId] = [];
         }
     }
     
     /**
-     * Get all user permissions
+     * Get user roles
      */
-    public function getUserPermissions() {
-        if ($this->userPermissions !== null) {
-            return $this->userPermissions;
-        }
-        
-        if (!$this->userId) {
-            return [];
-        }
-        
+    public function getUserRoles($userId) {
         try {
-            // Check if permissions table exists
-            $checkTable = $this->pdo->query("SHOW TABLES LIKE 'permissions'");
-            if ($checkTable->rowCount() == 0) {
-                // Return basic permissions
-                $this->userPermissions = [
-                    ['name' => 'basic.read', 'resource' => 'basic', 'action' => 'read']
-                ];
-                return $this->userPermissions;
+            if (!isset($this->userRoles[$userId])) {
+                $stmt = $this->pdo->prepare("
+                    SELECT r.id, r.name, r.display_name, r.description
+                    FROM roles r
+                    JOIN user_roles ur ON r.id = ur.role_id
+                    WHERE ur.user_id = ?
+                ");
+                $stmt->execute([$userId]);
+                $this->userRoles[$userId] = $stmt->fetchAll(PDO::FETCH_ASSOC);
             }
             
-            $stmt = $this->pdo->prepare("
-                SELECT DISTINCT p.name, p.display_name, p.description, p.resource, p.action
-                FROM user_roles ur
-                JOIN role_permissions rp ON ur.role_id = rp.role_id
-                JOIN permissions p ON rp.permission_id = p.id
-                WHERE ur.user_id = :user_id 
-                AND (ur.expires_at IS NULL OR ur.expires_at > NOW())
-                ORDER BY p.resource, p.action
-            ");
-            $stmt->bindParam(':user_id', $this->userId, PDO::PARAM_INT);
-            $stmt->execute();
-            
-            $this->userPermissions = $stmt->fetchAll(PDO::FETCH_ASSOC);
-            return $this->userPermissions;
+            return $this->userRoles[$userId];
         } catch (PDOException $e) {
-            error_log("ACL Error getting user permissions: " . $e->getMessage());
+            error_log("Error getting user roles: " . $e->getMessage());
             return [];
         }
     }
@@ -167,57 +374,23 @@ class ACL {
     /**
      * Assign role to user
      */
-    public function assignRole($userId, $roleName, $assignedBy = null, $expiresAt = null) {
+    public function assignRole($userId, $roleId, $assignedBy = null) {
         try {
-            // Check if roles table exists
-            $checkTable = $this->pdo->query("SHOW TABLES LIKE 'roles'");
-            if ($checkTable->rowCount() == 0) {
-                return true; // Skip if ACL tables don't exist
-            }
-            
-            // Get role ID
-            $stmt = $this->pdo->prepare("SELECT id FROM roles WHERE name = :role_name");
-            $stmt->bindParam(':role_name', $roleName);
-            $stmt->execute();
-            $role = $stmt->fetch();
-            
-            if (!$role) {
-                error_log("ACL Error: Role '$roleName' not found");
-                return false;
-            }
-            
-            // Check if user already has this role
             $stmt = $this->pdo->prepare("
-                SELECT id FROM user_roles 
-                WHERE user_id = :user_id AND role_id = :role_id
+                INSERT INTO user_roles (user_id, role_id, assigned_by) 
+                VALUES (?, ?, ?)
+                ON DUPLICATE KEY UPDATE assigned_by = VALUES(assigned_by), assigned_at = NOW()
             ");
-            $stmt->bindParam(':user_id', $userId, PDO::PARAM_INT);
-            $stmt->bindParam(':role_id', $role['id'], PDO::PARAM_INT);
-            $stmt->execute();
             
-            if ($stmt->fetch()) {
-                return true; // User already has this role
-            }
+            $result = $stmt->execute([$userId, $roleId, $assignedBy]);
             
-            // Assign the role
-            $stmt = $this->pdo->prepare("
-                INSERT INTO user_roles (user_id, role_id, assigned_by, expires_at)
-                VALUES (:user_id, :role_id, :assigned_by, :expires_at)
-            ");
-            $stmt->bindParam(':user_id', $userId, PDO::PARAM_INT);
-            $stmt->bindParam(':role_id', $role['id'], PDO::PARAM_INT);
-            $stmt->bindParam(':assigned_by', $assignedBy, PDO::PARAM_INT);
-            $stmt->bindParam(':expires_at', $expiresAt);
-            
-            $result = $stmt->execute();
-            
-            if ($result && $userId == $this->userId) {
-                $this->clearCache();
-            }
+            // Clear cache
+            unset($this->userPermissions[$userId]);
+            unset($this->userRoles[$userId]);
             
             return $result;
         } catch (PDOException $e) {
-            error_log("ACL Error assigning role: " . $e->getMessage());
+            error_log("Error assigning role: " . $e->getMessage());
             return false;
         }
     }
@@ -225,189 +398,296 @@ class ACL {
     /**
      * Remove role from user
      */
-    public function removeRole($userId, $roleName) {
+    public function removeRole($userId, $roleId) {
         try {
-            $stmt = $this->pdo->prepare("
-                DELETE ur FROM user_roles ur
-                JOIN roles r ON ur.role_id = r.id
-                WHERE ur.user_id = :user_id AND r.name = :role_name
-            ");
-            $stmt->bindParam(':user_id', $userId, PDO::PARAM_INT);
-            $stmt->bindParam(':role_name', $roleName);
+            $stmt = $this->pdo->prepare("DELETE FROM user_roles WHERE user_id = ? AND role_id = ?");
+            $result = $stmt->execute([$userId, $roleId]);
             
-            $result = $stmt->execute();
-            
-            if ($result && $userId == $this->userId) {
-                $this->clearCache();
-            }
+            // Clear cache
+            unset($this->userPermissions[$userId]);
+            unset($this->userRoles[$userId]);
             
             return $result;
         } catch (PDOException $e) {
-            error_log("ACL Error removing role: " . $e->getMessage());
+            error_log("Error removing role: " . $e->getMessage());
             return false;
         }
     }
     
     /**
-     * Get all available roles
+     * Create new role
+     */
+    public function createRole($name, $displayName, $description = null, $basicPermissionsOnly = true) {
+        try {
+            $this->pdo->beginTransaction();
+            
+            // Insert role
+            $stmt = $this->pdo->prepare("
+                INSERT INTO roles (name, display_name, description) 
+                VALUES (?, ?, ?)
+            ");
+            $stmt->execute([$name, $displayName, $description]);
+            $roleId = $this->pdo->lastInsertId();
+            
+            // Assign basic permissions if requested
+            if ($basicPermissionsOnly) {
+                $stmt = $this->pdo->prepare("
+                    INSERT INTO role_permissions (role_id, permission_id, granted)
+                    SELECT ?, id, 1 FROM permissions WHERE is_basic = 1
+                ");
+                $stmt->execute([$roleId]);
+            }
+            
+            $this->pdo->commit();
+            return $roleId;
+            
+        } catch (PDOException $e) {
+            $this->pdo->rollBack();
+            error_log("Error creating role: " . $e->getMessage());
+            return false;
+        }
+    }
+    
+    /**
+     * Update role permissions
+     */
+    public function updateRolePermissions($roleId, $permissions) {
+        try {
+            $this->pdo->beginTransaction();
+            
+            // Delete existing permissions for this role
+            $stmt = $this->pdo->prepare("DELETE FROM role_permissions WHERE role_id = ?");
+            $stmt->execute([$roleId]);
+            
+            // Insert new permissions
+            $stmt = $this->pdo->prepare("
+                INSERT INTO role_permissions (role_id, permission_id, granted) 
+                VALUES (?, ?, ?)
+            ");
+            
+            foreach ($permissions as $permissionId => $granted) {
+                $stmt->execute([$roleId, $permissionId, $granted ? 1 : 0]);
+            }
+            
+            $this->pdo->commit();
+            
+            // Clear all user permission caches since role changed
+            $this->userPermissions = [];
+            
+            return true;
+            
+        } catch (PDOException $e) {
+            $this->pdo->rollBack();
+            error_log("Error updating role permissions: " . $e->getMessage());
+            return false;
+        }
+    }
+    
+    /**
+     * Get role permissions
+     */
+    public function getRolePermissions($roleId) {
+        try {
+            $stmt = $this->pdo->prepare("
+                SELECT p.id, p.name, p.display_name, p.category, 
+                       COALESCE(rp.granted, 0) as granted
+                FROM permissions p
+                LEFT JOIN role_permissions rp ON p.id = rp.permission_id AND rp.role_id = ?
+                ORDER BY p.category, p.display_name
+            ");
+            $stmt->execute([$roleId]);
+            
+            return $stmt->fetchAll(PDO::FETCH_ASSOC);
+        } catch (PDOException $e) {
+            error_log("Error getting role permissions: " . $e->getMessage());
+            return [];
+        }
+    }
+    
+    /**
+     * Get all roles
      */
     public function getAllRoles() {
         try {
-            // Check if roles table exists
-            $checkTable = $this->pdo->query("SHOW TABLES LIKE 'roles'");
-            if ($checkTable->rowCount() == 0) {
-                return [
-                    ['name' => 'admin', 'display_name' => 'Administrator'],
-                    ['name' => 'user', 'display_name' => 'User']
-                ];
-            }
-            
-            $stmt = $this->pdo->query("
+            $stmt = $this->pdo->prepare("
                 SELECT r.*, 
-                    COUNT(ur.id) as user_count,
-                    COUNT(rp.id) as permission_count
+                       COUNT(ur.user_id) as user_count,
+                       COUNT(rp.permission_id) as permission_count
                 FROM roles r
                 LEFT JOIN user_roles ur ON r.id = ur.role_id
-                LEFT JOIN role_permissions rp ON r.id = rp.role_id
+                LEFT JOIN role_permissions rp ON r.id = rp.role_id AND rp.granted = 1
                 GROUP BY r.id
-                ORDER BY r.name
+                ORDER BY r.is_system DESC, r.name
             ");
+            $stmt->execute();
+            
             return $stmt->fetchAll(PDO::FETCH_ASSOC);
         } catch (PDOException $e) {
-            error_log("ACL Error getting all roles: " . $e->getMessage());
+            error_log("Error getting all roles: " . $e->getMessage());
             return [];
         }
     }
     
     /**
-     * Get all available permissions
+     * Get all permissions grouped by category
      */
     public function getAllPermissions() {
         try {
-            // Check if permissions table exists
-            $checkTable = $this->pdo->query("SHOW TABLES LIKE 'permissions'");
-            if ($checkTable->rowCount() == 0) {
-                return [];
-            }
-            
-            $stmt = $this->pdo->query("
+            $stmt = $this->pdo->prepare("
                 SELECT * FROM permissions 
-                ORDER BY resource, action
+                ORDER BY category, display_name
             ");
-            return $stmt->fetchAll(PDO::FETCH_ASSOC);
-        } catch (PDOException $e) {
-            error_log("ACL Error getting all permissions: " . $e->getMessage());
-            return [];
-        }
-    }
-    
-    /**
-     * Get permissions for a specific role
-     */
-    public function getRolePermissions($roleName) {
-        try {
-            $stmt = $this->pdo->prepare("
-                SELECT p.*
-                FROM roles r
-                JOIN role_permissions rp ON r.id = rp.role_id
-                JOIN permissions p ON rp.permission_id = p.id
-                WHERE r.name = :role_name
-                ORDER BY p.resource, p.action
-            ");
-            $stmt->bindParam(':role_name', $roleName);
             $stmt->execute();
-            return $stmt->fetchAll(PDO::FETCH_ASSOC);
-        } catch (PDOException $e) {
-            error_log("ACL Error getting role permissions: " . $e->getMessage());
-            return [];
-        }
-    }
-    
-    /**
-     * Create a new role
-     */
-    public function createRole($name, $displayName, $description = null, $isSystemRole = false) {
-        try {
-            $stmt = $this->pdo->prepare("
-                INSERT INTO roles (name, display_name, description, is_system_role)
-                VALUES (:name, :display_name, :description, :is_system_role)
-            ");
-            $stmt->bindParam(':name', $name);
-            $stmt->bindParam(':display_name', $displayName);
-            $stmt->bindParam(':description', $description);
-            $stmt->bindParam(':is_system_role', $isSystemRole, PDO::PARAM_BOOL);
             
-            if ($stmt->execute()) {
-                return $this->pdo->lastInsertId();
+            $permissions = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            
+            // Group by category
+            $grouped = [];
+            foreach ($permissions as $permission) {
+                $grouped[$permission['category']][] = $permission;
             }
-            return false;
+            
+            return $grouped;
         } catch (PDOException $e) {
-            error_log("ACL Error creating role: " . $e->getMessage());
+            error_log("Error getting all permissions: " . $e->getMessage());
+            return [];
+        }
+    }
+    
+    /**
+     * Delete role (only non-system roles)
+     */
+    public function deleteRole($roleId) {
+        try {
+            // Check if it's a system role
+            $stmt = $this->pdo->prepare("SELECT is_system FROM roles WHERE id = ?");
+            $stmt->execute([$roleId]);
+            $role = $stmt->fetch(PDO::FETCH_ASSOC);
+            
+            if (!$role || $role['is_system']) {
+                return false; // Cannot delete system roles
+            }
+            
+            $stmt = $this->pdo->prepare("DELETE FROM roles WHERE id = ? AND is_system = 0");
+            $result = $stmt->execute([$roleId]);
+            
+            // Clear cache
+            $this->userPermissions = [];
+            $this->userRoles = [];
+            
+            return $result;
+        } catch (PDOException $e) {
+            error_log("Error deleting role: " . $e->getMessage());
             return false;
         }
     }
     
     /**
-     * Clean up expired roles and permissions
+     * Check if user has any of the specified roles
      */
-    public function cleanupExpired() {
+    public function hasRole($userId, $roles) {
+        if (!is_array($roles)) {
+            $roles = [$roles];
+        }
+        
+        $userRoles = $this->getUserRoles($userId);
+        $userRoleNames = array_column($userRoles, 'name');
+        
+        return !empty(array_intersect($roles, $userRoleNames));
+    }
+    
+    /**
+     * Get default role ID
+     */
+    public function getDefaultRoleId() {
         try {
-            // Remove expired user roles
-            $stmt = $this->pdo->prepare("
-                DELETE FROM user_roles 
-                WHERE expires_at IS NOT NULL AND expires_at <= NOW()
-            ");
+            $stmt = $this->pdo->prepare("SELECT id FROM roles WHERE is_default = 1 LIMIT 1");
             $stmt->execute();
+            $result = $stmt->fetch(PDO::FETCH_ASSOC);
+            
+            return $result ? $result['id'] : null;
+        } catch (PDOException $e) {
+            error_log("Error getting default role: " . $e->getMessage());
+            return null;
+        }
+    }
+    
+    /**
+     * Auto-assign default role to user if they have no roles
+     */
+    public function ensureUserHasRole($userId) {
+        try {
+            // Check if user has any roles
+            $stmt = $this->pdo->prepare("SELECT COUNT(*) as role_count FROM user_roles WHERE user_id = ?");
+            $stmt->execute([$userId]);
+            $result = $stmt->fetch(PDO::FETCH_ASSOC);
+            
+            if ($result['role_count'] == 0) {
+                $defaultRoleId = $this->getDefaultRoleId();
+                if ($defaultRoleId) {
+                    return $this->assignRole($userId, $defaultRoleId);
+                }
+            }
             
             return true;
         } catch (PDOException $e) {
-            error_log("ACL Error cleaning up expired items: " . $e->getMessage());
+            error_log("Error ensuring user has role: " . $e->getMessage());
             return false;
         }
     }
     
     /**
-     * Get access audit log
+     * Clear permission cache for user
      */
-    public function getAuditLog($limit = 50, $offset = 0, $filters = []) {
+    public function clearUserCache($userId) {
+        unset($this->userPermissions[$userId]);
+        unset($this->userRoles[$userId]);
+    }
+    
+    /**
+     * Log ACL actions
+     */
+    public function logAction($action, $componentType, $componentId, $oldData = null, $newData = null) {
         try {
-            $whereConditions = [];
-            $params = [];
-            
-            if (!empty($filters['user_id'])) {
-                $whereConditions[] = "al.user_id = :user_id";
-                $params[':user_id'] = $filters['user_id'];
-            }
-            
-            if (!empty($filters['resource_type'])) {
-                $whereConditions[] = "al.resource_type = :resource_type";
-                $params[':resource_type'] = $filters['resource_type'];
-            }
-            
-            $whereClause = !empty($whereConditions) ? 'WHERE ' . implode(' AND ', $whereConditions) : '';
-            
             $stmt = $this->pdo->prepare("
-                SELECT al.*, u.username, u.email
-                FROM acl_audit_log al
-                LEFT JOIN users u ON al.user_id = u.id
-                $whereClause
-                ORDER BY al.created_at DESC
-                LIMIT :limit OFFSET :offset
+                INSERT INTO inventory_log (component_type, component_id, action, old_data, new_data, created_at) 
+                VALUES (?, ?, ?, ?, ?, NOW())
             ");
             
-            foreach ($params as $key => $value) {
-                $stmt->bindValue($key, $value);
-            }
-            $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
-            $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+            $stmt->execute([
+                $componentType, 
+                $componentId, 
+                $action,
+                $oldData ? json_encode($oldData) : null,
+                $newData ? json_encode($newData) : null
+            ]);
+        } catch (PDOException $e) {
+            error_log("Error logging ACL action: " . $e->getMessage());
+        }
+    }
+    
+    /**
+     * Get user permissions for a specific category
+     */
+    public function getUserPermissionsByCategory($userId, $category) {
+        try {
+            $stmt = $this->pdo->prepare("
+                SELECT DISTINCT p.name, p.display_name, rp.granted
+                FROM users u
+                JOIN user_roles ur ON u.id = ur.user_id
+                JOIN roles r ON ur.role_id = r.id
+                JOIN role_permissions rp ON r.id = rp.role_id
+                JOIN permissions p ON rp.permission_id = p.id
+                WHERE u.id = ? AND p.category = ? AND rp.granted = 1
+                ORDER BY p.display_name
+            ");
+            $stmt->execute([$userId, $category]);
             
-            $stmt->execute();
             return $stmt->fetchAll(PDO::FETCH_ASSOC);
         } catch (PDOException $e) {
-            error_log("ACL Error getting audit log: " . $e->getMessage());
+            error_log("Error getting user permissions by category: " . $e->getMessage());
             return [];
         }
     }
 }
-
 ?>

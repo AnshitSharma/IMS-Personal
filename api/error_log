@@ -626,3 +626,73 @@ Stack trace:
 [23-Jul-2025 21:09:22 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
 [23-Jul-2025 21:09:22 UTC] JWT Authentication failed: No token provided
 [23-Jul-2025 21:09:49 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[24-Jul-2025 00:08:07 UTC] PHP Warning:  Undefined variable $module in /home/shubhams/public_html/bdc_ims/api/api.php on line 10
+[24-Jul-2025 00:08:07 UTC] PHP Warning:  Undefined variable $module in /home/shubhams/public_html/bdc_ims/api/api.php on line 388
+[24-Jul-2025 00:08:22 UTC] PHP Warning:  Undefined variable $module in /home/shubhams/public_html/bdc_ims/api/api.php on line 10
+[24-Jul-2025 00:08:22 UTC] PHP Warning:  Undefined variable $module in /home/shubhams/public_html/bdc_ims/api/api.php on line 388
+[24-Jul-2025 00:08:30 UTC] PHP Warning:  Undefined variable $module in /home/shubhams/public_html/bdc_ims/api/api.php on line 10
+[24-Jul-2025 00:08:30 UTC] PHP Warning:  Undefined variable $module in /home/shubhams/public_html/bdc_ims/api/api.php on line 388
+[24-Jul-2025 00:08:34 UTC] PHP Warning:  Undefined variable $module in /home/shubhams/public_html/bdc_ims/api/api.php on line 10
+[24-Jul-2025 00:08:34 UTC] PHP Warning:  Undefined variable $module in /home/shubhams/public_html/bdc_ims/api/api.php on line 388
+[24-Jul-2025 00:40:37 UTC] PHP Warning:  Undefined variable $module in /home/shubhams/public_html/bdc_ims/api/api.php on line 10
+[24-Jul-2025 00:40:37 UTC] PHP Warning:  Undefined variable $module in /home/shubhams/public_html/bdc_ims/api/api.php on line 388
+[24-Jul-2025 23:27:49 UTC] PHP Warning:  Undefined variable $module in /home/shubhams/public_html/bdc_ims/api/api.php on line 10
+[24-Jul-2025 23:27:49 UTC] PHP Warning:  Undefined variable $module in /home/shubhams/public_html/bdc_ims/api/api.php on line 388
+[25-Jul-2025 00:20:53 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[25-Jul-2025 00:20:53 UTC] Auth operation: login
+[25-Jul-2025 00:20:53 UTC] Login attempt - Username: 'johnadmin'
+[25-Jul-2025 00:20:53 UTC] Authentication attempt for: johnadmin
+[25-Jul-2025 00:20:53 UTC] User found: johnadmin (ID: 37)
+[25-Jul-2025 00:20:53 UTC] Authentication successful for user: johnadmin
+[25-Jul-2025 00:20:53 UTC] Login successful for user: johnadmin with role: viewer
+[25-Jul-2025 00:20:53 UTC] Uncaught exception: Class "JWTHelper" not found
+[25-Jul-2025 00:20:53 UTC] PHP Fatal error:  Uncaught Error: Call to undefined function send_json_response() in /home/shubhams/public_html/bdc_ims/api/api.php:42
+Stack trace:
+#0 [internal function]: {closure}(Object(Error))
+#1 {main}
+  thrown in /home/shubhams/public_html/bdc_ims/api/api.php on line 42
+[25-Jul-2025 00:38:01 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[25-Jul-2025 00:38:01 UTC] Auth operation: login
+[25-Jul-2025 00:38:01 UTC] Login attempt - Username: 'johnadmin'
+[25-Jul-2025 00:38:01 UTC] Authentication attempt for: johnadmin
+[25-Jul-2025 00:38:01 UTC] User found: johnadmin (ID: 37)
+[25-Jul-2025 00:38:01 UTC] Authentication successful for user: johnadmin
+[25-Jul-2025 00:38:01 UTC] Login successful for user: johnadmin with role: admin
+[25-Jul-2025 00:38:32 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[25-Jul-2025 00:38:32 UTC] Authenticated user: johnadmin (ID: 37)
+[25-Jul-2025 01:29:56 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[25-Jul-2025 01:29:56 UTC] Auth operation: login
+[25-Jul-2025 01:29:56 UTC] Login attempt - Username: 'johnadmin'
+[25-Jul-2025 01:29:56 UTC] Authentication attempt for: johnadmin
+[25-Jul-2025 01:29:56 UTC] User found: johnadmin (ID: 37)
+[25-Jul-2025 01:29:56 UTC] Authentication successful for user: johnadmin
+[25-Jul-2025 01:29:56 UTC] Login successful for user: johnadmin (ID: 37)
+[25-Jul-2025 01:43:06 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[25-Jul-2025 01:43:06 UTC] Auth operation: login
+[25-Jul-2025 01:43:06 UTC] Login attempt - Username: 'johnadmin'
+[25-Jul-2025 01:43:06 UTC] Authentication attempt for: johnadmin
+[25-Jul-2025 01:43:06 UTC] User found: johnadmin (ID: 37)
+[25-Jul-2025 01:43:06 UTC] Authentication successful for user: johnadmin
+[25-Jul-2025 01:43:06 UTC] Login successful for user: johnadmin (ID: 37)
+[25-Jul-2025 01:45:13 UTC] API called with action: acl-get_user_permissions (Module: acl, Operation: get_user_permissions)
+[25-Jul-2025 01:45:19 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[25-Jul-2025 01:45:19 UTC] Auth operation: login
+[25-Jul-2025 01:45:19 UTC] Login attempt - Username: 'johnadmin'
+[25-Jul-2025 01:45:19 UTC] Authentication attempt for: johnadmin
+[25-Jul-2025 01:45:19 UTC] User found: johnadmin (ID: 37)
+[25-Jul-2025 01:45:19 UTC] Authentication successful for user: johnadmin
+[25-Jul-2025 01:45:19 UTC] Login successful for user: johnadmin (ID: 37)
+[25-Jul-2025 01:45:23 UTC] API called with action: acl-get_user_permissions (Module: acl, Operation: get_user_permissions)
+[25-Jul-2025 01:45:30 UTC] API called with action: acl-get_user_permissions (Module: acl, Operation: get_user_permissions)
+[25-Jul-2025 01:45:30 UTC] JWT Authentication failed: Invalid token signature
+[25-Jul-2025 02:41:14 UTC] API called with action: acl-assign_role (Module: acl, Operation: assign_role)
+[25-Jul-2025 02:41:14 UTC] JWT Authentication failed: Invalid token signature
+[25-Jul-2025 02:41:20 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[25-Jul-2025 02:41:20 UTC] Auth operation: login
+[25-Jul-2025 02:41:20 UTC] Login attempt - Username: 'johnadmin'
+[25-Jul-2025 02:41:20 UTC] Authentication attempt for: johnadmin
+[25-Jul-2025 02:41:20 UTC] User found: johnadmin (ID: 37)
+[25-Jul-2025 02:41:20 UTC] Authentication successful for user: johnadmin
+[25-Jul-2025 02:41:20 UTC] Login successful for user: johnadmin (ID: 37)
+[25-Jul-2025 02:41:46 UTC] API called with action: acl-assign_role (Module: acl, Operation: assign_role)
+[25-Jul-2025 02:41:46 UTC] JWT Authentication failed: Invalid token signature
