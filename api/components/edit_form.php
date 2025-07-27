@@ -51,6 +51,69 @@ try {
     exit();
 }
 
+// Load JSON data for cascading dropdowns
+function loadJSONData($type) {
+    $jsonPaths = [
+        'cpu' => [
+            'level1' => __DIR__ . '/../../All JSON/cpu jsons/Cpu base level 1.json',
+            'level2' => __DIR__ . '/../../All JSON/cpu jsons/Cpu family level 2.json',
+            'level3' => __DIR__ . '/../../All JSON/cpu jsons/Cpu details level 3.json'
+        ],
+        'motherboard' => [
+            'level1' => __DIR__ . '/../../All JSON/motherboad jsons/motherboard level 1.json',
+            'level3' => __DIR__ . '/../../All JSON/motherboad jsons/motherboard level 3.json'
+        ],
+        'ram' => [
+            'level3' => __DIR__ . '/../../All JSON/Ram JSON/ram_detail.json'
+        ],
+        'storage' => [
+            'level3' => __DIR__ . '/../../All JSON/storage jsons/storagedetail.json'
+        ],
+        'caddy' => [
+            'level3' => __DIR__ . '/../../All JSON/caddy json/caddy_details.json'
+        ]
+    ];
+    
+    $data = [];
+    if (isset($jsonPaths[$type])) {
+        foreach ($jsonPaths[$type] as $level => $path) {
+            if (file_exists($path)) {
+                $content = file_get_contents($path);
+                $data[$level] = json_decode($content, true);
+            }
+        }
+    }
+    
+    return $data;
+}
+
+$jsonData = loadJSONData($componentType);
+
+// Find current component details from JSON based on UUID
+function findComponentInJSON($uuid, $jsonData) {
+    if (empty($uuid) || empty($jsonData['level3'])) {
+        return null;
+    }
+    
+    foreach ($jsonData['level3'] as $brandData) {
+        if (isset($brandData['models'])) {
+            foreach ($brandData['models'] as $model) {
+                $modelUUID = $model['UUID'] ?? $model['uuid'] ?? $model['inventory']['UUID'] ?? '';
+                if ($modelUUID === $uuid) {
+                    return [
+                        'brand' => $brandData['brand'],
+                        'series' => $brandData['series'] ?? '',
+                        'model' => $model,
+                        'modelName' => $model['model'] ?? $model['name'] ?? ''
+                    ];
+                }
+            }
+        }
+    }
+    return null;
+}
+
+$currentComponentData = findComponentInJSON($component['UUID'], $jsonData);
 ?>
 
 <style>
@@ -98,154 +161,221 @@ try {
         gap: 1rem;
     }
 
+    .form-row-three {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 1rem;
+    }
+
     .form-actions {
         display: flex;
         gap: 1rem;
         justify-content: flex-end;
         margin-top: 2rem;
-        padding-top: 1.5rem;
+        padding-top: 1rem;
         border-top: 1px solid #e5e7eb;
     }
 
     .btn {
         padding: 10px 20px;
         border: none;
-        border-radius: 8px;
+        border-radius: 6px;
         font-size: 14px;
         font-weight: 500;
         cursor: pointer;
-        transition: all 0.3s ease;
+        transition: all 0.2s ease;
     }
 
     .btn-primary {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        background: #667eea;
         color: white;
     }
 
-    .btn-primary:hover:not(:disabled) {
-        transform: translateY(-1px);
-        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+    .btn-primary:hover {
+        background: #5a67d8;
     }
 
     .btn-secondary {
-        background: #e5e7eb;
+        background: #f3f4f6;
         color: #374151;
     }
 
     .btn-secondary:hover {
-        background: #d1d5db;
+        background: #e5e7eb;
     }
 
-    .btn:disabled {
-        opacity: 0.7;
-        cursor: not-allowed;
-    }
-
-    .error-message {
-        background: #fee2e2;
-        color: #dc2626;
-        padding: 12px 16px;
-        border-radius: 8px;
-        margin-bottom: 1rem;
-        font-size: 14px;
-    }
-
-    .info-box {
-        background: #f0f4ff;
-        border: 1px solid #c7d2fe;
-        border-radius: 8px;
+    .cascade-section {
+        background: #f8fafc;
         padding: 1rem;
+        border-radius: 8px;
         margin-bottom: 1.5rem;
+        border: 1px solid #e2e8f0;
     }
 
-    .info-title {
+    .cascade-title {
         font-weight: 600;
-        color: #4338ca;
-        margin-bottom: 0.5rem;
+        color: #2d3748;
+        margin-bottom: 1rem;
+        font-size: 16px;
     }
 
-    .info-item {
+    .component-details {
+        background: #fff;
+        padding: 1rem;
+        border-radius: 6px;
+        border: 1px solid #e2e8f0;
+        margin-top: 1rem;
+    }
+
+    .detail-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 0.5rem;
+    }
+
+    .detail-item {
         display: flex;
         justify-content: space-between;
         padding: 0.25rem 0;
-        font-size: 14px;
+        border-bottom: 1px solid #f1f5f9;
     }
 
-    .info-label {
-        color: #6b7280;
-    }
-
-    .info-value {
-        color: #1f2937;
+    .detail-label {
         font-weight: 500;
-        font-family: monospace;
-        font-size: 12px;
+        color: #64748b;
     }
 
-    .spinner {
+    .detail-value {
+        color: #1e293b;
+    }
+
+    .loading {
         display: inline-block;
-        width: 16px;
-        height: 16px;
-        border: 2px solid #fff;
+        width: 20px;
+        height: 20px;
+        border: 3px solid #f3f3f3;
+        border-top: 3px solid #667eea;
         border-radius: 50%;
-        border-top-color: transparent;
-        animation: spin 0.8s linear infinite;
+        animation: spin 1s linear infinite;
     }
 
     @keyframes spin {
-        to { transform: rotate(360deg); }
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
     }
 
-    .form-hint {
-        font-size: 12px;
-        color: #6b7280;
-        margin-top: 0.25rem;
+    .hidden {
+        display: none !important;
     }
 
-    .section-title {
-        font-size: 16px;
-        font-weight: 600;
-        color: #1f2937;
+    .readonly-info {
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        padding: 0.75rem;
+        border-radius: 6px;
+        font-size: 13px;
+        color: #64748b;
         margin-bottom: 1rem;
-        padding-bottom: 0.5rem;
-        border-bottom: 1px solid #e5e7eb;
     }
 </style>
 
-<form id="editComponentForm" onsubmit="submitEditForm(event, '<?php echo $componentType; ?>', <?php echo $componentId; ?>)">
-    
-    <div class="info-box">
-        <div class="info-title">Component Information</div>
-        <div class="info-item">
-            <span class="info-label">Component UUID:</span>
-            <span class="info-value"><?php echo htmlspecialchars($component['UUID']); ?></span>
+<form id="componentEditForm" data-type="<?php echo $componentType; ?>" data-id="<?php echo $componentId; ?>">
+    <!-- Component Selection Section (Read-only in edit mode) -->
+    <?php if ($componentType !== 'nic' && !empty($jsonData) && $currentComponentData): ?>
+    <div class="cascade-section">
+        <div class="cascade-title">Component Specifications (Read-only)</div>
+        
+        <div class="readonly-info">
+            <strong>Note:</strong> Component specifications cannot be changed during edit. To change the component type, delete this item and create a new one.
         </div>
-        <div class="info-item">
-            <span class="info-label">Serial Number:</span>
-            <span class="info-value"><?php echo htmlspecialchars($component['SerialNumber']); ?></span>
+        
+        <!-- Brand, Series, Model Display (Read-only) -->
+        <div class="form-row-three">
+            <div class="form-group">
+                <label class="form-label">Brand</label>
+                <input type="text" class="form-input" value="<?php echo htmlspecialchars($currentComponentData['brand']); ?>" disabled>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Series</label>
+                <input type="text" class="form-input" value="<?php echo htmlspecialchars($currentComponentData['series']); ?>" disabled>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Model</label>
+                <input type="text" class="form-input" value="<?php echo htmlspecialchars($currentComponentData['modelName']); ?>" disabled>
+            </div>
         </div>
-        <div class="info-item">
-            <span class="info-label">Created:</span>
-            <span class="info-value"><?php echo date('M d, Y H:i', strtotime($component['CreatedAt'])); ?></span>
+
+        <!-- Component Details Display -->
+        <div class="component-details">
+            <h4>Component Details</h4>
+            <div class="detail-grid">
+                <?php 
+                if ($componentType === 'cpu' && isset($currentComponentData['model'])):
+                    $model = $currentComponentData['model'];
+                    $details = [
+                        'Architecture' => $model['architecture'] ?? 'N/A',
+                        'Cores' => $model['cores'] ?? 'N/A',
+                        'Threads' => $model['threads'] ?? 'N/A',
+                        'Base Frequency' => ($model['base_frequency_GHz'] ?? 'N/A') . ($model['base_frequency_GHz'] ? ' GHz' : ''),
+                        'Max Frequency' => ($model['max_frequency_GHz'] ?? 'N/A') . ($model['max_frequency_GHz'] ? ' GHz' : ''),
+                        'TDP' => ($model['tdp_W'] ?? 'N/A') . ($model['tdp_W'] ? 'W' : ''),
+                        'Socket' => $model['socket'] ?? 'N/A'
+                    ];
+                    
+                    foreach ($details as $label => $value): ?>
+                        <div class="detail-item">
+                            <span class="detail-label"><?php echo $label; ?>:</span>
+                            <span class="detail-value"><?php echo htmlspecialchars($value); ?></span>
+                        </div>
+                    <?php endforeach;
+                elseif ($componentType === 'motherboard' && isset($currentComponentData['model'])):
+                    $model = $currentComponentData['model'];
+                    $details = [
+                        'Form Factor' => $model['form_factor'] ?? 'N/A',
+                        'Socket' => $model['socket'] ?? 'N/A',
+                        'Chipset' => $model['chipset'] ?? 'N/A',
+                        'Memory Slots' => $model['memory_slots'] ?? 'N/A',
+                        'Max Memory' => $model['max_memory'] ?? 'N/A',
+                        'PCIe Slots' => $model['pcie_slots'] ?? 'N/A'
+                    ];
+                    
+                    foreach ($details as $label => $value): ?>
+                        <div class="detail-item">
+                            <span class="detail-label"><?php echo $label; ?>:</span>
+                            <span class="detail-value"><?php echo htmlspecialchars($value); ?></span>
+                        </div>
+                    <?php endforeach;
+                endif; ?>
+            </div>
         </div>
-        <div class="info-item">
-            <span class="info-label">Last Updated:</span>
-            <span class="info-value"><?php echo date('M d, Y H:i', strtotime($component['UpdatedAt'])); ?></span>
+    </div>
+    <?php endif; ?>
+
+    <!-- UUID Fields -->
+    <div class="form-row">
+        <div class="form-group">
+            <label class="form-label">Component UUID</label>
+            <input type="text" id="componentUUID" name="UUID" class="form-input" value="<?php echo htmlspecialchars($component['UUID']); ?>" readonly>
+            <small style="color: #64748b; font-size: 12px;">UUID cannot be modified</small>
+        </div>
+        <div class="form-group">
+            <label class="form-label">Server UUID</label>
+            <input type="text" id="serverUUID" name="ServerUUID" class="form-input" value="<?php echo htmlspecialchars($component['ServerUUID'] ?? ''); ?>" placeholder="Optional - Server UUID if component is installed">
         </div>
     </div>
 
-    <div class="section-title">Editable Details</div>
-    
+    <!-- Basic Component Information -->
     <div class="form-row">
         <div class="form-group">
-            <label class="form-label">Serial Number</label>
-            <input type="text" class="form-input" value="<?php echo htmlspecialchars($component['SerialNumber']); ?>" disabled>
-            <span class="form-hint">Serial number cannot be changed</span>
+            <label class="form-label">Serial Number *</label>
+            <input type="text" id="serialNumber" name="SerialNumber" class="form-input" value="<?php echo htmlspecialchars($component['SerialNumber']); ?>" required placeholder="Enter manufacturer serial number">
         </div>
-        
+
         <div class="form-group">
-            <label class="form-label">Status</label>
-            <select name="status" class="form-select" required>
+            <label class="form-label">Status *</label>
+            <select id="status" name="Status" class="form-select" required>
                 <option value="1" <?php echo $component['Status'] == 1 ? 'selected' : ''; ?>>Available</option>
                 <option value="2" <?php echo $component['Status'] == 2 ? 'selected' : ''; ?>>In Use</option>
                 <option value="0" <?php echo $component['Status'] == 0 ? 'selected' : ''; ?>>Failed/Decommissioned</option>
@@ -253,91 +383,138 @@ try {
         </div>
     </div>
 
+    <!-- Location Information -->
     <div class="form-row">
-        <div class="form-group">
-            <label class="form-label">Server UUID</label>
-            <input type="text" name="server_uuid" class="form-input" 
-                   value="<?php echo htmlspecialchars($component['ServerUUID'] ?? ''); ?>"
-                   placeholder="UUID of server (if in use)">
-            <span class="form-hint">Enter if component is installed in a server</span>
-        </div>
-        
         <div class="form-group">
             <label class="form-label">Location</label>
-            <input type="text" name="location" class="form-input" 
-                   value="<?php echo htmlspecialchars($component['Location'] ?? ''); ?>"
-                   placeholder="e.g., Datacenter North">
+            <input type="text" id="location" name="Location" class="form-input" value="<?php echo htmlspecialchars($component['Location'] ?? ''); ?>" placeholder="e.g., Datacenter A, Warehouse East">
         </div>
-    </div>
 
-    <div class="form-group">
-        <label class="form-label">Rack Position</label>
-        <input type="text" name="rack_position" class="form-input" 
-               value="<?php echo htmlspecialchars($component['RackPosition'] ?? ''); ?>"
-               placeholder="e.g., Rack A3-12">
-    </div>
-
-    <?php if ($componentType == 'nic'): ?>
-    <div class="section-title">Network Configuration</div>
-    <div class="form-row">
         <div class="form-group">
-            <label class="form-label">MAC Address</label>
-            <input type="text" name="mac_address" class="form-input" 
-                   value="<?php echo htmlspecialchars($component['MacAddress'] ?? ''); ?>"
-                   placeholder="00:00:00:00:00:00"
-                   pattern="^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$">
-            <span class="form-hint">Format: XX:XX:XX:XX:XX:XX</span>
-        </div>
-        
-        <div class="form-group">
-            <label class="form-label">IP Address</label>
-            <input type="text" name="ip_address" class="form-input" 
-                   value="<?php echo htmlspecialchars($component['IPAddress'] ?? ''); ?>"
-                   placeholder="192.168.1.100">
+            <label class="form-label">Rack Position</label>
+            <input type="text" id="rackPosition" name="RackPosition" class="form-input" value="<?php echo htmlspecialchars($component['RackPosition'] ?? ''); ?>" placeholder="e.g., Rack B4, Shelf A2">
         </div>
     </div>
 
-    <div class="form-group">
-        <label class="form-label">Network Name</label>
-        <input type="text" name="network_name" class="form-input" 
-               value="<?php echo htmlspecialchars($component['NetworkName'] ?? ''); ?>"
-               placeholder="e.g., Internal-Production">
-    </div>
-    <?php endif; ?>
-
-    <div class="section-title">Additional Information</div>
-
+    <!-- Date Information -->
     <div class="form-row">
         <div class="form-group">
             <label class="form-label">Purchase Date</label>
-            <input type="date" name="purchase_date" class="form-input"
-                   value="<?php echo $component['PurchaseDate'] ?? ''; ?>">
+            <input type="date" id="purchaseDate" name="PurchaseDate" class="form-input" value="<?php echo $component['PurchaseDate']; ?>">
         </div>
-        
+
+        <div class="form-group">
+            <label class="form-label">Installation Date</label>
+            <input type="date" id="installationDate" name="InstallationDate" class="form-input" value="<?php echo $component['InstallationDate']; ?>">
+        </div>
+    </div>
+
+    <div class="form-row">
         <div class="form-group">
             <label class="form-label">Warranty End Date</label>
-            <input type="date" name="warranty_end_date" class="form-input"
-                   value="<?php echo $component['WarrantyEndDate'] ?? ''; ?>">
+            <input type="date" id="warrantyEndDate" name="WarrantyEndDate" class="form-input" value="<?php echo $component['WarrantyEndDate']; ?>">
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">Flag</label>
+            <select id="flag" name="Flag" class="form-select">
+                <option value="" <?php echo empty($component['Flag']) ? 'selected' : ''; ?>>No Flag</option>
+                <option value="Backup" <?php echo $component['Flag'] == 'Backup' ? 'selected' : ''; ?>>Backup</option>
+                <option value="Critical" <?php echo $component['Flag'] == 'Critical' ? 'selected' : ''; ?>>Critical</option>
+                <option value="Maintenance" <?php echo $component['Flag'] == 'Maintenance' ? 'selected' : ''; ?>>Maintenance</option>
+                <option value="Testing" <?php echo $component['Flag'] == 'Testing' ? 'selected' : ''; ?>>Testing</option>
+            </select>
         </div>
     </div>
 
-    <div class="form-group">
-        <label class="form-label">Flag/Category</label>
-        <input type="text" name="flag" class="form-input" 
-               value="<?php echo htmlspecialchars($component['Flag'] ?? ''); ?>"
-               placeholder="e.g., Production, Backup, Testing">
-    </div>
-
+    <!-- Notes -->
     <div class="form-group">
         <label class="form-label">Notes</label>
-        <textarea name="notes" class="form-textarea" 
-                  placeholder="Additional information about this component"><?php echo htmlspecialchars($component['Notes'] ?? ''); ?></textarea>
+        <textarea id="notes" name="Notes" class="form-textarea" placeholder="Additional notes or specifications..."><?php echo htmlspecialchars($component['Notes'] ?? ''); ?></textarea>
     </div>
 
     <div class="form-actions">
-        <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+        <button type="button" class="btn btn-secondary" id="modalCancel">Cancel</button>
         <button type="submit" class="btn btn-primary">
-            Update <?php echo ucfirst($componentType); ?>
+            <span id="submitText">Update <?php echo ucfirst($componentType); ?></span>
+            <span id="submitLoader" class="loading hidden"></span>
         </button>
     </div>
 </form>
+
+<script>
+// Store component data
+window.componentType = '<?php echo $componentType; ?>';
+window.componentId = '<?php echo $componentId; ?>';
+
+// Form submission handler
+document.getElementById('componentEditForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const submitBtn = e.target.querySelector('button[type="submit"]');
+    const submitText = document.getElementById('submitText');
+    const submitLoader = document.getElementById('submitLoader');
+    
+    // Disable submit button and show loading
+    submitBtn.disabled = true;
+    submitText.classList.add('hidden');
+    submitLoader.classList.remove('hidden');
+    
+    const formData = new FormData(this);
+    
+    // Add action for API
+    formData.append('action', `${window.componentType}-update`);
+    formData.append('id', window.componentId);
+    
+    // Submit to API
+    fetch('/bdc_ims/api/api.php', {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'Authorization': 'Bearer ' + (localStorage.getItem('auth_token') || '')
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Show success message
+            if (window.utils && window.utils.showAlert) {
+                window.utils.showAlert('Component updated successfully', 'success');
+            } else {
+                alert('Component updated successfully');
+            }
+            
+            // Close modal and refresh list
+            if (window.closeModal) {
+                window.closeModal();
+            }
+            if (window.loadComponentList) {
+                window.loadComponentList(window.componentType);
+            }
+        } else {
+            throw new Error(data.message || 'Failed to update component');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        if (window.utils && window.utils.showAlert) {
+            window.utils.showAlert(error.message || 'Failed to update component', 'error');
+        } else {
+            alert(error.message || 'Failed to update component');
+        }
+    })
+    .finally(() => {
+        // Re-enable submit button
+        submitBtn.disabled = false;
+        submitText.classList.remove('hidden');
+        submitLoader.classList.add('hidden');
+    });
+});
+
+// Cancel button handler
+document.getElementById('modalCancel').addEventListener('click', function() {
+    if (window.closeModal) {
+        window.closeModal();
+    }
+});
+</script>

@@ -696,3 +696,584 @@ Stack trace:
 [25-Jul-2025 02:41:20 UTC] Login successful for user: johnadmin (ID: 37)
 [25-Jul-2025 02:41:46 UTC] API called with action: acl-assign_role (Module: acl, Operation: assign_role)
 [25-Jul-2025 02:41:46 UTC] JWT Authentication failed: Invalid token signature
+[25-Jul-2025 03:57:32 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[25-Jul-2025 03:57:32 UTC] Auth operation: login
+[25-Jul-2025 03:57:32 UTC] Login attempt - Username: 'johnadmin'
+[25-Jul-2025 03:57:32 UTC] Authentication attempt for: johnadmin
+[25-Jul-2025 03:57:32 UTC] User found: johnadmin (ID: 37)
+[25-Jul-2025 03:57:32 UTC] Authentication successful for user: johnadmin
+[25-Jul-2025 03:57:32 UTC] Login successful for user: johnadmin (ID: 37)
+[25-Jul-2025 03:57:57 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[25-Jul-2025 03:57:57 UTC] Auth operation: verify_token
+[25-Jul-2025 03:58:07 UTC] API called with action: acl-assign_role (Module: acl, Operation: assign_role)
+[25-Jul-2025 03:58:07 UTC] Authenticated user: johnadmin (ID: 37)
+[25-Jul-2025 03:58:20 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[25-Jul-2025 03:58:20 UTC] Authenticated user: johnadmin (ID: 37)
+[25-Jul-2025 07:00:52 UTC] API called with action: users-create (Module: users, Operation: create)
+[25-Jul-2025 07:00:52 UTC] JWT Authentication failed: Token has expired
+[25-Jul-2025 07:00:57 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[25-Jul-2025 07:00:57 UTC] Auth operation: login
+[25-Jul-2025 07:00:57 UTC] Login attempt - Username: 'johnadmin'
+[25-Jul-2025 07:00:57 UTC] Authentication attempt for: johnadmin
+[25-Jul-2025 07:00:57 UTC] User found: johnadmin (ID: 37)
+[25-Jul-2025 07:00:57 UTC] Authentication successful for user: johnadmin
+[25-Jul-2025 07:00:57 UTC] Login successful for user: johnadmin (ID: 37)
+[25-Jul-2025 07:01:03 UTC] API called with action: users-create (Module: users, Operation: create)
+[25-Jul-2025 07:01:03 UTC] JWT Authentication failed: Token has expired
+[25-Jul-2025 07:01:08 UTC] API called with action: users-create (Module: users, Operation: create)
+[25-Jul-2025 07:01:08 UTC] JWT Authentication failed: Token has expired
+[25-Jul-2025 07:01:25 UTC] API called with action: users-create (Module: users, Operation: create)
+[25-Jul-2025 07:01:25 UTC] Authenticated user: johnadmin (ID: 37)
+[25-Jul-2025 07:06:47 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[25-Jul-2025 07:06:47 UTC] Auth operation: login
+[25-Jul-2025 07:06:47 UTC] Login attempt - Username: 'superadmin'
+[25-Jul-2025 07:06:47 UTC] Authentication attempt for: superadmin
+[25-Jul-2025 07:06:47 UTC] User found: superadmin (ID: 38)
+[25-Jul-2025 07:06:47 UTC] Authentication successful for user: superadmin
+[25-Jul-2025 07:06:47 UTC] Login successful for user: superadmin (ID: 38)
+[25-Jul-2025 07:07:09 UTC] API called with action: acl-get_all_roles (Module: acl, Operation: get_all_roles)
+[25-Jul-2025 07:07:22 UTC] API called with action: acl-get_all_roles (Module: acl, Operation: get_all_roles)
+[25-Jul-2025 07:07:22 UTC] Authenticated user: johnadmin (ID: 37)
+[25-Jul-2025 07:07:50 UTC] API called with action: acl-assign_role (Module: acl, Operation: assign_role)
+[25-Jul-2025 07:07:50 UTC] Authenticated user: johnadmin (ID: 37)
+[25-Jul-2025 07:08:05 UTC] API called with action: acl-assign_role (Module: acl, Operation: assign_role)
+[25-Jul-2025 07:08:05 UTC] Authenticated user: johnadmin (ID: 37)
+[25-Jul-2025 07:10:22 UTC] API called with action: acl-get_all_roles (Module: acl, Operation: get_all_roles)
+[25-Jul-2025 07:11:36 UTC] API called with action: acl-get_all_roles (Module: acl, Operation: get_all_roles)
+[25-Jul-2025 07:11:55 UTC] API called with action: acl-get_all_roles (Module: acl, Operation: get_all_roles)
+[25-Jul-2025 07:11:55 UTC] JWT Authentication failed: Invalid token signature
+[25-Jul-2025 07:12:06 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[25-Jul-2025 07:12:06 UTC] Auth operation: login
+[25-Jul-2025 07:12:06 UTC] Login attempt - Username: 'superadmin'
+[25-Jul-2025 07:12:06 UTC] Authentication attempt for: superadmin
+[25-Jul-2025 07:12:06 UTC] User found: superadmin (ID: 38)
+[25-Jul-2025 07:12:06 UTC] Authentication successful for user: superadmin
+[25-Jul-2025 07:12:06 UTC] Login successful for user: superadmin (ID: 38)
+[25-Jul-2025 07:12:14 UTC] API called with action: acl-get_all_roles (Module: acl, Operation: get_all_roles)
+[25-Jul-2025 07:12:16 UTC] API called with action: acl-get_all_roles (Module: acl, Operation: get_all_roles)
+[25-Jul-2025 07:12:28 UTC] API called with action: roles-update_permissions (Module: roles, Operation: update_permissions)
+[25-Jul-2025 07:13:16 UTC] API called with action: roles-update_permissions (Module: roles, Operation: update_permissions)
+[25-Jul-2025 07:13:21 UTC] API called with action: roles-update_permissions (Module: roles, Operation: update_permissions)
+[25-Jul-2025 07:13:31 UTC] API called with action: roles-update_permissions (Module: roles, Operation: update_permissions)
+[25-Jul-2025 07:13:31 UTC] Authenticated user: superadmin (ID: 38)
+[25-Jul-2025 07:13:31 UTC] Invalid module requested: roles
+[25-Jul-2025 07:18:12 UTC] API called with action: roles-update_permissions (Module: roles, Operation: update_permissions)
+[25-Jul-2025 07:18:12 UTC] Authenticated user: superadmin (ID: 38)
+[25-Jul-2025 07:18:12 UTC] Invalid module requested: roles
+[25-Jul-2025 07:18:52 UTC] API called with action: acl-assign_role (Module: acl, Operation: assign_role)
+[25-Jul-2025 07:18:52 UTC] Authenticated user: superadmin (ID: 38)
+[25-Jul-2025 07:46:16 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[25-Jul-2025 07:46:16 UTC] Authenticated user: superadmin (ID: 38)
+[25-Jul-2025 07:46:30 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[25-Jul-2025 07:46:30 UTC] Authenticated user: superadmin (ID: 38)
+[25-Jul-2025 07:48:29 UTC] API called with action: cpu-add (Module: cpu, Operation: add)
+[25-Jul-2025 07:48:29 UTC] Authenticated user: superadmin (ID: 38)
+[25-Jul-2025 07:48:50 UTC] API called with action: cpu-add (Module: cpu, Operation: add)
+[25-Jul-2025 07:48:50 UTC] Authenticated user: superadmin (ID: 38)
+[25-Jul-2025 07:49:41 UTC] API called with action: cpu-add (Module: cpu, Operation: add)
+[25-Jul-2025 07:49:41 UTC] Authenticated user: superadmin (ID: 38)
+[25-Jul-2025 07:49:41 UTC] Inserting cpu data: {"UUID":"450437dc-af82-4d56-879c-6f341373a8b9","SerialNumber":"CPU789089","Status":"1","ServerUUID":"","Location":" Warehouse East","RackPosition":"","PurchaseDate":null,"WarrantyEndDate":null,"Flag":"Backup","Notes":""}
+[25-Jul-2025 07:49:41 UTC] Successfully added cpu component with ID: 16
+[25-Jul-2025 07:50:22 UTC] API called with action: cpu-delete (Module: cpu, Operation: delete)
+[25-Jul-2025 07:50:31 UTC] API called with action: cpu-delete (Module: cpu, Operation: delete)
+[25-Jul-2025 07:50:31 UTC] Authenticated user: superadmin (ID: 38)
+[25-Jul-2025 07:50:40 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[25-Jul-2025 07:50:40 UTC] Authenticated user: superadmin (ID: 38)
+[25-Jul-2025 08:08:35 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[25-Jul-2025 08:08:35 UTC] Auth operation: login
+[25-Jul-2025 08:08:35 UTC] Login attempt - Username: 'superadmin'
+[25-Jul-2025 08:08:35 UTC] Authentication attempt for: superadmin
+[25-Jul-2025 08:08:35 UTC] User found: superadmin (ID: 38)
+[25-Jul-2025 08:08:35 UTC] Authentication successful for user: superadmin
+[25-Jul-2025 08:08:35 UTC] Login successful for user: superadmin (ID: 38)
+[25-Jul-2025 08:11:18 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[25-Jul-2025 08:11:18 UTC] Auth operation: login
+[25-Jul-2025 08:11:18 UTC] Login attempt - Username: 'superadmin'
+[25-Jul-2025 08:11:18 UTC] Authentication attempt for: superadmin
+[25-Jul-2025 08:11:18 UTC] User found: superadmin (ID: 38)
+[25-Jul-2025 08:11:18 UTC] Password verification failed for user: superadmin
+[25-Jul-2025 08:11:18 UTC] Login failed for username: superadmin
+[25-Jul-2025 08:11:24 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[25-Jul-2025 08:11:24 UTC] Auth operation: login
+[25-Jul-2025 08:11:24 UTC] Login attempt - Username: 'superadmin'
+[25-Jul-2025 08:11:24 UTC] Authentication attempt for: superadmin
+[25-Jul-2025 08:11:24 UTC] User found: superadmin (ID: 38)
+[25-Jul-2025 08:11:24 UTC] Password verification failed for user: superadmin
+[25-Jul-2025 08:11:24 UTC] Login failed for username: superadmin
+[25-Jul-2025 14:39:09 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[25-Jul-2025 14:39:09 UTC] Auth operation: login
+[25-Jul-2025 14:39:09 UTC] Login attempt - Username: 'a'
+[25-Jul-2025 14:39:09 UTC] Authentication attempt for: a
+[25-Jul-2025 14:39:09 UTC] User found: a (ID: 25)
+[25-Jul-2025 14:39:09 UTC] Authentication successful for user: a
+[25-Jul-2025 14:39:09 UTC] Login successful for user: a (ID: 25)
+[25-Jul-2025 14:39:38 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[25-Jul-2025 14:39:38 UTC] Auth operation: login
+[25-Jul-2025 14:39:38 UTC] Login attempt - Username: 'a'
+[25-Jul-2025 14:39:38 UTC] Authentication attempt for: a
+[25-Jul-2025 14:39:38 UTC] User found: a (ID: 25)
+[25-Jul-2025 14:39:38 UTC] Authentication successful for user: a
+[25-Jul-2025 14:39:38 UTC] Login successful for user: a (ID: 25)
+[25-Jul-2025 14:40:09 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[25-Jul-2025 14:40:09 UTC] Auth operation: login
+[25-Jul-2025 14:40:09 UTC] Login attempt - Username: 'a'
+[25-Jul-2025 14:40:09 UTC] Authentication attempt for: a
+[25-Jul-2025 14:40:09 UTC] User found: a (ID: 25)
+[25-Jul-2025 14:40:09 UTC] Authentication successful for user: a
+[25-Jul-2025 14:40:09 UTC] Login successful for user: a (ID: 25)
+[25-Jul-2025 17:34:15 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[25-Jul-2025 17:34:15 UTC] Auth operation: verify_token
+[25-Jul-2025 17:34:15 UTC] JWT Authentication failed: Token has expired
+[25-Jul-2025 17:35:05 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[25-Jul-2025 17:35:05 UTC] Auth operation: login
+[25-Jul-2025 17:35:05 UTC] Login attempt - Username: 'superadmin'
+[25-Jul-2025 17:35:05 UTC] Authentication attempt for: superadmin
+[25-Jul-2025 17:35:05 UTC] User found: superadmin (ID: 38)
+[25-Jul-2025 17:35:05 UTC] Authentication successful for user: superadmin
+[25-Jul-2025 17:35:05 UTC] Login successful for user: superadmin (ID: 38)
+[25-Jul-2025 17:35:08 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[25-Jul-2025 17:35:08 UTC] Auth operation: verify_token
+[25-Jul-2025 17:35:09 UTC] API called with action: acl-get_user_permissions (Module: acl, Operation: get_user_permissions)
+[25-Jul-2025 17:35:09 UTC] Authenticated user: superadmin (ID: 38)
+[25-Jul-2025 17:35:10 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[25-Jul-2025 17:35:10 UTC] Authenticated user: superadmin (ID: 38)
+[25-Jul-2025 17:35:16 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[25-Jul-2025 17:35:16 UTC] Authenticated user: superadmin (ID: 38)
+[25-Jul-2025 17:35:20 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[25-Jul-2025 17:35:20 UTC] Authenticated user: superadmin (ID: 38)
+[25-Jul-2025 17:35:29 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[25-Jul-2025 17:35:29 UTC] Authenticated user: superadmin (ID: 38)
+[25-Jul-2025 17:35:36 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[25-Jul-2025 17:35:36 UTC] Authenticated user: superadmin (ID: 38)
+[25-Jul-2025 17:35:52 UTC] API called with action: search-components (Module: search, Operation: components)
+[25-Jul-2025 17:35:52 UTC] Authenticated user: superadmin (ID: 38)
+[25-Jul-2025 17:36:11 UTC] API called with action: search-components (Module: search, Operation: components)
+[25-Jul-2025 17:36:11 UTC] Authenticated user: superadmin (ID: 38)
+[25-Jul-2025 17:36:15 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[25-Jul-2025 17:36:15 UTC] Authenticated user: superadmin (ID: 38)
+[25-Jul-2025 17:36:18 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[25-Jul-2025 17:36:18 UTC] Authenticated user: superadmin (ID: 38)
+[25-Jul-2025 17:36:23 UTC] API called with action: cpu-get (Module: cpu, Operation: get)
+[25-Jul-2025 17:36:23 UTC] Authenticated user: superadmin (ID: 38)
+[25-Jul-2025 17:36:24 UTC] API called with action: cpu-get (Module: cpu, Operation: get)
+[25-Jul-2025 17:36:24 UTC] Authenticated user: superadmin (ID: 38)
+[25-Jul-2025 17:36:38 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[25-Jul-2025 17:36:38 UTC] Authenticated user: superadmin (ID: 38)
+[25-Jul-2025 17:36:41 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[25-Jul-2025 17:36:41 UTC] Authenticated user: superadmin (ID: 38)
+[25-Jul-2025 17:36:43 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[25-Jul-2025 17:36:43 UTC] Authenticated user: superadmin (ID: 38)
+[25-Jul-2025 17:36:45 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[25-Jul-2025 17:36:45 UTC] Authenticated user: superadmin (ID: 38)
+[25-Jul-2025 17:37:10 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[25-Jul-2025 17:37:10 UTC] Authenticated user: superadmin (ID: 38)
+[25-Jul-2025 17:37:34 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[25-Jul-2025 17:37:34 UTC] Auth operation: verify_token
+[25-Jul-2025 17:37:34 UTC] API called with action: acl-get_user_permissions (Module: acl, Operation: get_user_permissions)
+[25-Jul-2025 17:37:34 UTC] Authenticated user: superadmin (ID: 38)
+[25-Jul-2025 17:37:34 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[25-Jul-2025 17:37:34 UTC] Authenticated user: superadmin (ID: 38)
+[25-Jul-2025 17:52:48 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[25-Jul-2025 17:52:48 UTC] Authenticated user: superadmin (ID: 38)
+[25-Jul-2025 17:53:36 UTC] API called with action: auth-logout (Module: auth, Operation: logout)
+[25-Jul-2025 17:53:36 UTC] Auth operation: logout
+[25-Jul-2025 17:53:36 UTC] User logged out successfully
+[25-Jul-2025 17:53:52 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[25-Jul-2025 17:53:52 UTC] Auth operation: login
+[25-Jul-2025 17:53:52 UTC] Login attempt - Username: 'superadmin'
+[25-Jul-2025 17:53:52 UTC] Authentication attempt for: superadmin
+[25-Jul-2025 17:53:52 UTC] User found: superadmin (ID: 38)
+[25-Jul-2025 17:53:52 UTC] Authentication successful for user: superadmin
+[25-Jul-2025 17:53:52 UTC] Login successful for user: superadmin (ID: 38)
+[25-Jul-2025 17:53:54 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[25-Jul-2025 17:53:54 UTC] Auth operation: verify_token
+[25-Jul-2025 17:53:55 UTC] API called with action: acl-get_user_permissions (Module: acl, Operation: get_user_permissions)
+[25-Jul-2025 17:53:55 UTC] Authenticated user: superadmin (ID: 38)
+[25-Jul-2025 17:53:55 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[25-Jul-2025 17:53:55 UTC] Authenticated user: superadmin (ID: 38)
+[25-Jul-2025 19:14:50 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[25-Jul-2025 19:14:50 UTC] Auth operation: verify_token
+[25-Jul-2025 19:14:50 UTC] JWT Authentication failed: Token has expired
+[25-Jul-2025 19:14:50 UTC] API called with action: auth-logout (Module: auth, Operation: logout)
+[25-Jul-2025 19:14:50 UTC] Auth operation: logout
+[25-Jul-2025 19:14:50 UTC] JWT Authentication failed: Token has expired
+[25-Jul-2025 19:14:50 UTC] User logged out successfully
+[25-Jul-2025 19:44:23 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[25-Jul-2025 19:44:23 UTC] Auth operation: login
+[25-Jul-2025 19:44:23 UTC] Login attempt - Username: 'superadmin'
+[25-Jul-2025 19:44:23 UTC] Authentication attempt for: superadmin
+[25-Jul-2025 19:44:23 UTC] User found: superadmin (ID: 38)
+[25-Jul-2025 19:44:23 UTC] Authentication successful for user: superadmin
+[25-Jul-2025 19:44:23 UTC] Login successful for user: superadmin (ID: 38)
+[25-Jul-2025 19:51:05 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[25-Jul-2025 19:51:05 UTC] Auth operation: login
+[25-Jul-2025 19:51:05 UTC] Login attempt - Username: 'superadmin'
+[25-Jul-2025 19:51:05 UTC] Authentication attempt for: superadmin
+[25-Jul-2025 19:51:05 UTC] User found: superadmin (ID: 38)
+[25-Jul-2025 19:51:05 UTC] Authentication successful for user: superadmin
+[25-Jul-2025 19:51:05 UTC] Login successful for user: superadmin (ID: 38)
+[25-Jul-2025 19:51:07 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[25-Jul-2025 19:51:07 UTC] Auth operation: verify_token
+[25-Jul-2025 19:51:07 UTC] API called with action: acl-get_user_permissions (Module: acl, Operation: get_user_permissions)
+[25-Jul-2025 19:51:07 UTC] Authenticated user: superadmin (ID: 38)
+[25-Jul-2025 19:51:07 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[25-Jul-2025 19:51:07 UTC] Authenticated user: superadmin (ID: 38)
+[25-Jul-2025 19:51:13 UTC] API called with action: storage-list (Module: storage, Operation: list)
+[25-Jul-2025 19:51:13 UTC] Authenticated user: superadmin (ID: 38)
+[25-Jul-2025 19:51:21 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[25-Jul-2025 19:51:21 UTC] Authenticated user: superadmin (ID: 38)
+[25-Jul-2025 19:51:40 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[25-Jul-2025 19:51:40 UTC] Auth operation: verify_token
+[25-Jul-2025 19:51:41 UTC] API called with action: acl-get_user_permissions (Module: acl, Operation: get_user_permissions)
+[25-Jul-2025 19:51:41 UTC] Authenticated user: superadmin (ID: 38)
+[25-Jul-2025 19:51:41 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[25-Jul-2025 19:51:41 UTC] Authenticated user: superadmin (ID: 38)
+[25-Jul-2025 19:53:13 UTC] API called with action: acl-get_user_permissions (Module: acl, Operation: get_user_permissions)
+[25-Jul-2025 19:53:13 UTC] JWT Authentication failed: Token has expired
+[25-Jul-2025 19:53:18 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[25-Jul-2025 19:53:18 UTC] Auth operation: login
+[25-Jul-2025 19:53:18 UTC] Login attempt - Username: 'superadmin'
+[25-Jul-2025 19:53:18 UTC] Authentication attempt for: superadmin
+[25-Jul-2025 19:53:18 UTC] User found: superadmin (ID: 38)
+[25-Jul-2025 19:53:18 UTC] Authentication successful for user: superadmin
+[25-Jul-2025 19:53:18 UTC] Login successful for user: superadmin (ID: 38)
+[25-Jul-2025 19:53:23 UTC] API called with action: acl-get_user_permissions (Module: acl, Operation: get_user_permissions)
+[25-Jul-2025 19:53:23 UTC] JWT Authentication failed: Token has expired
+[25-Jul-2025 19:53:36 UTC] API called with action: acl-get_user_permissions (Module: acl, Operation: get_user_permissions)
+[25-Jul-2025 19:53:36 UTC] Authenticated user: superadmin (ID: 38)
+[25-Jul-2025 19:56:17 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[25-Jul-2025 19:56:17 UTC] Authenticated user: superadmin (ID: 38)
+[26-Jul-2025 07:18:30 UTC] API called with action: auth-logout (Module: auth, Operation: logout)
+[26-Jul-2025 07:18:30 UTC] Auth operation: logout
+[26-Jul-2025 07:18:30 UTC] JWT Authentication failed: Token has expired
+[26-Jul-2025 07:18:30 UTC] User logged out successfully
+[26-Jul-2025 07:19:14 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[26-Jul-2025 07:19:14 UTC] Auth operation: login
+[26-Jul-2025 07:19:14 UTC] Login attempt - Username: 'superadmin'
+[26-Jul-2025 07:19:14 UTC] Authentication attempt for: superadmin
+[26-Jul-2025 07:19:14 UTC] User found: superadmin (ID: 38)
+[26-Jul-2025 07:19:14 UTC] Authentication successful for user: superadmin
+[26-Jul-2025 07:19:14 UTC] Login successful for user: superadmin (ID: 38)
+[26-Jul-2025 07:19:16 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[26-Jul-2025 07:19:16 UTC] Auth operation: verify_token
+[26-Jul-2025 07:19:17 UTC] API called with action: acl-get_user_permissions (Module: acl, Operation: get_user_permissions)
+[26-Jul-2025 07:19:17 UTC] Authenticated user: superadmin (ID: 38)
+[26-Jul-2025 07:19:17 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[26-Jul-2025 07:19:17 UTC] Authenticated user: superadmin (ID: 38)
+[26-Jul-2025 07:20:18 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[26-Jul-2025 07:20:18 UTC] Authenticated user: superadmin (ID: 38)
+[26-Jul-2025 07:20:24 UTC] API called with action: cpu-get (Module: cpu, Operation: get)
+[26-Jul-2025 07:20:24 UTC] Authenticated user: superadmin (ID: 38)
+[26-Jul-2025 07:21:28 UTC] API called with action: cpu-get (Module: cpu, Operation: get)
+[26-Jul-2025 07:21:28 UTC] Authenticated user: superadmin (ID: 38)
+[26-Jul-2025 07:21:30 UTC] API called with action: cpu-get (Module: cpu, Operation: get)
+[26-Jul-2025 07:21:30 UTC] Authenticated user: superadmin (ID: 38)
+[26-Jul-2025 07:21:36 UTC] API called with action: cpu-get (Module: cpu, Operation: get)
+[26-Jul-2025 07:21:36 UTC] Authenticated user: superadmin (ID: 38)
+[26-Jul-2025 07:21:36 UTC] API called with action: cpu-get (Module: cpu, Operation: get)
+[26-Jul-2025 07:21:36 UTC] Authenticated user: superadmin (ID: 38)
+[26-Jul-2025 07:21:48 UTC] API called with action: users-list (Module: users, Operation: list)
+[26-Jul-2025 07:21:48 UTC] Authenticated user: superadmin (ID: 38)
+[26-Jul-2025 07:21:50 UTC] API called with action: roles-list (Module: roles, Operation: list)
+[26-Jul-2025 07:21:50 UTC] Authenticated user: superadmin (ID: 38)
+[26-Jul-2025 07:21:50 UTC] Invalid module requested: roles
+[26-Jul-2025 07:22:15 UTC] API called with action: roles-create (Module: roles, Operation: create)
+[26-Jul-2025 07:22:15 UTC] API called with action: roles-create (Module: roles, Operation: create)
+[26-Jul-2025 07:22:15 UTC] Authenticated user: superadmin (ID: 38)
+[26-Jul-2025 07:22:15 UTC] Invalid module requested: roles
+[26-Jul-2025 07:22:15 UTC] Authenticated user: superadmin (ID: 38)
+[26-Jul-2025 07:22:15 UTC] Invalid module requested: roles
+[26-Jul-2025 07:22:22 UTC] API called with action: roles-create (Module: roles, Operation: create)
+[26-Jul-2025 07:22:22 UTC] Authenticated user: superadmin (ID: 38)
+[26-Jul-2025 07:22:22 UTC] Invalid module requested: roles
+[26-Jul-2025 07:22:30 UTC] API called with action: roles-list (Module: roles, Operation: list)
+[26-Jul-2025 07:22:30 UTC] Authenticated user: superadmin (ID: 38)
+[26-Jul-2025 07:22:30 UTC] Invalid module requested: roles
+[26-Jul-2025 07:22:31 UTC] API called with action: users-list (Module: users, Operation: list)
+[26-Jul-2025 07:22:31 UTC] Authenticated user: superadmin (ID: 38)
+[26-Jul-2025 07:22:32 UTC] API called with action: roles-list (Module: roles, Operation: list)
+[26-Jul-2025 07:22:33 UTC] Authenticated user: superadmin (ID: 38)
+[26-Jul-2025 07:22:33 UTC] Invalid module requested: roles
+[26-Jul-2025 07:26:30 UTC] API called with action: roles-get (Module: roles, Operation: get)
+[26-Jul-2025 07:26:30 UTC] JWT Authentication failed: Token has expired
+[26-Jul-2025 07:26:34 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[26-Jul-2025 07:26:34 UTC] Auth operation: login
+[26-Jul-2025 07:26:34 UTC] Login attempt - Username: 'superadmin'
+[26-Jul-2025 07:26:34 UTC] Authentication attempt for: superadmin
+[26-Jul-2025 07:26:34 UTC] User found: superadmin (ID: 38)
+[26-Jul-2025 07:26:34 UTC] Authentication successful for user: superadmin
+[26-Jul-2025 07:26:34 UTC] Login successful for user: superadmin (ID: 38)
+[26-Jul-2025 07:26:38 UTC] API called with action: roles-get (Module: roles, Operation: get)
+[26-Jul-2025 07:26:38 UTC] JWT Authentication failed: Token has expired
+[26-Jul-2025 07:26:41 UTC] API called with action: roles-get (Module: roles, Operation: get)
+[26-Jul-2025 07:26:41 UTC] JWT Authentication failed: Token has expired
+[26-Jul-2025 07:27:01 UTC] API called with action: roles-get (Module: roles, Operation: get)
+[26-Jul-2025 07:27:01 UTC] Authenticated user: superadmin (ID: 38)
+[26-Jul-2025 07:27:01 UTC] Invalid module requested: roles
+[26-Jul-2025 07:28:57 UTC] API called with action: roles-create (Module: roles, Operation: create)
+[26-Jul-2025 07:29:04 UTC] API called with action: roles-create (Module: roles, Operation: create)
+[26-Jul-2025 07:29:04 UTC] Authenticated user: superadmin (ID: 38)
+[26-Jul-2025 07:29:04 UTC] Invalid module requested: roles
+[26-Jul-2025 07:29:26 UTC] API called with action: roles-list (Module: roles, Operation: list)
+[26-Jul-2025 07:29:26 UTC] Authenticated user: superadmin (ID: 38)
+[26-Jul-2025 07:29:26 UTC] Invalid module requested: roles
+[26-Jul-2025 07:29:32 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[26-Jul-2025 07:29:32 UTC] Authenticated user: superadmin (ID: 38)
+[26-Jul-2025 08:44:02 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[26-Jul-2025 08:44:02 UTC] Auth operation: verify_token
+[26-Jul-2025 08:44:02 UTC] JWT Authentication failed: Token has expired
+[26-Jul-2025 08:44:03 UTC] API called with action: auth-logout (Module: auth, Operation: logout)
+[26-Jul-2025 08:44:03 UTC] Auth operation: logout
+[26-Jul-2025 08:44:03 UTC] JWT Authentication failed: Token has expired
+[26-Jul-2025 08:44:03 UTC] User logged out successfully
+[26-Jul-2025 08:44:47 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[26-Jul-2025 08:44:47 UTC] Auth operation: login
+[26-Jul-2025 08:44:47 UTC] Login attempt - Username: 'superadmin'
+[26-Jul-2025 08:44:47 UTC] Authentication attempt for: superadmin
+[26-Jul-2025 08:44:47 UTC] User found: superadmin (ID: 38)
+[26-Jul-2025 08:44:47 UTC] Authentication successful for user: superadmin
+[26-Jul-2025 08:44:47 UTC] Login successful for user: superadmin (ID: 38)
+[26-Jul-2025 08:44:49 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[26-Jul-2025 08:44:49 UTC] Auth operation: verify_token
+[26-Jul-2025 08:44:50 UTC] API called with action: acl-get_user_permissions (Module: acl, Operation: get_user_permissions)
+[26-Jul-2025 08:44:50 UTC] Authenticated user: superadmin (ID: 38)
+[26-Jul-2025 08:44:50 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[26-Jul-2025 08:44:50 UTC] Authenticated user: superadmin (ID: 38)
+[26-Jul-2025 08:44:52 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[26-Jul-2025 08:44:52 UTC] Authenticated user: superadmin (ID: 38)
+[26-Jul-2025 08:44:54 UTC] API called with action: users-list (Module: users, Operation: list)
+[26-Jul-2025 08:44:54 UTC] Authenticated user: superadmin (ID: 38)
+[26-Jul-2025 08:44:56 UTC] API called with action: roles-list (Module: roles, Operation: list)
+[26-Jul-2025 08:44:56 UTC] Authenticated user: superadmin (ID: 38)
+[26-Jul-2025 08:44:56 UTC] Invalid module requested: roles
+[26-Jul-2025 08:45:02 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[26-Jul-2025 08:45:02 UTC] Authenticated user: superadmin (ID: 38)
+[26-Jul-2025 08:45:43 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[26-Jul-2025 08:45:43 UTC] Authenticated user: superadmin (ID: 38)
+[26-Jul-2025 08:56:35 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[26-Jul-2025 08:56:35 UTC] Authenticated user: superadmin (ID: 38)
+[26-Jul-2025 08:56:40 UTC] API called with action: cpu-get (Module: cpu, Operation: get)
+[26-Jul-2025 08:56:40 UTC] Authenticated user: superadmin (ID: 38)
+[26-Jul-2025 08:57:09 UTC] API called with action: search-components (Module: search, Operation: components)
+[26-Jul-2025 08:57:09 UTC] Authenticated user: superadmin (ID: 38)
+[26-Jul-2025 08:57:11 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[26-Jul-2025 08:57:11 UTC] Authenticated user: superadmin (ID: 38)
+[26-Jul-2025 08:57:21 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[26-Jul-2025 08:57:21 UTC] Authenticated user: superadmin (ID: 38)
+[26-Jul-2025 08:57:26 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[26-Jul-2025 08:57:26 UTC] Authenticated user: superadmin (ID: 38)
+[26-Jul-2025 18:01:50 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[26-Jul-2025 18:01:50 UTC] Auth operation: verify_token
+[26-Jul-2025 18:01:50 UTC] JWT Authentication failed: Token has expired
+[26-Jul-2025 18:02:09 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[26-Jul-2025 18:02:09 UTC] Auth operation: login
+[26-Jul-2025 18:02:09 UTC] Login attempt - Username: 'superadmin'
+[26-Jul-2025 18:02:09 UTC] Authentication attempt for: superadmin
+[26-Jul-2025 18:02:09 UTC] User found: superadmin (ID: 38)
+[26-Jul-2025 18:02:09 UTC] Authentication successful for user: superadmin
+[26-Jul-2025 18:02:09 UTC] Login successful for user: superadmin (ID: 38)
+[26-Jul-2025 18:04:15 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[26-Jul-2025 18:04:15 UTC] Auth operation: verify_token
+[26-Jul-2025 18:04:56 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[26-Jul-2025 18:04:56 UTC] Auth operation: verify_token
+[26-Jul-2025 18:05:22 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[26-Jul-2025 18:05:22 UTC] Auth operation: verify_token
+[26-Jul-2025 18:05:22 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[26-Jul-2025 18:05:22 UTC] Auth operation: verify_token
+[26-Jul-2025 18:05:23 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[26-Jul-2025 18:05:23 UTC] Auth operation: verify_token
+[26-Jul-2025 18:05:23 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[26-Jul-2025 18:05:23 UTC] Auth operation: verify_token
+[26-Jul-2025 18:05:24 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[26-Jul-2025 18:05:24 UTC] Auth operation: verify_token
+[26-Jul-2025 18:05:24 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[26-Jul-2025 18:05:24 UTC] Auth operation: verify_token
+[26-Jul-2025 18:05:25 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[26-Jul-2025 18:05:25 UTC] Auth operation: verify_token
+[26-Jul-2025 18:05:26 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[26-Jul-2025 18:05:26 UTC] Auth operation: verify_token
+[26-Jul-2025 18:05:26 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[26-Jul-2025 18:05:26 UTC] Auth operation: verify_token
+[26-Jul-2025 18:05:27 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[26-Jul-2025 18:05:27 UTC] Auth operation: verify_token
+[26-Jul-2025 18:05:28 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[26-Jul-2025 18:05:28 UTC] Auth operation: verify_token
+[26-Jul-2025 18:05:28 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[26-Jul-2025 18:05:28 UTC] Auth operation: verify_token
+[26-Jul-2025 18:05:29 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[26-Jul-2025 18:05:29 UTC] Auth operation: verify_token
+[26-Jul-2025 18:05:29 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[26-Jul-2025 18:05:29 UTC] Auth operation: verify_token
+[26-Jul-2025 18:05:30 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[26-Jul-2025 18:05:30 UTC] Auth operation: verify_token
+[26-Jul-2025 18:05:30 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[26-Jul-2025 18:05:30 UTC] Auth operation: verify_token
+[26-Jul-2025 18:05:31 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[26-Jul-2025 18:05:31 UTC] Auth operation: verify_token
+[26-Jul-2025 18:05:31 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[26-Jul-2025 18:05:31 UTC] Auth operation: verify_token
+[26-Jul-2025 18:05:32 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[26-Jul-2025 18:05:32 UTC] Auth operation: verify_token
+[26-Jul-2025 18:05:32 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[26-Jul-2025 18:05:32 UTC] Auth operation: verify_token
+[26-Jul-2025 18:05:33 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[26-Jul-2025 18:05:33 UTC] Auth operation: verify_token
+[26-Jul-2025 18:05:33 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[26-Jul-2025 18:05:33 UTC] Auth operation: verify_token
+[26-Jul-2025 18:05:34 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[26-Jul-2025 18:05:34 UTC] Auth operation: verify_token
+[26-Jul-2025 18:05:34 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[26-Jul-2025 18:05:34 UTC] Auth operation: verify_token
+[26-Jul-2025 18:06:16 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[26-Jul-2025 18:06:16 UTC] Auth operation: login
+[26-Jul-2025 18:06:16 UTC] Login attempt - Username: 'superadmin'
+[26-Jul-2025 18:06:16 UTC] Authentication attempt for: superadmin
+[26-Jul-2025 18:06:16 UTC] User found: superadmin (ID: 38)
+[26-Jul-2025 18:06:16 UTC] Authentication successful for user: superadmin
+[26-Jul-2025 18:06:16 UTC] Login successful for user: superadmin (ID: 38)
+[26-Jul-2025 18:06:30 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[26-Jul-2025 18:06:30 UTC] Auth operation: login
+[26-Jul-2025 18:06:30 UTC] Login attempt - Username: 'superadmin'
+[26-Jul-2025 18:06:30 UTC] Authentication attempt for: superadmin
+[26-Jul-2025 18:06:30 UTC] User found: superadmin (ID: 38)
+[26-Jul-2025 18:06:30 UTC] Authentication successful for user: superadmin
+[26-Jul-2025 18:06:30 UTC] Login successful for user: superadmin (ID: 38)
+[26-Jul-2025 18:15:07 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[26-Jul-2025 18:15:07 UTC] Auth operation: verify_token
+[26-Jul-2025 18:15:16 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[26-Jul-2025 18:15:16 UTC] Auth operation: login
+[26-Jul-2025 18:15:16 UTC] Login attempt - Username: 'superadmin'
+[26-Jul-2025 18:15:16 UTC] Authentication attempt for: superadmin
+[26-Jul-2025 18:15:16 UTC] User found: superadmin (ID: 38)
+[26-Jul-2025 18:15:16 UTC] Authentication successful for user: superadmin
+[26-Jul-2025 18:15:16 UTC] Login successful for user: superadmin (ID: 38)
+[26-Jul-2025 18:16:17 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[26-Jul-2025 18:16:17 UTC] Auth operation: login
+[26-Jul-2025 18:16:17 UTC] Login attempt - Username: 'superadmin'
+[26-Jul-2025 18:16:17 UTC] Authentication attempt for: superadmin
+[26-Jul-2025 18:16:17 UTC] User found: superadmin (ID: 38)
+[26-Jul-2025 18:16:18 UTC] Authentication successful for user: superadmin
+[26-Jul-2025 18:16:18 UTC] Login successful for user: superadmin (ID: 38)
+[26-Jul-2025 18:16:23 UTC] API called with action: auth-logout (Module: auth, Operation: logout)
+[26-Jul-2025 18:16:23 UTC] Auth operation: logout
+[26-Jul-2025 18:16:23 UTC] JWT Authentication failed: Token has expired
+[26-Jul-2025 18:16:23 UTC] User logged out successfully
+[26-Jul-2025 18:16:57 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[26-Jul-2025 18:16:57 UTC] Auth operation: login
+[26-Jul-2025 18:16:57 UTC] Login attempt - Username: 'superadmin'
+[26-Jul-2025 18:16:57 UTC] Authentication attempt for: superadmin
+[26-Jul-2025 18:16:57 UTC] User found: superadmin (ID: 38)
+[26-Jul-2025 18:16:57 UTC] Authentication successful for user: superadmin
+[26-Jul-2025 18:16:57 UTC] Login successful for user: superadmin (ID: 38)
+[26-Jul-2025 18:22:43 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[26-Jul-2025 18:22:43 UTC] Auth operation: login
+[26-Jul-2025 18:22:43 UTC] Login attempt - Username: 'superadmin'
+[26-Jul-2025 18:22:43 UTC] Authentication attempt for: superadmin
+[26-Jul-2025 18:22:43 UTC] User found: superadmin (ID: 38)
+[26-Jul-2025 18:22:43 UTC] Authentication successful for user: superadmin
+[26-Jul-2025 18:22:43 UTC] Login successful for user: superadmin (ID: 38)
+[26-Jul-2025 18:26:15 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[26-Jul-2025 18:26:15 UTC] Auth operation: login
+[26-Jul-2025 18:26:15 UTC] Login attempt - Username: 'superadmin'
+[26-Jul-2025 18:26:15 UTC] Authentication attempt for: superadmin
+[26-Jul-2025 18:26:15 UTC] User found: superadmin (ID: 38)
+[26-Jul-2025 18:26:15 UTC] Password verification failed for user: superadmin
+[26-Jul-2025 18:26:15 UTC] Login failed for username: superadmin
+[26-Jul-2025 18:26:19 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[26-Jul-2025 18:26:19 UTC] Auth operation: login
+[26-Jul-2025 18:26:19 UTC] Login attempt - Username: 'superadmin'
+[26-Jul-2025 18:26:19 UTC] Authentication attempt for: superadmin
+[26-Jul-2025 18:26:19 UTC] User found: superadmin (ID: 38)
+[26-Jul-2025 18:26:19 UTC] Authentication successful for user: superadmin
+[26-Jul-2025 18:26:19 UTC] Login successful for user: superadmin (ID: 38)
+[26-Jul-2025 18:34:30 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[26-Jul-2025 18:34:30 UTC] Auth operation: login
+[26-Jul-2025 18:34:30 UTC] Login attempt - Username: 'superadmin'
+[26-Jul-2025 18:34:30 UTC] Authentication attempt for: superadmin
+[26-Jul-2025 18:34:30 UTC] User found: superadmin (ID: 38)
+[26-Jul-2025 18:34:30 UTC] Password verification failed for user: superadmin
+[26-Jul-2025 18:34:30 UTC] Login failed for username: superadmin
+[26-Jul-2025 18:34:34 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[26-Jul-2025 18:34:34 UTC] Auth operation: login
+[26-Jul-2025 18:34:34 UTC] Login attempt - Username: 'superadmin'
+[26-Jul-2025 18:34:34 UTC] Authentication attempt for: superadmin
+[26-Jul-2025 18:34:34 UTC] User found: superadmin (ID: 38)
+[26-Jul-2025 18:34:34 UTC] Authentication successful for user: superadmin
+[26-Jul-2025 18:34:34 UTC] Login successful for user: superadmin (ID: 38)
+[26-Jul-2025 18:36:21 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[26-Jul-2025 18:36:21 UTC] Auth operation: verify_token
+[26-Jul-2025 18:36:21 UTC] JWT Authentication failed: Token has expired
+[26-Jul-2025 18:37:09 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[26-Jul-2025 18:37:09 UTC] Auth operation: verify_token
+[26-Jul-2025 18:37:12 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[26-Jul-2025 18:37:12 UTC] Auth operation: verify_token
+[26-Jul-2025 18:37:14 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[26-Jul-2025 18:37:14 UTC] Auth operation: verify_token
+[26-Jul-2025 18:37:25 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[26-Jul-2025 18:37:25 UTC] Auth operation: login
+[26-Jul-2025 18:37:25 UTC] Login attempt - Username: 'superadmin'
+[26-Jul-2025 18:37:25 UTC] Authentication attempt for: superadmin
+[26-Jul-2025 18:37:25 UTC] User found: superadmin (ID: 38)
+[26-Jul-2025 18:37:25 UTC] Authentication successful for user: superadmin
+[26-Jul-2025 18:37:25 UTC] Login successful for user: superadmin (ID: 38)
+[26-Jul-2025 23:25:20 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[26-Jul-2025 23:25:20 UTC] JWT Authentication failed: Token has expired
+[26-Jul-2025 23:25:20 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[26-Jul-2025 23:25:20 UTC] Auth operation: verify_token
+[26-Jul-2025 23:25:20 UTC] JWT Authentication failed: Token has expired
+[26-Jul-2025 23:25:28 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[26-Jul-2025 23:25:28 UTC] JWT Authentication failed: Token has expired
+[26-Jul-2025 23:25:28 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[26-Jul-2025 23:25:28 UTC] Auth operation: verify_token
+[26-Jul-2025 23:25:28 UTC] JWT Authentication failed: Token has expired
+[26-Jul-2025 23:25:34 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[26-Jul-2025 23:25:34 UTC] Auth operation: verify_token
+[26-Jul-2025 23:25:34 UTC] JWT Authentication failed: Token has expired
+[26-Jul-2025 23:25:45 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[26-Jul-2025 23:25:45 UTC] Auth operation: login
+[26-Jul-2025 23:25:45 UTC] Login attempt - Username: 'superadmin'
+[26-Jul-2025 23:25:45 UTC] Authentication attempt for: superadmin
+[26-Jul-2025 23:25:45 UTC] User found: superadmin (ID: 38)
+[26-Jul-2025 23:25:45 UTC] Authentication successful for user: superadmin
+[26-Jul-2025 23:25:45 UTC] Login successful for user: superadmin (ID: 38)
+[26-Jul-2025 23:25:48 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[26-Jul-2025 23:25:48 UTC] Auth operation: verify_token
+[26-Jul-2025 23:25:48 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[26-Jul-2025 23:25:48 UTC] Authenticated user: superadmin (ID: 38)
+[26-Jul-2025 23:29:31 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[26-Jul-2025 23:29:31 UTC] Auth operation: login
+[26-Jul-2025 23:29:31 UTC] Login attempt - Username: 'superadmin'
+[26-Jul-2025 23:29:31 UTC] Authentication attempt for: superadmin
+[26-Jul-2025 23:29:31 UTC] User found: superadmin (ID: 38)
+[26-Jul-2025 23:29:31 UTC] Authentication successful for user: superadmin
+[26-Jul-2025 23:29:31 UTC] Login successful for user: superadmin (ID: 38)
+[26-Jul-2025 23:29:35 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[26-Jul-2025 23:29:35 UTC] Auth operation: verify_token
+[26-Jul-2025 23:29:35 UTC] JWT Authentication failed: Token has expired
+[26-Jul-2025 23:30:29 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[26-Jul-2025 23:30:29 UTC] Auth operation: verify_token
+[26-Jul-2025 23:36:03 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[26-Jul-2025 23:36:03 UTC] Auth operation: verify_token
+[26-Jul-2025 23:36:03 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[26-Jul-2025 23:36:03 UTC] Authenticated user: superadmin (ID: 38)
+[26-Jul-2025 23:36:08 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[26-Jul-2025 23:36:08 UTC] Auth operation: verify_token
+[26-Jul-2025 23:42:11 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[26-Jul-2025 23:42:11 UTC] Auth operation: login
+[26-Jul-2025 23:42:11 UTC] Login attempt - Username: 'superadmin'
+[26-Jul-2025 23:42:11 UTC] Authentication attempt for: superadmin
+[26-Jul-2025 23:42:11 UTC] User found: superadmin (ID: 38)
+[26-Jul-2025 23:42:11 UTC] Authentication successful for user: superadmin
+[26-Jul-2025 23:42:11 UTC] Login successful for user: superadmin (ID: 38)
+[26-Jul-2025 23:42:15 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[26-Jul-2025 23:42:15 UTC] Auth operation: verify_token
+[26-Jul-2025 23:42:15 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[26-Jul-2025 23:42:15 UTC] Authenticated user: superadmin (ID: 38)
+[26-Jul-2025 23:42:27 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[26-Jul-2025 23:42:27 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 00:45:13 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 00:45:13 UTC] JWT Authentication failed: Token has expired
+[27-Jul-2025 00:45:25 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 00:45:25 UTC] JWT Authentication failed: Token has expired
+[27-Jul-2025 00:45:26 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 00:45:26 UTC] JWT Authentication failed: Token has expired
