@@ -1,0 +1,470 @@
+/**
+ * API Handler for BDC Inventory Management System
+ */
+
+
+window.api = {
+    // Base configuration - Hardcoded for staging
+        baseURL: 'https://shubham.staging.cloudmate.in/bdc_ims/api/api.php', 
+    
+    // Get auth token from localStorage
+    getToken() {
+        return localStorage.getItem('bdc_token');
+    },
+
+    // Set auth token
+    setToken(token) {
+        if (token) {
+            localStorage.setItem('bdc_token', token);
+        } else {
+            localStorage.removeItem('bdc_token');
+        }
+    },
+
+    // Get refresh token
+    getRefreshToken() {
+        return localStorage.getItem('bdc_refresh_token');
+    },
+
+    // Set refresh token
+    setRefreshToken(token) {
+        if (token) {
+            localStorage.setItem('bdc_refresh_token', token);
+        } else {
+            localStorage.removeItem('bdc_refresh_token');
+        }
+    },
+
+    // Get user data
+    getUser() {
+        const userData = localStorage.getItem('bdc_user');
+        return userData ? JSON.parse(userData) : null;
+    },
+
+    // Set user data
+    setUser(user) {
+        if (user) {
+            localStorage.setItem('bdc_user', JSON.stringify(user));
+        } else {
+            localStorage.removeItem('bdc_user');
+        }
+    },
+
+    // Clear all auth data
+    clearAuth() {
+        localStorage.removeItem('bdc_token');
+        localStorage.removeItem('bdc_refresh_token');
+        localStorage.removeItem('bdc_user');
+    },
+
+    // Make API request with automatic token refresh
+    async request(action, data = {}, method = 'POST') {
+        const token = this.getToken();
+        
+        // Always use FormData for consistency with API expectations
+        const formData = new FormData();
+        formData.append('action', action);
+        
+        // Append data to FormData
+        Object.keys(data).forEach(key => {
+            if (Array.isArray(data[key])) {
+                data[key].forEach(item => {
+                    formData.append(`${key}[]`, item);
+                });
+            } else if (data[key] !== null && data[key] !== undefined) {
+                formData.append(key, data[key]);
+            }
+        });
+
+        // Prepare headers - only add Authorization if token exists
+        const headers = {};
+        if (token) {
+            headers['Authorization'] = `Bearer ${token}`;
+        }
+
+        try {
+            console.log(`Making API request: ${action}`, { data });
+            
+            const response = await fetch(this.baseURL, {
+                method: 'POST', // API always expects POST
+                headers: headers,
+                body: formData
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            const result = await response.json();
+            console.log(`API response for ${action}:`, result);
+
+            // Handle token expiration
+            if (result.code === 401 && result.message && 
+                (result.message.includes('expired') || result.message.includes('Invalid token'))) {
+                const refreshed = await this.refreshToken();
+                if (refreshed) {
+                    // Retry the original request with new token
+                    const newHeaders = {
+                        'Authorization': `Bearer ${this.getToken()}`
+                    };
+                    
+                    const retryResponse = await fetch(this.baseURL, {
+                        method: 'POST',
+                        headers: newHeaders,
+                        body: formData
+                    });
+                    
+                    if (!retryResponse.ok) {
+                        throw new Error(`HTTP ${retryResponse.status}: ${retryResponse.statusText}`);
+                    }
+                    
+                    return await retryResponse.json();
+                } else {
+                    // Refresh failed, redirect to login
+                    this.handleAuthFailure();
+                    throw new Error('Authentication failed');
+                }
+            }
+
+            return result;
+
+        } catch (error) {
+            console.error('API request error:', error);
+            throw error;
+        }
+    },
+
+    // Refresh authentication token
+    async refreshToken() {
+        const refreshToken = this.getRefreshToken();
+        if (!refreshToken) {
+            console.log('No refresh token available');
+            return false;
+        }
+
+        try {
+            console.log('Attempting to refresh token...');
+            
+            const formData = new FormData();
+            formData.append('action', 'auth-refresh');
+            formData.append('refresh_token', refreshToken);
+
+            const response = await fetch(this.baseURL, {
+                method: 'POST',
+                body: formData
+            });
+
+            if (!response.ok) {
+                console.error('Refresh token request failed:', response.status, response.statusText);
+                return false;
+            }
+
+            const result = await response.json();
+            console.log('Refresh token response:', result);
+
+            if (result.success && result.data && result.data.tokens) {
+                this.setToken(result.data.tokens.access_token);
+                this.setRefreshToken(result.data.tokens.refresh_token);
+                this.setUser(result.data.user);
+                console.log('Token refreshed successfully');
+                return true;
+            }
+
+            console.error('Token refresh failed:', result.message);
+            return false;
+
+        } catch (error) {
+            console.error('Token refresh error:', error);
+            return false;
+        }
+    },
+
+    // Handle authentication failure
+    handleAuthFailure() {
+        this.clearAuth();
+        utils.showAlert('Session expired. Please login again.', 'warning');
+        // Redirect to login page after a short delay
+        setTimeout(() => {
+            window.location.href = '/ims_frontend/';
+        }, 2000);
+    },
+
+    // Authentication endpoints
+    auth: {
+        async login(username, password) {
+            console.log('Attempting login for:', username);
+            
+            const result = await api.request('auth-login', {
+                username: username,
+                password: password
+            });
+
+            if (result.success && result.data && result.data.tokens) {
+                api.setToken(result.data.tokens.access_token);
+                api.setRefreshToken(result.data.tokens.refresh_token);
+                api.setUser(result.data.user);
+                console.log('Login successful, tokens stored');
+            }
+
+            return result;
+        },
+
+        async logout() {
+            const refreshToken = api.getRefreshToken();
+            
+            try {
+                if (refreshToken) {
+                    await api.request('auth-logout', {
+                        refresh_token: refreshToken
+                    });
+                }
+            } catch (error) {
+                console.error('Logout error:', error);
+            } finally {
+                api.clearAuth();
+                console.log('Auth data cleared');
+            }
+        },
+
+        async verifyToken() {
+            try {
+                const result = await api.request('auth-verify_token');
+                console.log('Token verification result:', result);
+                return result.success;
+            } catch (error) {
+                console.error('Token verification error:', error);
+                return false;
+            }
+        },
+
+        async changePassword(currentPassword, newPassword, confirmPassword) {
+            return await api.request('auth-change_password', {
+                current_password: currentPassword,
+                new_password: newPassword,
+                confirm_password: confirmPassword
+            });
+        }
+    },
+
+    // Dashboard endpoints
+    dashboard: {
+        async getData() {
+            return await api.request('dashboard-get_data');
+        },
+
+        async getAdminData() {
+            return await api.request('dashboard-get_admin_data');
+        }
+    },
+
+    // Component management endpoints
+    components: {
+        async list(componentType, params = {}) {
+            return await api.request(`${componentType}-list`, params);
+        },
+
+        async get(componentType, id) {
+            return await api.request(`${componentType}-get`, { id: id });
+        },
+
+        async add(componentType, data) {
+            return await api.request(`${componentType}-add`, data);
+        },
+
+        async update(componentType, id, data) {
+            return await api.request(`${componentType}-update`, { 
+                id: id,
+                ...data 
+            });
+        },
+
+        async delete(componentType, id) {
+            return await api.request(`${componentType}-delete`, { id: id });
+        },
+
+        async bulkUpdate(componentType, ids, updates) {
+            return await api.request(`${componentType}-bulk_update`, {
+                ids: ids,
+                ...updates
+            });
+        },
+
+        async getJSONData(componentType) {
+            return await api.request(`${componentType}-get_json_data`);
+        }
+    },
+
+    // Search endpoints
+    search: {
+        async global(query, params = {}) {
+            return await api.request('search-components', {
+                q: query,
+                ...params
+            });
+        },
+
+        async advanced(filters) {
+            return await api.request('search-advanced', filters);
+        }
+    },
+
+    // User management endpoints (for future use)
+    users: {
+        async list(params = {}) {
+            return await api.request('users-list', params);
+        },
+
+        async get(id) {
+            return await api.request('users-get', { id: id });
+        },
+
+        async create(data) {
+            return await api.request('users-create', data);
+        },
+
+        async update(id, data) {
+            return await api.request('users-update', { 
+                id: id,
+                ...data 
+            });
+        },
+
+        async delete(id) {
+            return await api.request('users-delete', { id: id });
+        },
+
+        async resetPassword(id, newPassword = null, sendEmail = true) {
+            return await api.request('users-reset_password', {
+                id: id,
+                new_password: newPassword,
+                send_email: sendEmail
+            });
+        },
+
+        async manageRoles(userId, roleIds, replace = true) {
+            return await api.request('users-manage_roles', {
+                user_id: userId,
+                roles: roleIds,
+                replace: replace
+            });
+        }
+    },
+
+    // Utility methods
+    utils: {
+        // Check if user is authenticated
+        isAuthenticated() {
+            return !!api.getToken();
+        },
+
+        // Check if user has specific permission
+        hasPermission(permission) {
+            const user = api.getUser();
+            if (!user || !user.permissions) {
+                return false;
+            }
+            return user.permissions.includes(permission);
+        },
+
+        // Check if user has any of the specified roles
+        hasRole(roles) {
+            const user = api.getUser();
+            if (!user || !user.roles) {
+                return false;
+            }
+            
+            const userRoles = user.roles.map(role => role.name);
+            return Array.isArray(roles) 
+                ? roles.some(role => userRoles.includes(role))
+                : userRoles.includes(roles);
+        },
+
+        // Get user's primary role
+        getPrimaryRole() {
+            const user = api.getUser();
+            return user ? user.primary_role : null;
+        },
+
+        // Format API error message
+        formatError(result) {
+            if (result.message) {
+                return result.message;
+            }
+            
+            if (result.errors && typeof result.errors === 'object') {
+                return Object.values(result.errors).flat().join(', ');
+            }
+            
+            return 'An unexpected error occurred';
+        },
+
+        // Handle API response with automatic error display
+        async handleResponse(apiCall, successMessage = null, errorTitle = 'Error') {
+            try {
+                utils.showLoading(true);
+                const result = await apiCall;
+                
+                if (result.success) {
+                    if (successMessage) {
+                        utils.showAlert(successMessage, 'success');
+                    }
+                    return result;
+                } else {
+                    const errorMessage = this.formatError(result);
+                    utils.showAlert(errorMessage, 'error', errorTitle);
+                    throw new Error(errorMessage);
+                }
+            } catch (error) {
+                if (error.message !== this.formatError({ message: error.message })) {
+                    utils.showAlert('Network error or server unavailable', 'error', 'Connection Error');
+                }
+                throw error;
+            } finally {
+                utils.showLoading(false);
+            }
+        }
+    }
+};
+
+// Initialize API authentication check on page load
+document.addEventListener('DOMContentLoaded', async () => {
+    console.log('API: Initializing authentication check...');
+    
+    // Skip auth check if on login page
+    if (window.location.pathname.includes('login')) {
+        console.log('API: Skipping auth check - on login page');
+        return;
+    }
+
+    // Check if user is authenticated
+    if (!api.utils.isAuthenticated()) {
+        console.log('API: User not authenticated, redirecting to login');
+        // Redirect to login if not authenticated
+        window.location.href = '/ims_frontend/';
+        return;
+    }
+
+    console.log('API: User appears authenticated, verifying token...');
+    
+    // Verify token is still valid
+    const isValid = await api.auth.verifyToken();
+    if (!isValid) {
+        console.log('API: Token invalid, attempting refresh...');
+        // Try to refresh token
+        const refreshed = await api.refreshToken();
+        if (!refreshed) {
+            console.log('API: Token refresh failed, redirecting to login');
+            // Redirect to login if refresh failed
+            api.handleAuthFailure();
+        } else {
+            console.log('API: Token refreshed successfully');
+        }
+    } else {
+        console.log('API: Token is valid');
+    }
+});
+
+// Export for use in other modules
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = api;
+}

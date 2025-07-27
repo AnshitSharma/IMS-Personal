@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Edit Component - BDC Inventory</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="css/forms.css">
+</head>
+<body>
+    <div class="form-container">
+        <div class="form-header">
+            <button class="back-btn" onclick="goBack()">
+                <i class="fas fa-arrow-left"></i>
+            </button>
+            <h2 id="formTitle">Edit Component</h2>
+            <button class="close-btn" onclick="closeForm()">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+
+        <form id="editComponentForm" class="component-form">
+            <!-- Current Component Info -->
+            <div id="currentComponentSection" class="form-section" style="display: none;">
+                <h3 class="section-title">
+                    <i class="fas fa-info-circle"></i>
+                    Current Component Information
+                </h3>
+                <div id="currentComponentInfo" class="spec-preview">
+                    <!-- Will be populated by JavaScript -->
+                </div>
+            </div>
+
+            <!-- Component Identification (Read-only in edit mode) -->
+            <div id="identificationSection" class="form-section" style="display: none;">
+                <h3 class="section-title">Component Identification</h3>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Component UUID</label>
+                        <input type="text" id="componentUUID" class="form-input" readonly>
+                        <small class="form-help">UUID cannot be changed after creation</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Serial Number</label>
+                        <input type="text" id="serialNumber" class="form-input" readonly>
+                        <small class="form-help">Serial number cannot be changed after creation</small>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Status and Assignment -->
+            <div id="statusSection" class="form-section" style="display: none;">
+                <h3 class="section-title">Status & Assignment</h3>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label required">Status</label>
+                        <select id="status" class="form-select" required>
+                            <option value="">Select Status</option>
+                            <option value="1">Available</option>
+                            <option value="2">In Use</option>
+                            <option value="0">Failed</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" id="serverUUIDLabel">Server UUID</label>
+                        <input type="text" id="serverUUID" class="form-input" 
+                               placeholder="Enter if assigned to a server">
+                        <small class="form-help">Required when status is "In Use"</small>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Location Information -->
+            <div id="locationSection" class="form-section" style="display: none;">
+                <h3 class="section-title">Location Information</h3>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Location</label>
+                        <input type="text" id="location" class="form-input" 
+                               placeholder="e.g., Data Center A, Warehouse East">
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Rack Position</label>
+                        <input type="text" id="rackPosition" class="form-input" 
+                               placeholder="e.g., Rack B4, Shelf A2">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Component-specific Fields -->
+            <div id="componentSpecificSection" class="form-section" style="display: none;">
+                <h3 class="section-title" id="specificSectionTitle">Additional Details</h3>
+                
+                <!-- NIC Specific Fields -->
+                <div id="nicFields" style="display: none;">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">MAC Address</label>
+                            <input type="text" id="macAddress" class="form-input" 
+                                   placeholder="00:1A:2B:3C:4D:5F">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label class="form-label">IP Address</label>
+                            <input type="text" id="ipAddress" class="form-input" 
+                                   placeholder="192.168.1.100">
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Network Name</label>
+                        <input type="text" id="networkName" class="form-input" 
+                               placeholder="Production-Network">
+                    </div>
+                </div>
+
+                <!-- Storage Specific Fields -->
+                <div id="storageFields" style="display: none;">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">Capacity</label>
+                            <input type="text" id="capacity" class="form-input" 
+                                   placeholder="e.g., 1TB, 500GB">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label class="form-label">Type</label>
+                            <select id="storageType" class="form-select">
+                                <option value="">Select Type</option>
+                                <option value="HDD">HDD</option>
+                                <option value="SSD">SSD</option>
+                                <option value="NVMe">NVMe</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Interface</label>
+                        <select id="interface" class="form-select">
+                            <option value="">Select Interface</option>
+                            <option value="SATA">SATA</option>
+                            <option value="SAS">SAS</option>
+                            <option value="NVMe">NVMe</option>
+                            <option value="PCIe">PCIe</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Date Information -->
+            <div id="dateSection" class="form-section" style="display: none;">
+                <h3 class="section-title">Date Information</h3>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Purchase Date</label>
+                        <input type="date" id="purchaseDate" class="form-input">
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Installation Date</label>
+                        <input type="date" id="installationDate" class="form-input">
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Warranty End Date</label>
+                        <input type="date" id="warrantyEndDate" class="form-input">
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Flag</label>
+                        <select id="flag" class="form-select">
+                            <option value="">No Flag</option>
+                            <option value="Backup">Backup</option>
+                            <option value="Critical">Critical</option>
+                            <option value="Maintenance">Maintenance</option>
+                            <option value="Testing">Testing</option>
+                            <option value="Production">Production</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Notes -->
+            <div id="notesSection" class="form-section" style="display: none;">
+                <h3 class="section-title">Additional Notes</h3>
+                
+                <div class="form-group">
+                    <label class="form-label">Notes</label>
+                    <textarea id="notes" class="form-textarea" rows="4"
+                              placeholder="Additional notes, specifications, or remarks..."></textarea>
+                </div>
+            </div>
+
+            <!-- Form Actions -->
+            <div class="form-actions">
+                <button type="button" class="btn btn-secondary" onclick="closeForm()">
+                    Cancel
+                </button>
+                <button type="submit" class="btn btn-primary" id="submitBtn">
+                    <span class="btn-text">Update Component</span>
+                    <span class="btn-loader" style="display: none;">
+                        <i class="fas fa-spinner fa-spin"></i>
+                    </span>
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" class="loading-overlay" style="display: none;">
+        <div class="loading-content">
+            <i class="fas fa-spinner fa-spin"></i>
+            <p>Loading component data...</p>
+        </div>
+    </div>
+
+    <!-- Alert Container -->
+    <div id="alertContainer" class="alert-container"></div>
+
+    <!-- Scripts -->
+    <script src="../js/utils.js"></script>
+    <script src="../js/api.js"></script>
+    <script src="js/edit-form.js"></script>
+</body>
+</html>
