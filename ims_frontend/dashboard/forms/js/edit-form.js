@@ -1,5 +1,5 @@
 /**
- * Edit Component Form JavaScript
+ * Edit Component Form JavaScript - Basic Edit Only (No JSON Specifications)
  * forms/js/edit-form.js
  */
 
@@ -8,7 +8,6 @@ class EditComponentForm {
         this.componentType = null;
         this.componentId = null;
         this.currentComponent = null;
-        this.jsonData = {};
         
         this.init();
     }
@@ -21,29 +20,35 @@ class EditComponentForm {
         this.componentType = urlParams.get('type');
         this.componentId = urlParams.get('id');
         
+        console.log('URL Parameters:', { componentType: this.componentType, componentId: this.componentId });
+        
         if (!this.componentType || !this.componentId) {
-            this.showAlert('Invalid component parameters', 'error');
-            this.goBack();
+            this.showAlert('Invalid component parameters. Missing type or ID.', 'error');
+            setTimeout(() => this.goBack(), 2000);
             return;
         }
 
+        // Set form title
         document.getElementById('formTitle').textContent = `Edit ${this.componentType.toUpperCase()} Component`;
         
+        // Show component type info
+        const componentTypeInfo = document.getElementById('componentTypeInfo');
+        if (componentTypeInfo) {
+            componentTypeInfo.textContent = this.componentType.toUpperCase();
+        }
+        
         try {
-            // Load component data
-            await this.loadComponentData();
-            
-            // Load JSON data for specifications
-            await this.loadJSONData();
-            
-            // Setup form
+            // Setup form and event listeners first
             this.setupForm();
             this.setupEventListeners();
             this.showFormSections();
             
+            // Then load component data
+            await this.loadComponentData();
+            
         } catch (error) {
             console.error('Error initializing edit form:', error);
-            this.showAlert('Failed to load component data', 'error');
+            this.showAlert(`Failed to load component data: ${error.message}`, 'error');
         }
         
         console.log('Edit Component Form initialized');
@@ -53,262 +58,193 @@ class EditComponentForm {
         try {
             this.showLoading(true, 'Loading component data...');
             
-            const result = await api.components.get(this.componentType, this.componentId);
+            // Make API call to get component data
+            const response = await fetch(`https://shubham.staging.cloudmate.in/bdc_ims/api/api.php?action=${this.componentType}-get&id=${this.componentId}`, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('bdc_token')}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const result = await response.json();
+            console.log('API Response:', result);
             
-            if (result.success && result.data.component) {
-                this.currentComponent = result.data.component;
-                this.populateForm();
-                this.displayCurrentComponentInfo();
+            // Handle different response structures
+            if (result.success === 1 || result.status === 1 || result.success === true) {
+                // Try different possible data locations
+                this.currentComponent = result.data?.component || result.data || result.component || result;
+                console.log('Extracted component data:', this.currentComponent);
+                
+                if (this.currentComponent && typeof this.currentComponent === 'object') {
+                    this.populateForm();
+                } else {
+                    throw new Error('Invalid component data structure');
+                }
             } else {
-                throw new Error('Component not found');
+                throw new Error(result.message || result.error || 'Component not found');
             }
             
         } catch (error) {
             console.error('Error loading component:', error);
-            throw error;
+            // Try alternative API call format
+            try {
+                await this.loadComponentDataAlternative();
+            } catch (altError) {
+                console.error('Alternative API call also failed:', altError);
+                throw new Error(`Failed to load component data: ${error.message}`);
+            }
         } finally {
             this.showLoading(false);
         }
     }
 
-    async loadJSONData() {
-        const jsonPaths = {
-            'cpu': {
-                'level1': '../../../ims_frontend/All JSON/cpu jsons/Cpu base level 1.json',
-                'level2': '../../../ims_frontend/All JSON/cpu jsons/Cpu family level 2.json',
-                'level3': '../../../ims_frontend/All JSON/cpu jsons/Cpu details level 3.json'
+    async loadComponentDataAlternative() {
+        // Try POST method as alternative
+        const response = await fetch('https://shubham.staging.cloudmate.in/bdc_ims/api/api.php', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'Authorization': `Bearer ${localStorage.getItem('bdc_token')}`
             },
-            'motherboard': {
-                'level1': '../../../ims_frontend/All JSON/motherboard jsons/motherboard level 1.json',
-                'level3': '../../../ims_frontend/All JSON/motherboard jsons/motherboard level 3.json'
-            },
-            'ram': {
-                'level3': '../../../ims_frontend/All JSON/Ram JSON/ram_detail.json'
-            },
-            'storage': {
-                'level3': '../../../ims_frontend/All JSON/storage jsons/storagedetail.json'
-            },
-            'nic': {
-                'level3': '../../../ims_frontend/All JSON/nic json/nic_details.json'
-            },
-            'caddy': {
-                'level3': '../../../ims_frontend/All JSON/caddy json/caddy_details.json'
-            }
-        };
+            body: new URLSearchParams({
+                action: `${this.componentType}-get`,
+                id: this.componentId
+            })
+        });
 
-        this.jsonData = {};
-        const paths = jsonPaths[this.componentType];
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
 
-        if (paths) {
-            for (const [level, path] of Object.entries(paths)) {
-                try {
-                    const response = await fetch(path);
-                    if (response.ok) {
-                        this.jsonData[level] = await response.json();
-                    }
-                } catch (error) {
-                    console.warn(`Error loading ${level} data:`, error);
-                }
+        const result = await response.json();
+        console.log('Alternative API Response:', result);
+        
+        if (result.success === 1 || result.status === 1 || result.success === true) {
+            this.currentComponent = result.data?.component || result.data || result.component || result;
+            if (this.currentComponent && typeof this.currentComponent === 'object') {
+                this.populateForm();
+            } else {
+                throw new Error('Invalid component data structure from alternative call');
             }
+        } else {
+            throw new Error(result.message || result.error || 'Component not found in alternative call');
         }
     }
 
     populateForm() {
-        const component = this.currentComponent;
-        
-        // Basic identification (read-only)
-        document.getElementById('componentUUID').value = component.UUID || '';
-        document.getElementById('serialNumber').value = component.SerialNumber || '';
-        
-        // Status and assignment
-        document.getElementById('status').value = component.Status || '';
-        document.getElementById('serverUUID').value = component.ServerUUID || '';
-        
-        // Location
-        document.getElementById('location').value = component.Location || '';
-        document.getElementById('rackPosition').value = component.RackPosition || '';
-        
-        // Dates
-        document.getElementById('purchaseDate').value = component.PurchaseDate || '';
-        document.getElementById('installationDate').value = component.InstallationDate || '';
-        document.getElementById('warrantyEndDate').value = component.WarrantyEndDate || '';
-        
-        // Flag and notes
-        document.getElementById('flag').value = component.Flag || '';
-        document.getElementById('notes').value = component.Notes || '';
-        
-        // Component-specific fields
-        if (this.componentType === 'nic') {
-            document.getElementById('macAddress').value = component.MacAddress || '';
-            document.getElementById('ipAddress').value = component.IPAddress || '';
-            document.getElementById('networkName').value = component.NetworkName || '';
-        } else if (this.componentType === 'storage') {
-            document.getElementById('capacity').value = component.Capacity || '';
-            document.getElementById('storageType').value = component.Type || '';
-            document.getElementById('interface').value = component.Interface || '';
-        }
-    }
-
-    displayCurrentComponentInfo() {
-        const component = this.currentComponent;
-        const infoContainer = document.getElementById('currentComponentInfo');
-        
-        // Find component details from JSON
-        const jsonDetails = this.findComponentInJSON(component.UUID);
-        
-        let infoHTML = `
-            <h4><i class="fas fa-microchip"></i> ${component.SerialNumber}</h4>
-            <div class="spec-grid">
-                <div class="spec-item">
-                    <span class="spec-label">Status</span>
-                    <span class="spec-value">${this.getStatusText(component.Status)}</span>
-                </div>
-                <div class="spec-item">
-                    <span class="spec-label">Location</span>
-                    <span class="spec-value">${component.Location || 'Not specified'}</span>
-                </div>
-        `;
-
-        if (component.ServerUUID) {
-            infoHTML += `
-                <div class="spec-item">
-                    <span class="spec-label">Server UUID</span>
-                    <span class="spec-value" style="font-family: monospace; font-size: 11px;">${component.ServerUUID}</span>
-                </div>
-            `;
+        if (!this.currentComponent) {
+            console.error('No component data to populate');
+            return;
         }
 
-        if (jsonDetails) {
-            infoHTML += `
-                <div class="spec-item">
-                    <span class="spec-label">Brand</span>
-                    <span class="spec-value">${jsonDetails.brand}</span>
-                </div>
-                <div class="spec-item">
-                    <span class="spec-label">Model</span>
-                    <span class="spec-value">${jsonDetails.modelName}</span>
-                </div>
-            `;
+        console.log('Populating form with data:', this.currentComponent);
 
-            if (jsonDetails.series) {
-                infoHTML += `
-                    <div class="spec-item">
-                        <span class="spec-label">Series</span>
-                        <span class="spec-value">${jsonDetails.series}</span>
-                    </div>
-                `;
+        // Field mapping - handle different possible field names from API
+        const fieldMappings = {
+            // Component UUID
+            componentuuid: ['UUID', 'uuid', 'ComponentUUID', 'component_uuid'],
+            // Serial Number  
+            serialnumber: ['SerialNumber', 'serial_number', 'serialNumber', 'Serial'],
+            // Status
+            status: ['Status', 'status', 'ComponentStatus'],
+            // Server UUID
+            serveruuid: ['ServerUUID', 'server_uuid', 'serverUUID', 'ServerID'],
+            // Location fields
+            location: ['Location', 'location', 'ComponentLocation'],
+            rackposition: ['RackPosition', 'rack_position', 'rackPosition', 'Position'],
+            // Date fields
+            purchasedate: ['PurchaseDate', 'purchase_date', 'purchaseDate', 'DatePurchased'],
+            installationdate: ['InstallationDate', 'installation_date', 'installationDate', 'DateInstalled'],
+            warrantyenddate: ['WarrantyEndDate', 'warranty_end_date', 'warrantyEndDate', 'WarrantyEnd'],
+            // Flag and Notes
+            flag: ['Flag', 'flag', 'ComponentFlag', 'Status_Flag'],
+            notes: ['Notes', 'notes', 'ComponentNotes', 'Description', 'Comments']
+        };
+
+        // Populate each form field
+        Object.keys(fieldMappings).forEach(elementId => {
+            const element = document.getElementById(elementId);
+            if (!element) {
+                console.warn(`Form element with ID '${elementId}' not found`);
+                return;
             }
-        }
 
-        infoHTML += '</div>';
-        infoContainer.innerHTML = infoHTML;
-        
-        document.getElementById('currentComponentSection').style.display = 'block';
-    }
-
-    findComponentInJSON(uuid) {
-        if (!uuid || !this.jsonData.level3) {
-            return null;
-        }
-
-        for (const brandData of this.jsonData.level3) {
-            if (brandData.models && Array.isArray(brandData.models)) {
-                for (const model of brandData.models) {
-                    const modelUUID = model.UUID || model.uuid || model.inventory?.UUID || '';
-                    if (modelUUID === uuid) {
-                        return {
-                            brand: brandData.brand || brandData.manufacturer || '',
-                            series: brandData.series || model.series || '',
-                            model: model,
-                            modelName: model.model || model.name || model.part_number || ''
-                        };
-                    }
+            // Try each possible field name until we find data
+            let value = '';
+            const possibleFields = fieldMappings[elementId];
+            
+            for (const fieldName of possibleFields) {
+                if (this.currentComponent[fieldName] !== undefined && this.currentComponent[fieldName] !== null) {
+                    value = this.currentComponent[fieldName];
+                    console.log(`Found data for ${elementId}: ${fieldName} = ${value}`);
+                    break;
                 }
             }
+
+            // Handle different field types
+            if (element.type === 'date' && value) {
+                // Handle date formatting - convert from various formats to YYYY-MM-DD
+                try {
+                    const date = new Date(value);
+                    if (!isNaN(date.getTime())) {
+                        element.value = date.toISOString().split('T')[0];
+                    } else {
+                        element.value = '';
+                    }
+                } catch (e) {
+                    console.warn(`Invalid date format for ${elementId}:`, value);
+                    element.value = '';
+                }
+            } else {
+                // For text, textarea, and select elements
+                element.value = value || '';
+            }
+
+            console.log(`Set ${elementId} = ${element.value}`);
+        });
+
+        // Handle status change for server UUID requirement
+        const statusValue = document.getElementById('status').value;
+        if (statusValue) {
+            this.handleStatusChange(statusValue);
         }
-        return null;
-    }
 
-    getStatusText(status) {
-        const statusMap = {
-            0: 'Failed',
-            1: 'Available', 
-            2: 'In Use'
-        };
-        return statusMap[status] || 'Unknown';
-    }
+        // Show component type and ID info
+        const componentTypeInfo = document.getElementById('componentTypeInfo');
+        const componentIdInfo = document.getElementById('componentIdInfo');
+        if (componentTypeInfo) {
+            componentTypeInfo.textContent = this.componentType.toUpperCase();
+        }
+        if (componentIdInfo) {
+            componentIdInfo.textContent = this.componentId;
+        }
 
-    setupForm() {
-        // Setup component-specific fields
-        this.setupComponentSpecificFields();
+        console.log('Form population completed');
         
-        // Setup validation
-        this.setupValidation();
+        // Debug: Show what we populated
+        this.debugFormData();
     }
 
-    setupComponentSpecificFields() {
-        // Hide all component-specific sections first
-        document.getElementById('nicFields').style.display = 'none';
-        document.getElementById('storageFields').style.display = 'none';
+    debugFormData() {
+        console.log('=== FORM DATA DEBUG ===');
+        const formElements = [
+            'componentuuid', 'serialnumber', 'status', 'serveruuid',
+            'location', 'rackposition', 'purchasedate', 'installationdate', 
+            'warrantyenddate', 'flag', 'notes'
+        ];
 
-        const componentSpecificSection = document.getElementById('componentSpecificSection');
-        const specificSectionTitle = document.getElementById('specificSectionTitle');
-
-        if (this.componentType === 'nic') {
-            specificSectionTitle.textContent = 'Network Interface Details';
-            document.getElementById('nicFields').style.display = 'block';
-            componentSpecificSection.style.display = 'block';
-            this.setupNICValidation();
-        } else if (this.componentType === 'storage') {
-            specificSectionTitle.textContent = 'Storage Details';
-            document.getElementById('storageFields').style.display = 'block';
-            componentSpecificSection.style.display = 'block';
-        } else {
-            componentSpecificSection.style.display = 'none';
-        }
-    }
-
-    setupNICValidation() {
-        const macAddressInput = document.getElementById('macAddress');
-        const ipAddressInput = document.getElementById('ipAddress');
-
-        if (macAddressInput) {
-            macAddressInput.addEventListener('input', (e) => {
-                this.validateMacAddress(e.target);
-            });
-        }
-
-        if (ipAddressInput) {
-            ipAddressInput.addEventListener('input', (e) => {
-                this.validateIPAddress(e.target);
-            });
-        }
-    }
-
-    validateMacAddress(input) {
-        const value = input.value;
-        const macPattern = /^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$/;
-        
-        if (value && !macPattern.test(value)) {
-            input.classList.add('error');
-            this.showFieldError(input, 'Invalid MAC address format (e.g., 00:1A:2B:3C:4D:5F)');
-        } else {
-            input.classList.remove('error');
-            this.hideFieldError(input);
-        }
-    }
-
-    validateIPAddress(input) {
-        const value = input.value;
-        const ipPattern = /^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
-        
-        if (value && !ipPattern.test(value)) {
-            input.classList.add('error');
-            this.showFieldError(input, 'Invalid IP address format');
-        } else {
-            input.classList.remove('error');
-            this.hideFieldError(input);
-        }
+        formElements.forEach(elementId => {
+            const element = document.getElementById(elementId);
+            if (element) {
+                console.log(`${elementId}: "${element.value}"`);
+            }
+        });
+        console.log('=== END DEBUG ===');
     }
 
     setupEventListeners() {
@@ -323,252 +259,265 @@ class EditComponentForm {
             this.handleFormSubmit();
         });
 
-        // Validation on input
+        // Cancel button
+        const cancelBtn = document.getElementById('cancelBtn');
+        if (cancelBtn) {
+            cancelBtn.addEventListener('click', () => {
+                this.goBack();
+            });
+        }
+
+        // Validation setup
         this.setupValidation();
     }
 
-    handleStatusChange(status) {
-        const serverUUIDInput = document.getElementById('serverUUID');
-        const serverUUIDLabel = document.getElementById('serverUUIDLabel');
-        
-        if (status === '2') { // In Use
-            serverUUIDInput.required = true;
-            serverUUIDLabel.classList.add('required');
-        } else {
-            serverUUIDInput.required = false;
-            serverUUIDLabel.classList.remove('required');
-        }
-    }
-
-    setupValidation() {
-        const fields = ['status'];
-        
-        fields.forEach(fieldId => {
-            const field = document.getElementById(fieldId);
-            if (field) {
-                field.addEventListener('blur', () => this.validateField(field));
-                field.addEventListener('input', () => this.clearFieldError(field));
-            }
-        });
-    }
-
-    validateField(field) {
-        const value = field.value.trim();
-        const isRequired = field.hasAttribute('required') || field.classList.contains('required');
-
-        if (isRequired && !value) {
-            this.showFieldError(field, 'This field is required');
-            return false;
+    setupForm() {
+        // Hide Component Specification section - not needed for edit
+        const specSection = document.getElementById('specificationSection');
+        if (specSection) {
+            specSection.style.display = 'none';
         }
 
-        this.hideFieldError(field);
-        return true;
-    }
-
-    showFieldError(field, message) {
-        field.classList.add('error');
-        
-        this.hideFieldError(field);
-        
-        const errorDiv = document.createElement('div');
-        errorDiv.className = 'form-error';
-        errorDiv.textContent = message;
-        field.parentNode.appendChild(errorDiv);
-    }
-
-    hideFieldError(field) {
-        const errorDiv = field.parentNode.querySelector('.form-error');
-        if (errorDiv) {
-            errorDiv.remove();
+        // Show component type info (readonly)
+        const componentTypeInfo = document.getElementById('componentTypeInfo');
+        if (componentTypeInfo) {
+            componentTypeInfo.textContent = this.componentType.toUpperCase();
         }
-    }
-
-    clearFieldError(field) {
-        field.classList.remove('error');
-        this.hideFieldError(field);
     }
 
     showFormSections() {
+        // Show only the sections needed for editing
         const sections = [
             'identificationSection',
-            'statusSection',
+            'statusSection', 
             'locationSection',
-            'dateSection',
+            'datesSection',
+            'flagSection',
             'notesSection'
         ];
 
         sections.forEach(sectionId => {
-            document.getElementById(sectionId).style.display = 'block';
+            const section = document.getElementById(sectionId);
+            if (section) {
+                section.style.display = 'block';
+            }
         });
     }
 
-    async handleFormSubmit() {
-        if (!this.validateForm()) {
-            return;
-        }
-
-        const formData = this.collectFormData();
+    handleStatusChange(status) {
+        const serverUUIDGroup = document.getElementById('serveruuid').closest('.form-group');
+        const serverUUIDLabel = document.querySelector('label[for="serveruuid"]');
         
+        if (status === '2') { // In Use
+            if (serverUUIDGroup) serverUUIDGroup.style.display = 'block';
+            if (serverUUIDLabel) serverUUIDLabel.textContent = 'Server UUID (Required)';
+            document.getElementById('serveruuid').required = true;
+        } else {
+            if (serverUUIDLabel) serverUUIDLabel.textContent = 'Server UUID';
+            document.getElementById('serveruuid').required = false;
+        }
+    }
+
+    async handleFormSubmit() {
         try {
-            this.setButtonLoading(true);
-            
-            const result = await api.components.update(this.componentType, this.componentId, formData);
-            
-            if (result.success) {
+            const submitBtn = document.getElementById('submitBtn');
+            const btnText = submitBtn.querySelector('.btn-text');
+            const btnLoader = submitBtn.querySelector('.btn-loader');
+
+            // Show loading state
+            submitBtn.disabled = true;
+            if (btnText) btnText.style.display = 'none';
+            if (btnLoader) btnLoader.style.display = 'inline-block';
+
+            // Validate required fields
+            if (!this.validateForm()) {
+                throw new Error('Please fill in all required fields');
+            }
+
+            // Collect form data
+            const formData = this.collectFormData();
+
+            console.log('Submitting edit form data:', formData);
+
+            // Submit to API
+            const result = await this.submitComponent(formData);
+
+            console.log('API response:', result);
+
+            if (result.success || result.status === 1) {
                 this.showAlert('Component updated successfully!', 'success');
                 
-                // Redirect back to dashboard after short delay
+                // Go back after successful update
                 setTimeout(() => {
                     this.goBack();
                 }, 1500);
             } else {
                 throw new Error(result.message || 'Failed to update component');
             }
-            
+
         } catch (error) {
-            console.error('Error updating component:', error);
-            this.showAlert(error.message || 'Failed to update component', 'error');
+            console.error('Error submitting form:', error);
+            this.showAlert(error.message, 'error');
         } finally {
-            this.setButtonLoading(false);
+            // Reset button state
+            const submitBtn = document.getElementById('submitBtn');
+            const btnText = submitBtn.querySelector('.btn-text');
+            const btnLoader = submitBtn.querySelector('.btn-loader');
+            
+            submitBtn.disabled = false;
+            if (btnText) btnText.style.display = 'inline-block';
+            if (btnLoader) btnLoader.style.display = 'none';
         }
     }
 
     validateForm() {
-        let isValid = true;
+        const requiredFields = [
+            'serialnumber',
+            'status'
+        ];
 
-        // Validate status
-        const statusField = document.getElementById('status');
-        if (!this.validateField(statusField)) {
-            isValid = false;
-        }
-
-        // Validate server UUID for in-use status
-        const status = document.getElementById('status').value;
-        const serverUUID = document.getElementById('serverUUID').value.trim();
-        if (status === '2' && !serverUUID) {
-            const serverUUIDField = document.getElementById('serverUUID');
-            this.showFieldError(serverUUIDField, 'Server UUID is required when status is "In Use"');
-            isValid = false;
-        }
-
-        // Validate MAC address for NIC
-        if (this.componentType === 'nic') {
-            const macAddress = document.getElementById('macAddress').value.trim();
-            if (macAddress && !this.isValidMacAddress(macAddress)) {
-                isValid = false;
+        for (const fieldId of requiredFields) {
+            const field = document.getElementById(fieldId);
+            if (!field || !field.value.trim()) {
+                field?.focus();
+                const fieldLabel = this.getFieldLabel(fieldId);
+                this.showAlert(`Please fill in the ${fieldLabel} field`, 'warning');
+                return false;
             }
         }
 
-        return isValid;
+        // Additional validation for status = "In Use"
+        const status = document.getElementById('status').value;
+        const serverUUID = document.getElementById('serveruuid').value;
+        
+        if (status === '2' && !serverUUID.trim()) {
+            document.getElementById('serveruuid').focus();
+            this.showAlert('Server UUID is required when status is "In Use"', 'warning');
+            return false;
+        }
+
+        return true;
     }
 
-    isValidMacAddress(mac) {
-        const macPattern = /^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$/;
-        return macPattern.test(mac);
+    getFieldLabel(fieldId) {
+        const labelMap = {
+            'serialnumber': 'Serial Number',
+            'status': 'Status',
+            'serveruuid': 'Server UUID',
+            'location': 'Location',
+            'rackposition': 'Rack Position',
+            'purchasedate': 'Purchase Date',
+            'installationdate': 'Installation Date',
+            'warrantyenddate': 'Warranty End Date',
+            'flag': 'Flag',
+            'notes': 'Notes'
+        };
+        
+        return labelMap[fieldId] || fieldId.replace(/([A-Z])/g, ' $1').toLowerCase();
     }
 
     collectFormData() {
-        const formData = {
-            Status: parseInt(document.getElementById('status').value),
-            ServerUUID: document.getElementById('serverUUID').value.trim(),
-            Location: document.getElementById('location').value.trim(),
-            RackPosition: document.getElementById('rackPosition').value.trim(),
-            PurchaseDate: document.getElementById('purchaseDate').value,
-            InstallationDate: document.getElementById('installationDate').value,
-            WarrantyEndDate: document.getElementById('warrantyEndDate').value,
-            Flag: document.getElementById('flag').value,
-            Notes: document.getElementById('notes').value.trim()
+        return {
+            action: `${this.componentType}-update`,
+            id: this.componentId,
+            UUID: document.getElementById('componentuuid').value, // UUID should not be changed
+            SerialNumber: document.getElementById('serialnumber').value,
+            Status: document.getElementById('status').value,
+            ServerUUID: document.getElementById('serveruuid').value || null,
+            Location: document.getElementById('location').value || null,
+            RackPosition: document.getElementById('rackposition').value || null,
+            PurchaseDate: document.getElementById('purchasedate').value || null,
+            InstallationDate: document.getElementById('installationdate').value || null,
+            WarrantyEndDate: document.getElementById('warrantyenddate').value || null,
+            Flag: document.getElementById('flag').value || null,
+            Notes: document.getElementById('notes').value || null
         };
-
-        // Add component-specific fields
-        if (this.componentType === 'nic') {
-            formData.MacAddress = document.getElementById('macAddress').value.trim();
-            formData.IPAddress = document.getElementById('ipAddress').value.trim();
-            formData.NetworkName = document.getElementById('networkName').value.trim();
-        } else if (this.componentType === 'storage') {
-            formData.Capacity = document.getElementById('capacity').value.trim();
-            formData.Type = document.getElementById('storageType').value;
-            formData.Interface = document.getElementById('interface').value;
-        }
-
-        // Remove empty values
-        Object.keys(formData).forEach(key => {
-            if (formData[key] === '' || formData[key] === null || formData[key] === undefined) {
-                delete formData[key];
-            }
-        });
-
-        return formData;
     }
 
-    setButtonLoading(loading) {
-        const submitBtn = document.getElementById('submitBtn');
-        const btnText = submitBtn.querySelector('.btn-text');
-        const btnLoader = submitBtn.querySelector('.btn-loader');
+    async submitComponent(formData) {
+        const response = await fetch('https://shubham.staging.cloudmate.in/bdc_ims/api/api.php', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'Authorization': `Bearer ${localStorage.getItem('bdc_token')}`
+            },
+            body: new URLSearchParams(formData)
+        });
 
-        if (loading) {
-            submitBtn.disabled = true;
-            btnText.style.display = 'none';
-            btnLoader.style.display = 'flex';
-        } else {
-            submitBtn.disabled = false;
-            btnText.style.display = 'block';
-            btnLoader.style.display = 'none';
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        return await response.json();
+    }
+
+    setupValidation() {
+        // Basic form validation
+        const form = document.getElementById('editComponentForm');
+        if (form) {
+            form.addEventListener('input', (e) => {
+                // Reset any previous validation styling
+                if (e.target.style.borderColor) {
+                    e.target.style.borderColor = '';
+                }
+            });
         }
     }
 
     showLoading(show, message = 'Loading...') {
         const overlay = document.getElementById('loadingOverlay');
-        const loadingText = overlay.querySelector('p');
-        
-        if (show) {
-            loadingText.textContent = message;
-            overlay.style.display = 'flex';
-        } else {
-            overlay.style.display = 'none';
+        if (overlay) {
+            if (show) {
+                const messageElement = overlay.querySelector('p');
+                if (messageElement) messageElement.textContent = message;
+                overlay.style.display = 'flex';
+            } else {
+                overlay.style.display = 'none';
+            }
         }
     }
 
     showAlert(message, type = 'info') {
-        if (window.utils && window.utils.showAlert) {
-            window.utils.showAlert(message, type);
-        } else {
+        const container = document.getElementById('alertContainer');
+        if (!container) {
             alert(message);
+            return;
         }
+
+        const alert = document.createElement('div');
+        alert.className = `alert alert-${type}`;
+        alert.innerHTML = `
+            <span>${message}</span>
+            <button type="button" class="alert-close" onclick="this.parentElement.remove()">×</button>
+        `;
+
+        container.appendChild(alert);
+
+        // Auto-remove after 5 seconds
+        setTimeout(() => {
+            if (alert.parentElement) {
+                alert.remove();
+            }
+        }, 5000);
     }
 
     goBack() {
-        if (window.history.length > 1) {
-            window.history.back();
-        } else {
-            window.location.href = '../index.html';
-        }
-    }
-
-    closeForm() {
-        this.goBack();
+        window.history.back();
     }
 }
 
-// Global functions for button handlers
+// Initialize when DOM is loaded
+document.addEventListener('DOMContentLoaded', () => {
+    new EditComponentForm();
+});
+
+// Global functions for navigation
 function goBack() {
-    if (window.editForm) {
-        window.editForm.goBack();
-    }
+    window.history.back();
 }
 
 function closeForm() {
-    if (window.editForm) {
-        window.editForm.closeForm();
+    if (confirm('Are you sure you want to close this form? Any unsaved changes will be lost.')) {
+        window.history.back();
     }
-}
-
-// Initialize form when DOM is ready
-document.addEventListener('DOMContentLoaded', () => {
-    window.editForm = new EditComponentForm();
-});
-
-// Export for use in other modules
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = EditComponentForm;
 }

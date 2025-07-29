@@ -530,8 +530,202 @@ class Dashboard {
     }
 
     async showEditForm(componentType, componentId) {
-        // Navigate to the edit form page with parameters
-        window.location.href = `forms/edit-component.html?type=${componentType}&id=${componentId}`;
+        try {
+            utils.showLoading(true, 'Loading component data...');
+            
+            // Get component data
+            const result = await api.components.get(componentType, componentId);
+            
+            if (!result.success) {
+                utils.showAlert('Failed to load component data', 'error');
+                return;
+            }
+
+            // The API returns an array of components, find the one with matching ID
+            let component = null;
+            if (result.data.components && Array.isArray(result.data.components)) {
+                component = result.data.components.find(c => c.ID == componentId);
+            } else if (result.data.component) {
+                // In case the API returns a single component
+                component = result.data.component;
+            }
+
+            if (!component) {
+                utils.showAlert('Component not found', 'error');
+                return;
+            }
+            
+            // Build the edit form HTML based on component type
+            let formFields = this.getEditFormFields(componentType, component);
+            
+            const modalContent = `
+                <form id="editComponentForm" style="max-width: 600px;">
+                    <input type="hidden" id="editComponentId" value="${component.ID}">
+                    <input type="hidden" id="editComponentType" value="${componentType}">
+                    
+                    ${formFields}
+                    
+                    <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 24px;">
+                        <button type="button" class="btn btn-secondary" onclick="dashboard.closeModal()">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Update ${componentType.toUpperCase()}</button>
+                    </div>
+                </form>
+            `;
+
+            this.showModal(`Edit ${componentType.toUpperCase()} - ${component.SerialNumber}`, modalContent);
+
+            // Add form submission handler
+            document.getElementById('editComponentForm').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                await this.handleEditFormSubmit();
+            });
+
+        } catch (error) {
+            console.error('Error loading edit form:', error);
+            utils.showAlert('Failed to load edit form', 'error');
+        } finally {
+            utils.showLoading(false);
+        }
+    }
+
+    getEditFormFields(componentType, component) {
+        // Ensure component exists and has required properties
+        if (!component) {
+            return '<p>Error: Component data not found</p>';
+        }
+
+        // Common fields for all components
+        let commonFields = `
+            <div class="form-group">
+                <label class="form-label">Serial Number</label>
+                <input type="text" class="form-input" value="${utils.escapeHtml(component.SerialNumber || '')}" readonly style="background-color: #f5f5f5;">
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">Status</label>
+                <select id="editStatus" class="form-select">
+                    <option value="1" ${component.Status == 1 ? 'selected' : ''}>Available</option>
+                    <option value="2" ${component.Status == 2 ? 'selected' : ''}>In Use</option>
+                    <option value="0" ${component.Status == 0 ? 'selected' : ''}>Failed</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">Location</label>
+                <input type="text" id="editLocation" class="form-input" value="${utils.escapeHtml(component.Location || '')}" placeholder="Enter location">
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">Rack Position</label>
+                <input type="text" id="editRackPosition" class="form-input" value="${utils.escapeHtml(component.RackPosition || '')}" placeholder="Enter rack position">
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">Server UUID</label>
+                <input type="text" id="editServerUUID" class="form-input" value="${utils.escapeHtml(component.ServerUUID || '')}" placeholder="Enter server UUID">
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">Installation Date</label>
+                <input type="date" id="editInstallationDate" class="form-input" value="${component.InstallationDate ? component.InstallationDate.split(' ')[0] : ''}">
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">Flag</label>
+                <select id="editFlag" class="form-select">
+                    <option value="">No Flag</option>
+                    <option value="Backup" ${component.Flag === 'Backup' ? 'selected' : ''}>Backup</option>
+                    <option value="Critical" ${component.Flag === 'Critical' ? 'selected' : ''}>Critical</option>
+                    <option value="Maintenance" ${component.Flag === 'Maintenance' ? 'selected' : ''}>Maintenance</option>
+                    <option value="Testing" ${component.Flag === 'Testing' ? 'selected' : ''}>Testing</option>
+                    <option value="Production" ${component.Flag === 'Production' ? 'selected' : ''}>Production</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">Notes</label>
+                <textarea id="editNotes" class="form-input" rows="3" placeholder="Enter any notes">${utils.escapeHtml(component.Notes || '')}</textarea>
+            </div>
+        `;
+
+        // Add component-specific fields
+        if (componentType === 'nic') {
+            commonFields += `
+                <div class="form-group">
+                    <label class="form-label">MAC Address</label>
+                    <input type="text" id="editMacAddress" class="form-input" value="${utils.escapeHtml(component.MacAddress || '')}" 
+                           placeholder="00:1A:2B:3C:4D:5E" pattern="^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$">
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">IP Address</label>
+                    <input type="text" id="editIPAddress" class="form-input" value="${utils.escapeHtml(component.IPAddress || '')}" 
+                           placeholder="192.168.1.1" pattern="^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$">
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Network Name</label>
+                    <input type="text" id="editNetworkName" class="form-input" value="${utils.escapeHtml(component.NetworkName || '')}" placeholder="Enter network name">
+                </div>
+            `;
+        }
+
+        return commonFields;
+    }
+
+    async handleEditFormSubmit() {
+        const componentId = document.getElementById('editComponentId').value;
+        const componentType = document.getElementById('editComponentType').value;
+        
+        // Collect form data
+        const formData = {
+            Status: document.getElementById('editStatus').value,
+            Location: document.getElementById('editLocation').value,
+            RackPosition: document.getElementById('editRackPosition').value,
+            ServerUUID: document.getElementById('editServerUUID').value,
+            InstallationDate: document.getElementById('editInstallationDate').value,
+            Flag: document.getElementById('editFlag').value,
+            Notes: document.getElementById('editNotes').value
+        };
+
+        // Add component-specific fields
+        if (componentType === 'nic') {
+            const macAddress = document.getElementById('editMacAddress')?.value;
+            const ipAddress = document.getElementById('editIPAddress')?.value;
+            const networkName = document.getElementById('editNetworkName')?.value;
+            
+            if (macAddress) formData.MacAddress = macAddress;
+            if (ipAddress) formData.IPAddress = ipAddress;
+            if (networkName) formData.NetworkName = networkName;
+        }
+
+        // Remove empty values
+        Object.keys(formData).forEach(key => {
+            if (formData[key] === '' || formData[key] === null || formData[key] === undefined) {
+                delete formData[key];
+            }
+        });
+
+        try {
+            utils.showLoading(true, 'Updating component...');
+            
+            const result = await api.components.update(componentType, componentId, formData);
+            
+            if (result.success) {
+                utils.showAlert(`${componentType.toUpperCase()} updated successfully`, 'success');
+                this.closeModal();
+                await this.loadComponentList(componentType);
+                await this.loadDashboard(); // Refresh dashboard stats
+            } else {
+                utils.showAlert(result.message || 'Failed to update component', 'error');
+            }
+            
+        } catch (error) {
+            console.error('Error updating component:', error);
+            utils.showAlert('Failed to update component', 'error');
+        } finally {
+            utils.showLoading(false);
+        }
     }
 
     async handleDeleteComponent(componentType, componentId) {
@@ -811,7 +1005,7 @@ class Dashboard {
                 await api.auth.logout();
                 
                 // Redirect to login page
-                window.location.href = '/';
+                window.location.href = '/ims_frontend/';
                 
             } catch (error) {
                 console.error('Logout error:', error);
