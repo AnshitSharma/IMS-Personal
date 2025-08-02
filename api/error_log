@@ -1277,3 +1277,1934 @@ Stack trace:
 [27-Jul-2025 00:45:25 UTC] JWT Authentication failed: Token has expired
 [27-Jul-2025 00:45:26 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
 [27-Jul-2025 00:45:26 UTC] JWT Authentication failed: Token has expired
+[27-Jul-2025 01:06:00 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 01:06:00 UTC] Auth operation: verify_token
+[27-Jul-2025 01:06:00 UTC] JWT Authentication failed: Token has expired
+[27-Jul-2025 01:06:06 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[27-Jul-2025 01:06:06 UTC] Auth operation: login
+[27-Jul-2025 01:06:06 UTC] Login attempt - Username: 'superadmin'
+[27-Jul-2025 01:06:06 UTC] Authentication attempt for: superadmin
+[27-Jul-2025 01:06:06 UTC] User found: superadmin (ID: 38)
+[27-Jul-2025 01:06:06 UTC] Authentication successful for user: superadmin
+[27-Jul-2025 01:06:06 UTC] Login successful for user: superadmin (ID: 38)
+[27-Jul-2025 01:06:09 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 01:06:09 UTC] Auth operation: verify_token
+[27-Jul-2025 01:06:09 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 01:06:09 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 01:32:49 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 01:32:49 UTC] Auth operation: verify_token
+[27-Jul-2025 01:32:49 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 01:32:49 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 01:36:10 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 01:36:10 UTC] Auth operation: verify_token
+[27-Jul-2025 01:36:10 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 01:36:10 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 01:36:16 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 01:36:16 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 01:36:17 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 01:36:17 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 01:36:18 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 01:36:18 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 01:36:21 UTC] API called with action: roles-list (Module: roles, Operation: list)
+[27-Jul-2025 01:36:21 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 01:36:21 UTC] Invalid module requested: roles
+[27-Jul-2025 01:36:23 UTC] API called with action: users-list (Module: users, Operation: list)
+[27-Jul-2025 01:36:23 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 01:36:25 UTC] API called with action: users-list (Module: users, Operation: list)
+[27-Jul-2025 01:36:25 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 01:36:28 UTC] API called with action: caddy-list (Module: caddy, Operation: list)
+[27-Jul-2025 01:36:28 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 01:36:29 UTC] API called with action: nic-list (Module: nic, Operation: list)
+[27-Jul-2025 01:36:29 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 01:36:30 UTC] API called with action: ram-list (Module: ram, Operation: list)
+[27-Jul-2025 01:36:30 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 01:36:31 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 01:36:31 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 01:36:43 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 01:36:43 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 02:47:30 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 02:47:30 UTC] Auth operation: verify_token
+[27-Jul-2025 02:47:30 UTC] JWT Authentication failed: Token has expired
+[27-Jul-2025 02:47:43 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[27-Jul-2025 02:47:43 UTC] Auth operation: login
+[27-Jul-2025 02:47:43 UTC] Login attempt - Username: 'superadmin'
+[27-Jul-2025 02:47:43 UTC] Authentication attempt for: superadmin
+[27-Jul-2025 02:47:43 UTC] User found: superadmin (ID: 38)
+[27-Jul-2025 02:47:43 UTC] Authentication successful for user: superadmin
+[27-Jul-2025 02:47:43 UTC] Login successful for user: superadmin (ID: 38)
+[27-Jul-2025 02:49:18 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 02:49:27 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 02:49:27 UTC] JWT Authentication failed: Token has expired
+[27-Jul-2025 02:49:31 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[27-Jul-2025 02:49:31 UTC] Auth operation: login
+[27-Jul-2025 02:49:31 UTC] Login attempt - Username: 'superadmin'
+[27-Jul-2025 02:49:31 UTC] Authentication attempt for: superadmin
+[27-Jul-2025 02:49:31 UTC] User found: superadmin (ID: 38)
+[27-Jul-2025 02:49:31 UTC] Authentication successful for user: superadmin
+[27-Jul-2025 02:49:31 UTC] Login successful for user: superadmin (ID: 38)
+[27-Jul-2025 02:49:36 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 02:49:36 UTC] JWT Authentication failed: Token has expired
+[27-Jul-2025 02:50:12 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 02:50:12 UTC] Auth operation: verify_token
+[27-Jul-2025 02:50:18 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 02:50:18 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 03:02:40 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 03:02:40 UTC] Auth operation: verify_token
+[27-Jul-2025 03:02:40 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 03:02:40 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 03:02:42 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 03:02:42 UTC] Auth operation: verify_token
+[27-Jul-2025 03:02:42 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 03:02:42 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 03:02:54 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 03:02:54 UTC] Auth operation: verify_token
+[27-Jul-2025 03:02:55 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 03:02:55 UTC] Auth operation: verify_token
+[27-Jul-2025 03:02:55 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 03:02:55 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 03:03:03 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 03:03:03 UTC] Auth operation: verify_token
+[27-Jul-2025 03:03:04 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 03:03:04 UTC] Auth operation: verify_token
+[27-Jul-2025 03:03:05 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 03:03:05 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 03:03:07 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 03:03:07 UTC] Auth operation: verify_token
+[27-Jul-2025 03:03:08 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 03:03:08 UTC] Auth operation: verify_token
+[27-Jul-2025 03:03:09 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 03:03:09 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 03:03:10 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 03:03:10 UTC] Auth operation: verify_token
+[27-Jul-2025 03:03:13 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 03:03:13 UTC] Auth operation: verify_token
+[27-Jul-2025 03:03:24 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[27-Jul-2025 03:03:24 UTC] Auth operation: login
+[27-Jul-2025 03:03:24 UTC] Login attempt - Username: 'superadmin'
+[27-Jul-2025 03:03:24 UTC] Authentication attempt for: superadmin
+[27-Jul-2025 03:03:24 UTC] User found: superadmin (ID: 38)
+[27-Jul-2025 03:03:24 UTC] Authentication successful for user: superadmin
+[27-Jul-2025 03:03:24 UTC] Login successful for user: superadmin (ID: 38)
+[27-Jul-2025 03:03:26 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 03:03:26 UTC] Auth operation: verify_token
+[27-Jul-2025 03:03:27 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 03:03:27 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 03:03:38 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 03:03:38 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 03:03:41 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 03:03:41 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 03:03:43 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 03:03:43 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 03:03:44 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 03:03:44 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 03:03:46 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 03:03:46 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 03:03:48 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 03:03:48 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 03:03:50 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 03:03:50 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 03:03:53 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 03:03:53 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 03:03:57 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 03:03:58 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 03:04:26 UTC] API called with action: system-status (Module: system, Operation: status)
+[27-Jul-2025 03:04:26 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 03:04:26 UTC] Invalid module requested: system
+[27-Jul-2025 03:04:27 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 03:04:27 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 03:04:57 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 03:04:57 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 03:05:27 UTC] API called with action: system-status (Module: system, Operation: status)
+[27-Jul-2025 03:05:27 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 03:05:27 UTC] Invalid module requested: system
+[27-Jul-2025 03:05:28 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 03:05:28 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 03:05:36 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 03:05:36 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 03:34:24 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 03:34:24 UTC] Auth operation: verify_token
+[27-Jul-2025 03:34:32 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 03:34:32 UTC] Auth operation: verify_token
+[27-Jul-2025 03:34:36 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 03:34:36 UTC] Auth operation: verify_token
+[27-Jul-2025 03:35:58 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[27-Jul-2025 03:35:58 UTC] Auth operation: login
+[27-Jul-2025 03:35:58 UTC] Login attempt - Username: 'superadmin'
+[27-Jul-2025 03:35:58 UTC] Authentication attempt for: superadmin
+[27-Jul-2025 03:35:58 UTC] User found: superadmin (ID: 38)
+[27-Jul-2025 03:35:58 UTC] Authentication successful for user: superadmin
+[27-Jul-2025 03:35:58 UTC] Login successful for user: superadmin (ID: 38)
+[27-Jul-2025 03:36:51 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 03:36:51 UTC] Auth operation: verify_token
+[27-Jul-2025 03:36:58 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[27-Jul-2025 03:36:58 UTC] Auth operation: login
+[27-Jul-2025 03:36:58 UTC] Login attempt - Username: 'superadmin'
+[27-Jul-2025 03:36:58 UTC] Authentication attempt for: superadmin
+[27-Jul-2025 03:36:58 UTC] User found: superadmin (ID: 38)
+[27-Jul-2025 03:36:59 UTC] Authentication successful for user: superadmin
+[27-Jul-2025 03:36:59 UTC] Login successful for user: superadmin (ID: 38)
+[27-Jul-2025 03:39:39 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[27-Jul-2025 03:39:39 UTC] Auth operation: login
+[27-Jul-2025 03:39:39 UTC] Login attempt - Username: 'superadmin'
+[27-Jul-2025 03:39:39 UTC] Authentication attempt for: superadmin
+[27-Jul-2025 03:39:39 UTC] User found: superadmin (ID: 38)
+[27-Jul-2025 03:39:39 UTC] Authentication successful for user: superadmin
+[27-Jul-2025 03:39:39 UTC] Login successful for user: superadmin (ID: 38)
+[27-Jul-2025 03:42:38 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[27-Jul-2025 03:42:38 UTC] Auth operation: login
+[27-Jul-2025 03:42:38 UTC] Login attempt - Username: 'superadmin'
+[27-Jul-2025 03:42:38 UTC] Authentication attempt for: superadmin
+[27-Jul-2025 03:42:38 UTC] User found: superadmin (ID: 38)
+[27-Jul-2025 03:42:38 UTC] Authentication successful for user: superadmin
+[27-Jul-2025 03:42:38 UTC] Login successful for user: superadmin (ID: 38)
+[27-Jul-2025 03:48:20 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[27-Jul-2025 03:48:20 UTC] Auth operation: login
+[27-Jul-2025 03:48:20 UTC] Login attempt - Username: 'superadmin'
+[27-Jul-2025 03:48:20 UTC] Authentication attempt for: superadmin
+[27-Jul-2025 03:48:20 UTC] User found: superadmin (ID: 38)
+[27-Jul-2025 03:48:21 UTC] Authentication successful for user: superadmin
+[27-Jul-2025 03:48:21 UTC] Login successful for user: superadmin (ID: 38)
+[27-Jul-2025 03:49:14 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[27-Jul-2025 03:49:14 UTC] Auth operation: login
+[27-Jul-2025 03:49:14 UTC] Login attempt - Username: 'superadmin'
+[27-Jul-2025 03:49:14 UTC] Authentication attempt for: superadmin
+[27-Jul-2025 03:49:14 UTC] User found: superadmin (ID: 38)
+[27-Jul-2025 03:49:14 UTC] Authentication successful for user: superadmin
+[27-Jul-2025 03:49:14 UTC] Login successful for user: superadmin (ID: 38)
+[27-Jul-2025 03:50:22 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[27-Jul-2025 03:50:22 UTC] Auth operation: login
+[27-Jul-2025 03:50:22 UTC] Login attempt - Username: 'superadmin'
+[27-Jul-2025 03:50:22 UTC] Authentication attempt for: superadmin
+[27-Jul-2025 03:50:22 UTC] User found: superadmin (ID: 38)
+[27-Jul-2025 03:50:22 UTC] Authentication successful for user: superadmin
+[27-Jul-2025 03:50:22 UTC] Login successful for user: superadmin (ID: 38)
+[27-Jul-2025 03:57:12 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[27-Jul-2025 03:57:12 UTC] Auth operation: login
+[27-Jul-2025 03:57:12 UTC] Login attempt - Username: 'superadmin'
+[27-Jul-2025 03:57:12 UTC] Authentication attempt for: superadmin
+[27-Jul-2025 03:57:12 UTC] User found: superadmin (ID: 38)
+[27-Jul-2025 03:57:12 UTC] Authentication successful for user: superadmin
+[27-Jul-2025 03:57:12 UTC] Login successful for user: superadmin (ID: 38)
+[27-Jul-2025 03:57:14 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 03:57:14 UTC] Auth operation: verify_token
+[27-Jul-2025 03:57:14 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 03:57:14 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 03:57:17 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 03:57:17 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 03:58:32 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 03:58:32 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 03:58:35 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 03:58:35 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 03:58:37 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 03:58:37 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 03:58:43 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 03:58:43 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 03:59:38 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 03:59:38 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 03:59:44 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 03:59:44 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 03:59:50 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 03:59:50 UTC] Auth operation: verify_token
+[27-Jul-2025 03:59:50 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 03:59:50 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 03:59:50 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 03:59:50 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 03:59:52 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 03:59:52 UTC] Auth operation: verify_token
+[27-Jul-2025 03:59:53 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 03:59:53 UTC] Auth operation: verify_token
+[27-Jul-2025 03:59:53 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 03:59:53 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 03:59:53 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 03:59:53 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 03:59:55 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 03:59:55 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 03:59:55 UTC] Auth operation: verify_token
+[27-Jul-2025 03:59:55 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 03:59:55 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 03:59:55 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:00:01 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 04:00:01 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:00:01 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 04:00:01 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:00:01 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 04:00:01 UTC] Auth operation: verify_token
+[27-Jul-2025 04:00:06 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 04:00:06 UTC] Auth operation: verify_token
+[27-Jul-2025 04:00:06 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 04:00:06 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:00:06 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 04:00:06 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:00:15 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 04:00:15 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:01:28 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 04:01:28 UTC] Auth operation: verify_token
+[27-Jul-2025 04:01:28 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 04:01:28 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:01:28 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 04:01:28 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:01:29 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 04:01:29 UTC] Auth operation: verify_token
+[27-Jul-2025 04:01:29 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 04:01:29 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 04:01:29 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:01:29 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:01:30 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 04:01:30 UTC] Auth operation: verify_token
+[27-Jul-2025 04:01:30 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 04:01:30 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:01:30 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 04:01:30 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:01:32 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 04:01:32 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:01:32 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 04:01:32 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:01:32 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 04:01:32 UTC] Auth operation: verify_token
+[27-Jul-2025 04:01:34 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 04:01:34 UTC] Auth operation: verify_token
+[27-Jul-2025 04:01:34 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 04:01:34 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:01:34 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 04:01:34 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:01:36 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 04:01:36 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:01:37 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 04:01:37 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:01:39 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 04:01:39 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:02:23 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 04:02:23 UTC] Auth operation: verify_token
+[27-Jul-2025 04:02:23 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 04:02:23 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:02:23 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 04:02:23 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:02:53 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 04:02:53 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 04:02:53 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:02:53 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:02:53 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 04:02:53 UTC] Auth operation: verify_token
+[27-Jul-2025 04:02:55 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 04:02:55 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 04:02:55 UTC] Auth operation: verify_token
+[27-Jul-2025 04:02:55 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:02:55 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 04:02:55 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:02:56 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 04:02:56 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 04:02:56 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:02:56 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:02:56 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 04:02:56 UTC] Auth operation: verify_token
+[27-Jul-2025 04:02:57 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 04:02:57 UTC] Auth operation: verify_token
+[27-Jul-2025 04:02:57 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 04:02:57 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:02:57 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 04:02:57 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:03:45 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 04:03:45 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 04:03:45 UTC] Auth operation: verify_token
+[27-Jul-2025 04:03:45 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:03:45 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 04:03:45 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:03:46 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 04:03:46 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:03:46 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 04:03:46 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:03:46 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 04:03:46 UTC] Auth operation: verify_token
+[27-Jul-2025 04:03:48 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 04:03:48 UTC] Auth operation: verify_token
+[27-Jul-2025 04:03:48 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 04:03:48 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:03:48 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 04:03:48 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:03:53 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 04:03:53 UTC] Auth operation: verify_token
+[27-Jul-2025 04:03:53 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 04:03:53 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:03:53 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 04:03:53 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:03:56 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 04:03:56 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 04:03:56 UTC] Auth operation: verify_token
+[27-Jul-2025 04:03:56 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:03:56 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 04:03:56 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:03:58 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 04:03:58 UTC] Auth operation: verify_token
+[27-Jul-2025 04:03:58 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 04:03:58 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:03:58 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 04:03:58 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:04:01 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 04:04:01 UTC] Auth operation: verify_token
+[27-Jul-2025 04:04:01 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 04:04:01 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:04:01 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 04:04:01 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:04:05 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 04:04:05 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 04:04:05 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 04:04:05 UTC] Auth operation: verify_token
+[27-Jul-2025 04:04:05 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:04:05 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:04:09 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 04:04:09 UTC] Auth operation: verify_token
+[27-Jul-2025 04:04:09 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 04:04:09 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:04:09 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 04:04:09 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:04:20 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 04:04:20 UTC] Auth operation: verify_token
+[27-Jul-2025 04:04:20 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 04:04:20 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 04:04:20 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:04:20 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:04:25 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 04:04:25 UTC] Auth operation: verify_token
+[27-Jul-2025 04:04:25 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 04:04:25 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:04:25 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 04:04:25 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:04:59 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 04:04:59 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 04:04:59 UTC] Auth operation: verify_token
+[27-Jul-2025 04:04:59 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:04:59 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 04:04:59 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:05:06 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 04:05:06 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:05:14 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 04:05:14 UTC] Auth operation: verify_token
+[27-Jul-2025 04:05:14 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 04:05:14 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:05:14 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 04:05:14 UTC] Auth operation: verify_token
+[27-Jul-2025 04:05:19 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 04:05:19 UTC] Auth operation: verify_token
+[27-Jul-2025 04:05:20 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 04:05:20 UTC] Auth operation: verify_token
+[27-Jul-2025 04:05:20 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 04:05:20 UTC] Auth operation: verify_token
+[27-Jul-2025 04:05:20 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 04:05:20 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:05:22 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 04:05:22 UTC] Auth operation: verify_token
+[27-Jul-2025 04:05:22 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 04:05:22 UTC] Auth operation: verify_token
+[27-Jul-2025 04:05:22 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 04:05:22 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:05:23 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 04:05:23 UTC] Auth operation: verify_token
+[27-Jul-2025 04:05:24 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 04:05:24 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:05:24 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 04:05:24 UTC] Auth operation: verify_token
+[27-Jul-2025 04:05:25 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 04:05:25 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:05:25 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 04:05:25 UTC] Auth operation: verify_token
+[27-Jul-2025 04:05:25 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 04:05:25 UTC] Auth operation: verify_token
+[27-Jul-2025 04:05:42 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[27-Jul-2025 04:05:42 UTC] Auth operation: login
+[27-Jul-2025 04:05:42 UTC] Login attempt - Username: 'superadmin'
+[27-Jul-2025 04:05:42 UTC] Authentication attempt for: superadmin
+[27-Jul-2025 04:05:42 UTC] User found: superadmin (ID: 38)
+[27-Jul-2025 04:05:42 UTC] Password verification failed for user: superadmin
+[27-Jul-2025 04:05:42 UTC] Login failed for username: superadmin
+[27-Jul-2025 04:05:54 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[27-Jul-2025 04:05:54 UTC] Auth operation: login
+[27-Jul-2025 04:05:54 UTC] Login attempt - Username: 'superadmin'
+[27-Jul-2025 04:05:54 UTC] Authentication attempt for: superadmin
+[27-Jul-2025 04:05:54 UTC] User found: superadmin (ID: 38)
+[27-Jul-2025 04:05:54 UTC] Authentication successful for user: superadmin
+[27-Jul-2025 04:05:54 UTC] Login successful for user: superadmin (ID: 38)
+[27-Jul-2025 04:05:56 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 04:05:56 UTC] Auth operation: verify_token
+[27-Jul-2025 04:05:56 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 04:05:56 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:06:00 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 04:06:00 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:08:11 UTC] API called with action: ram-list (Module: ram, Operation: list)
+[27-Jul-2025 04:08:11 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:08:31 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 04:08:31 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:08:38 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 04:08:38 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:08:41 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 04:08:41 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:08:56 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 04:08:56 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:09:07 UTC] API called with action: search-components (Module: search, Operation: components)
+[27-Jul-2025 04:09:07 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:09:29 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 04:09:29 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:09:31 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 04:09:31 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:18:33 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 04:18:33 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:18:34 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 04:18:34 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:19:03 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 04:19:03 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:19:07 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 04:19:07 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:19:38 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 04:19:38 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:19:41 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 04:19:41 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:20:41 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 04:20:41 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:20:46 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 04:20:46 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:32:25 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 04:32:25 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:34:41 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 04:34:41 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 04:34:41 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:34:41 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:34:41 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 04:34:41 UTC] Auth operation: verify_token
+[27-Jul-2025 04:34:50 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 04:34:50 UTC] Auth operation: verify_token
+[27-Jul-2025 04:34:50 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 04:34:50 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:34:50 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 04:34:50 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:35:04 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 04:35:04 UTC] Auth operation: verify_token
+[27-Jul-2025 04:35:04 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 04:35:04 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:35:04 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 04:35:04 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:35:10 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 04:35:10 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 04:35:10 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:35:10 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:35:10 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 04:35:10 UTC] Auth operation: verify_token
+[27-Jul-2025 04:35:13 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 04:35:13 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 04:35:13 UTC] Auth operation: verify_token
+[27-Jul-2025 04:35:13 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:35:13 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 04:35:13 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:35:32 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 04:35:32 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 04:35:32 UTC] Auth operation: verify_token
+[27-Jul-2025 04:35:32 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:35:32 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 04:35:32 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:35:41 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 04:35:41 UTC] Auth operation: verify_token
+[27-Jul-2025 04:35:41 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 04:35:41 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:35:41 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 04:35:41 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:35:46 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 04:35:46 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 04:35:46 UTC] Auth operation: verify_token
+[27-Jul-2025 04:35:46 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:35:46 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 04:35:46 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:37:14 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 04:37:14 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:37:14 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 04:37:14 UTC] Auth operation: verify_token
+[27-Jul-2025 04:37:14 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 04:37:14 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:37:26 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 04:37:26 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 04:37:26 UTC] Auth operation: verify_token
+[27-Jul-2025 04:37:26 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:37:26 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 04:37:26 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:37:40 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 04:37:40 UTC] Auth operation: verify_token
+[27-Jul-2025 04:37:40 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 04:37:40 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:37:40 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 04:37:40 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:38:06 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 04:38:06 UTC] Auth operation: verify_token
+[27-Jul-2025 04:38:06 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 04:38:06 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:38:06 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 04:38:06 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:38:39 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 04:38:39 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 04:38:39 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:38:39 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:38:39 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 04:38:39 UTC] Auth operation: verify_token
+[27-Jul-2025 04:38:54 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 04:38:54 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 04:38:54 UTC] Auth operation: verify_token
+[27-Jul-2025 04:38:54 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:38:54 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 04:38:54 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:38:56 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 04:38:56 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:39:14 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 04:39:14 UTC] Auth operation: verify_token
+[27-Jul-2025 04:39:14 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 04:39:14 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:39:14 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 04:39:14 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:39:22 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 04:39:22 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 04:39:22 UTC] Auth operation: verify_token
+[27-Jul-2025 04:39:22 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:39:22 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 04:39:22 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:39:35 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 04:39:35 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:39:41 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 04:39:41 UTC] Auth operation: verify_token
+[27-Jul-2025 04:39:56 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[27-Jul-2025 04:39:56 UTC] Auth operation: login
+[27-Jul-2025 04:39:56 UTC] Login attempt - Username: 'superadmin'
+[27-Jul-2025 04:39:56 UTC] Authentication attempt for: superadmin
+[27-Jul-2025 04:39:56 UTC] User found: superadmin (ID: 38)
+[27-Jul-2025 04:39:56 UTC] Authentication successful for user: superadmin
+[27-Jul-2025 04:39:56 UTC] Login successful for user: superadmin (ID: 38)
+[27-Jul-2025 04:39:59 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 04:39:59 UTC] Auth operation: verify_token
+[27-Jul-2025 04:39:59 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 04:39:59 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 04:40:04 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 04:40:04 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 05:06:31 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 05:06:31 UTC] Auth operation: verify_token
+[27-Jul-2025 05:06:33 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 05:06:33 UTC] Auth operation: verify_token
+[27-Jul-2025 05:06:33 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 05:06:33 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 05:06:36 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 05:06:36 UTC] Auth operation: verify_token
+[27-Jul-2025 05:06:37 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 05:06:37 UTC] Auth operation: verify_token
+[27-Jul-2025 05:06:37 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 05:06:37 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 05:06:37 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 05:06:37 UTC] Auth operation: verify_token
+[27-Jul-2025 05:06:46 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[27-Jul-2025 05:06:46 UTC] Auth operation: login
+[27-Jul-2025 05:06:46 UTC] Login attempt - Username: 'superadmin'
+[27-Jul-2025 05:06:46 UTC] Authentication attempt for: superadmin
+[27-Jul-2025 05:06:46 UTC] User found: superadmin (ID: 38)
+[27-Jul-2025 05:06:46 UTC] Authentication successful for user: superadmin
+[27-Jul-2025 05:06:46 UTC] Login successful for user: superadmin (ID: 38)
+[27-Jul-2025 05:06:49 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 05:06:49 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 05:06:49 UTC] Auth operation: verify_token
+[27-Jul-2025 05:06:49 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 05:06:53 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 05:06:53 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 05:06:56 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 05:06:56 UTC] Auth operation: verify_token
+[27-Jul-2025 05:07:56 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 05:07:56 UTC] Auth operation: verify_token
+[27-Jul-2025 05:09:01 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 05:09:01 UTC] Auth operation: verify_token
+[27-Jul-2025 05:09:02 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 05:09:02 UTC] Auth operation: verify_token
+[27-Jul-2025 05:09:05 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 05:09:05 UTC] Auth operation: verify_token
+[27-Jul-2025 05:09:34 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 05:09:34 UTC] Auth operation: verify_token
+[27-Jul-2025 05:09:51 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 05:09:51 UTC] Auth operation: verify_token
+[27-Jul-2025 05:10:03 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 05:10:03 UTC] Auth operation: verify_token
+[27-Jul-2025 05:10:07 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 05:10:07 UTC] Auth operation: verify_token
+[27-Jul-2025 05:10:24 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 05:10:24 UTC] Auth operation: verify_token
+[27-Jul-2025 05:10:29 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 05:10:29 UTC] Auth operation: verify_token
+[27-Jul-2025 05:10:32 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 05:10:32 UTC] Auth operation: verify_token
+[27-Jul-2025 05:10:32 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 05:10:32 UTC] Auth operation: verify_token
+[27-Jul-2025 05:10:35 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 05:10:35 UTC] Auth operation: verify_token
+[27-Jul-2025 05:10:37 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 05:10:37 UTC] Auth operation: verify_token
+[27-Jul-2025 05:10:44 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 05:10:44 UTC] Auth operation: verify_token
+[27-Jul-2025 05:10:46 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 05:10:46 UTC] Auth operation: verify_token
+[27-Jul-2025 05:10:48 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 05:10:48 UTC] Auth operation: verify_token
+[27-Jul-2025 05:11:34 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 05:11:34 UTC] Auth operation: verify_token
+[27-Jul-2025 05:11:49 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 05:11:49 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 05:11:49 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 05:11:49 UTC] Auth operation: verify_token
+[27-Jul-2025 05:11:49 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 05:11:49 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 05:14:29 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[27-Jul-2025 05:14:29 UTC] Auth operation: login
+[27-Jul-2025 05:14:29 UTC] Login attempt - Username: 'superadmin'
+[27-Jul-2025 05:14:29 UTC] Authentication attempt for: superadmin
+[27-Jul-2025 05:14:29 UTC] User found: superadmin (ID: 38)
+[27-Jul-2025 05:14:29 UTC] Password verification failed for user: superadmin
+[27-Jul-2025 05:14:29 UTC] Login failed for username: superadmin
+[27-Jul-2025 05:14:34 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[27-Jul-2025 05:14:34 UTC] Auth operation: login
+[27-Jul-2025 05:14:34 UTC] Login attempt - Username: 'superadmin'
+[27-Jul-2025 05:14:34 UTC] Authentication attempt for: superadmin
+[27-Jul-2025 05:14:34 UTC] User found: superadmin (ID: 38)
+[27-Jul-2025 05:14:34 UTC] Authentication successful for user: superadmin
+[27-Jul-2025 05:14:34 UTC] Login successful for user: superadmin (ID: 38)
+[27-Jul-2025 05:14:37 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 05:14:37 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 05:14:37 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 05:14:37 UTC] Auth operation: verify_token
+[27-Jul-2025 05:14:38 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 05:14:38 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 05:14:42 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 05:14:42 UTC] Auth operation: verify_token
+[27-Jul-2025 05:15:43 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 05:15:43 UTC] Auth operation: verify_token
+[27-Jul-2025 05:35:24 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 05:35:24 UTC] Auth operation: verify_token
+[27-Jul-2025 05:35:24 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 05:35:24 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 05:35:24 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 05:35:24 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 05:35:27 UTC] API called with action: caddy-list (Module: caddy, Operation: list)
+[27-Jul-2025 05:35:27 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 05:35:28 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 05:35:28 UTC] Auth operation: verify_token
+[27-Jul-2025 05:35:33 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 05:35:33 UTC] Auth operation: verify_token
+[27-Jul-2025 05:35:33 UTC] API called with action: caddy-list (Module: caddy, Operation: list)
+[27-Jul-2025 05:35:33 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 05:35:33 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 05:35:33 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 05:35:34 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 05:35:34 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 05:35:35 UTC] API called with action: ram-list (Module: ram, Operation: list)
+[27-Jul-2025 05:35:35 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 05:35:36 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 05:35:36 UTC] Auth operation: verify_token
+[27-Jul-2025 05:35:40 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 05:35:40 UTC] Auth operation: verify_token
+[27-Jul-2025 05:35:40 UTC] API called with action: ram-list (Module: ram, Operation: list)
+[27-Jul-2025 05:35:40 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 05:35:40 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 05:35:40 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 05:35:41 UTC] API called with action: storage-list (Module: storage, Operation: list)
+[27-Jul-2025 05:35:41 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 05:35:42 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 05:35:42 UTC] Auth operation: verify_token
+[27-Jul-2025 05:35:47 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 05:35:47 UTC] Auth operation: verify_token
+[27-Jul-2025 05:35:47 UTC] API called with action: storage-list (Module: storage, Operation: list)
+[27-Jul-2025 05:35:47 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 05:35:47 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 05:35:47 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 05:35:48 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 05:35:48 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 05:35:50 UTC] API called with action: motherboard-list (Module: motherboard, Operation: list)
+[27-Jul-2025 05:35:50 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 05:35:53 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 05:35:53 UTC] Auth operation: verify_token
+[27-Jul-2025 05:35:56 UTC] API called with action: motherboard-list (Module: motherboard, Operation: list)
+[27-Jul-2025 05:35:56 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 05:35:56 UTC] Auth operation: verify_token
+[27-Jul-2025 05:35:56 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 05:35:56 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 05:35:56 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 05:35:57 UTC] API called with action: nic-list (Module: nic, Operation: list)
+[27-Jul-2025 05:35:57 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 05:35:59 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 05:35:59 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 05:36:06 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 05:36:06 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 05:36:06 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 05:36:06 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 05:36:12 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 05:36:12 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 05:36:12 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 05:36:12 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 05:36:24 UTC] API called with action: cpu-delete (Module: cpu, Operation: delete)
+[27-Jul-2025 05:36:24 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 05:36:25 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 05:36:25 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 05:36:25 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 05:36:25 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 05:36:32 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 05:36:32 UTC] Auth operation: verify_token
+[27-Jul-2025 05:43:15 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 05:43:15 UTC] Auth operation: verify_token
+[27-Jul-2025 05:43:30 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 05:43:30 UTC] Auth operation: verify_token
+[27-Jul-2025 05:43:35 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 05:43:35 UTC] Auth operation: verify_token
+[27-Jul-2025 05:43:38 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 05:43:38 UTC] Auth operation: verify_token
+[27-Jul-2025 05:43:40 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 05:43:40 UTC] Auth operation: verify_token
+[27-Jul-2025 05:43:42 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 05:43:42 UTC] Auth operation: verify_token
+[27-Jul-2025 05:43:51 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 05:43:51 UTC] Auth operation: verify_token
+[27-Jul-2025 05:44:29 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 05:44:29 UTC] Auth operation: verify_token
+[27-Jul-2025 07:02:03 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 07:02:03 UTC] JWT Authentication failed: Token has expired
+[27-Jul-2025 07:02:03 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 07:02:03 UTC] JWT Authentication failed: Token has expired
+[27-Jul-2025 07:02:03 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 07:02:03 UTC] Auth operation: verify_token
+[27-Jul-2025 07:02:03 UTC] JWT Authentication failed: Token has expired
+[27-Jul-2025 07:02:04 UTC] API called with action: auth-refresh (Module: auth, Operation: refresh)
+[27-Jul-2025 07:02:04 UTC] Auth operation: refresh
+[27-Jul-2025 07:02:04 UTC] Token refresh successful for user: superadmin
+[27-Jul-2025 07:02:09 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 07:02:09 UTC] Auth operation: verify_token
+[27-Jul-2025 07:02:10 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 07:02:10 UTC] Auth operation: verify_token
+[27-Jul-2025 07:02:10 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 07:02:10 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 07:02:23 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[27-Jul-2025 07:02:23 UTC] Auth operation: login
+[27-Jul-2025 07:02:23 UTC] Login attempt - Username: 'superadmin'
+[27-Jul-2025 07:02:23 UTC] Authentication attempt for: superadmin
+[27-Jul-2025 07:02:23 UTC] User found: superadmin (ID: 38)
+[27-Jul-2025 07:02:23 UTC] Authentication successful for user: superadmin
+[27-Jul-2025 07:02:23 UTC] Login successful for user: superadmin (ID: 38)
+[27-Jul-2025 07:02:26 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 07:02:26 UTC] Auth operation: verify_token
+[27-Jul-2025 07:02:26 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 07:02:26 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 07:02:28 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 07:02:28 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 07:02:30 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 07:02:30 UTC] Auth operation: verify_token
+[27-Jul-2025 07:02:50 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 07:02:50 UTC] Auth operation: verify_token
+[27-Jul-2025 07:02:53 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 07:02:53 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 07:02:53 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 07:02:53 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 07:02:53 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 07:02:53 UTC] Auth operation: verify_token
+[27-Jul-2025 07:02:56 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 07:02:56 UTC] Auth operation: verify_token
+[27-Jul-2025 07:03:49 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 07:03:49 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 07:03:49 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 07:03:49 UTC] Auth operation: verify_token
+[27-Jul-2025 07:03:49 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 07:03:49 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 07:04:03 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 07:04:03 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 07:04:04 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 07:04:04 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 07:04:10 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 07:04:10 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 07:04:25 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 07:04:25 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 07:16:26 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 07:16:26 UTC] Auth operation: verify_token
+[27-Jul-2025 07:16:27 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 07:16:27 UTC] Auth operation: verify_token
+[27-Jul-2025 07:16:27 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 07:16:27 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 07:16:28 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 07:16:28 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 07:16:30 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 07:16:30 UTC] Auth operation: verify_token
+[27-Jul-2025 07:18:39 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 07:18:39 UTC] Auth operation: verify_token
+[27-Jul-2025 07:18:39 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 07:18:39 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 07:18:39 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 07:18:39 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 07:18:43 UTC] API called with action: ram-list (Module: ram, Operation: list)
+[27-Jul-2025 07:18:43 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 07:18:44 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 07:18:44 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 07:19:22 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 07:19:22 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 07:19:24 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 07:19:24 UTC] Auth operation: verify_token
+[27-Jul-2025 08:03:02 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[27-Jul-2025 08:03:02 UTC] Auth operation: login
+[27-Jul-2025 08:03:02 UTC] Login attempt - Username: 'superadmin'
+[27-Jul-2025 08:03:02 UTC] Authentication attempt for: superadmin
+[27-Jul-2025 08:03:02 UTC] User found: superadmin (ID: 38)
+[27-Jul-2025 08:03:02 UTC] Authentication successful for user: superadmin
+[27-Jul-2025 08:03:02 UTC] Login successful for user: superadmin (ID: 38)
+[27-Jul-2025 08:03:05 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 08:03:05 UTC] Auth operation: verify_token
+[27-Jul-2025 08:03:05 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 08:03:05 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 08:03:08 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 08:03:08 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 08:04:53 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 08:04:53 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 08:04:53 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 08:04:53 UTC] Auth operation: verify_token
+[27-Jul-2025 08:04:53 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 08:04:53 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 08:05:31 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[27-Jul-2025 08:05:31 UTC] Auth operation: login
+[27-Jul-2025 08:05:31 UTC] Login attempt - Username: 'superadmin'
+[27-Jul-2025 08:05:31 UTC] Authentication attempt for: superadmin
+[27-Jul-2025 08:05:31 UTC] User found: superadmin (ID: 38)
+[27-Jul-2025 08:05:31 UTC] Password verification failed for user: superadmin
+[27-Jul-2025 08:05:31 UTC] Login failed for username: superadmin
+[27-Jul-2025 08:05:39 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[27-Jul-2025 08:05:39 UTC] Auth operation: login
+[27-Jul-2025 08:05:39 UTC] Login attempt - Username: 'superadmin'
+[27-Jul-2025 08:05:39 UTC] Authentication attempt for: superadmin
+[27-Jul-2025 08:05:39 UTC] User found: superadmin (ID: 38)
+[27-Jul-2025 08:05:39 UTC] Authentication successful for user: superadmin
+[27-Jul-2025 08:05:39 UTC] Login successful for user: superadmin (ID: 38)
+[27-Jul-2025 08:05:41 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 08:05:41 UTC] Auth operation: verify_token
+[27-Jul-2025 08:05:41 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 08:05:41 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 08:05:43 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 08:05:43 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 08:23:28 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 08:23:28 UTC] Auth operation: verify_token
+[27-Jul-2025 08:23:29 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 08:23:29 UTC] Auth operation: verify_token
+[27-Jul-2025 08:23:29 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 08:23:29 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 08:23:31 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 08:23:31 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 08:23:33 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 08:23:33 UTC] Auth operation: verify_token
+[27-Jul-2025 08:26:15 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 08:26:15 UTC] Auth operation: verify_token
+[27-Jul-2025 08:34:15 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 08:34:15 UTC] Auth operation: verify_token
+[27-Jul-2025 08:34:16 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 08:34:16 UTC] Auth operation: verify_token
+[27-Jul-2025 08:34:18 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 08:34:18 UTC] Auth operation: verify_token
+[27-Jul-2025 08:36:47 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 08:36:47 UTC] Auth operation: verify_token
+[27-Jul-2025 08:36:47 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 08:36:47 UTC] Auth operation: verify_token
+[27-Jul-2025 08:36:47 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 08:36:47 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 08:37:10 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[27-Jul-2025 08:37:10 UTC] Auth operation: login
+[27-Jul-2025 08:37:10 UTC] Login attempt - Username: 'superadmin'
+[27-Jul-2025 08:37:10 UTC] Authentication attempt for: superadmin
+[27-Jul-2025 08:37:10 UTC] User found: superadmin (ID: 38)
+[27-Jul-2025 08:37:10 UTC] Authentication successful for user: superadmin
+[27-Jul-2025 08:37:10 UTC] Login successful for user: superadmin (ID: 38)
+[27-Jul-2025 08:37:13 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 08:37:13 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 08:37:13 UTC] Auth operation: verify_token
+[27-Jul-2025 08:37:13 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 08:37:15 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 08:37:15 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 08:37:19 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 08:37:19 UTC] Auth operation: verify_token
+[27-Jul-2025 08:45:24 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 08:45:24 UTC] Auth operation: verify_token
+[27-Jul-2025 08:45:32 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 08:45:32 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 08:45:32 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 08:45:32 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 08:45:32 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 08:45:32 UTC] Auth operation: verify_token
+[27-Jul-2025 08:45:36 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 08:45:36 UTC] Auth operation: verify_token
+[27-Jul-2025 08:47:50 UTC] API called with action: cpu-add (Module: cpu, Operation: add)
+[27-Jul-2025 08:47:50 UTC] JWT Authentication failed: Invalid token format
+[27-Jul-2025 08:55:32 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 08:55:32 UTC] Auth operation: verify_token
+[27-Jul-2025 08:55:46 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 08:55:53 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[27-Jul-2025 08:55:53 UTC] Auth operation: login
+[27-Jul-2025 08:55:53 UTC] Login attempt - Username: 'superadmin'
+[27-Jul-2025 08:55:53 UTC] Authentication attempt for: superadmin
+[27-Jul-2025 08:55:53 UTC] User found: superadmin (ID: 38)
+[27-Jul-2025 08:55:53 UTC] Authentication successful for user: superadmin
+[27-Jul-2025 08:55:53 UTC] Login successful for user: superadmin (ID: 38)
+[27-Jul-2025 08:55:56 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 08:55:56 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 08:55:56 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 08:55:56 UTC] Auth operation: verify_token
+[27-Jul-2025 08:55:58 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 08:55:58 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 08:56:00 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 08:56:00 UTC] Auth operation: verify_token
+[27-Jul-2025 08:57:02 UTC] API called with action: cpu-add (Module: cpu, Operation: add)
+[27-Jul-2025 08:57:02 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 08:57:02 UTC] Inserting cpu data: {"UUID":"139e9bcd-ac86-44e9-8e9b-3178e3be1fb8","SerialNumber":"CPU789060","Status":"1","ServerUUID":"null","Location":"New Delhi, Delhi","RackPosition":"Rack Z10","PurchaseDate":"2025-07-28","WarrantyEndDate":"2027-12-02","Flag":"Backup","Notes":"EPYC 9534 AMD CPU"}
+[27-Jul-2025 08:57:02 UTC] Successfully added cpu component with ID: 17
+[27-Jul-2025 08:57:05 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 08:57:05 UTC] Auth operation: verify_token
+[27-Jul-2025 08:57:05 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 08:57:05 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 08:57:05 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 08:57:05 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 08:57:31 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 08:57:31 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 08:57:35 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 08:57:35 UTC] Auth operation: verify_token
+[27-Jul-2025 08:57:35 UTC] API called with action: cpu-get (Module: cpu, Operation: get)
+[27-Jul-2025 08:57:35 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 08:57:39 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 08:57:39 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 08:57:39 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 08:57:39 UTC] Auth operation: verify_token
+[27-Jul-2025 08:57:39 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 08:57:39 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 08:57:42 UTC] API called with action: ram-list (Module: ram, Operation: list)
+[27-Jul-2025 08:57:42 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 08:57:44 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 08:57:44 UTC] Auth operation: verify_token
+[27-Jul-2025 08:58:45 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 08:58:45 UTC] Auth operation: verify_token
+[27-Jul-2025 13:50:56 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 13:50:56 UTC] Auth operation: verify_token
+[27-Jul-2025 13:50:56 UTC] JWT Authentication failed: Token has expired
+[27-Jul-2025 13:51:06 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[27-Jul-2025 13:51:06 UTC] Auth operation: login
+[27-Jul-2025 13:51:06 UTC] Login attempt - Username: 'superadmin'
+[27-Jul-2025 13:51:06 UTC] Authentication attempt for: superadmin
+[27-Jul-2025 13:51:06 UTC] User found: superadmin (ID: 38)
+[27-Jul-2025 13:51:06 UTC] Authentication successful for user: superadmin
+[27-Jul-2025 13:51:06 UTC] Login successful for user: superadmin (ID: 38)
+[27-Jul-2025 13:51:08 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 13:51:08 UTC] Auth operation: verify_token
+[27-Jul-2025 13:51:08 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 13:51:08 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 13:51:10 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 13:51:10 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 13:51:13 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 13:51:13 UTC] Auth operation: verify_token
+[27-Jul-2025 14:04:11 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 14:04:11 UTC] Auth operation: verify_token
+[27-Jul-2025 14:04:19 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 14:04:19 UTC] Auth operation: verify_token
+[27-Jul-2025 14:04:21 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 14:04:21 UTC] Auth operation: verify_token
+[27-Jul-2025 14:05:07 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[27-Jul-2025 14:05:07 UTC] Auth operation: login
+[27-Jul-2025 14:05:07 UTC] Login attempt - Username: 'superadmin'
+[27-Jul-2025 14:05:07 UTC] Authentication attempt for: superadmin
+[27-Jul-2025 14:05:07 UTC] User found: superadmin (ID: 38)
+[27-Jul-2025 14:05:07 UTC] Authentication successful for user: superadmin
+[27-Jul-2025 14:05:07 UTC] Login successful for user: superadmin (ID: 38)
+[27-Jul-2025 14:05:10 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 14:05:10 UTC] Auth operation: verify_token
+[27-Jul-2025 14:05:10 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 14:05:10 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 14:05:12 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 14:05:12 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 14:05:14 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 14:05:14 UTC] Auth operation: verify_token
+[27-Jul-2025 14:06:01 UTC] API called with action: storage-add (Module: storage, Operation: add)
+[27-Jul-2025 14:06:01 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 14:06:01 UTC] Inserting storage data: {"UUID":"43e1ad0d-cf4a-49c9-a750-b50f73e773f7","SerialNumber":"HDD789098","Status":"1","ServerUUID":"null","Location":"New Delhi, Delhi","RackPosition":"Rack Z9","PurchaseDate":"2025-07-30","WarrantyEndDate":"2029-10-25","Flag":"Backup","Notes":"Type: HDD, Capacity: 960GB\n\nAdditional Notes: crucial nvme gen 4 "}
+[27-Jul-2025 14:06:01 UTC] Successfully added storage component with ID: 4
+[27-Jul-2025 14:06:05 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 14:06:05 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 14:06:05 UTC] Auth operation: verify_token
+[27-Jul-2025 14:06:05 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 14:06:05 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 14:06:05 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 14:06:09 UTC] API called with action: storage-list (Module: storage, Operation: list)
+[27-Jul-2025 14:06:09 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 14:06:20 UTC] API called with action: motherboard-list (Module: motherboard, Operation: list)
+[27-Jul-2025 14:06:20 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 14:06:21 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 14:06:21 UTC] Auth operation: verify_token
+[27-Jul-2025 14:08:05 UTC] API called with action: motherboard-add (Module: motherboard, Operation: add)
+[27-Jul-2025 14:08:05 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 14:08:05 UTC] Inserting motherboard data: {"UUID":"18527f82-7f18-4148-9cb8-7449b1e3cadf","SerialNumber":"MOT2323882","Status":"1","ServerUUID":"null","Location":"New Delhi India","RackPosition":"Rack Z10","PurchaseDate":"2025-07-29","WarrantyEndDate":"2029-11-15","Flag":"Backup","Notes":"Brand: GIGABYTE, Series: MZ, Model: MZ93-FS0\n\nAdditional Notes: gigabyte motherboard z790 godlike"}
+[27-Jul-2025 14:08:05 UTC] Successfully added motherboard component with ID: 4
+[27-Jul-2025 14:08:07 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 14:08:07 UTC] Auth operation: verify_token
+[27-Jul-2025 14:08:07 UTC] API called with action: motherboard-list (Module: motherboard, Operation: list)
+[27-Jul-2025 14:08:07 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 14:08:07 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 14:08:07 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 14:08:49 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 14:08:49 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 14:08:49 UTC] Auth operation: verify_token
+[27-Jul-2025 14:08:49 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 14:08:49 UTC] API called with action: motherboard-list (Module: motherboard, Operation: list)
+[27-Jul-2025 14:08:49 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 14:08:54 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 14:08:54 UTC] Auth operation: verify_token
+[27-Jul-2025 14:08:54 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 14:08:54 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 14:08:54 UTC] API called with action: motherboard-list (Module: motherboard, Operation: list)
+[27-Jul-2025 14:08:54 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 14:08:56 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 14:08:56 UTC] Auth operation: verify_token
+[27-Jul-2025 14:09:43 UTC] API called with action: motherboard-add (Module: motherboard, Operation: add)
+[27-Jul-2025 14:09:43 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 14:09:43 UTC] Inserting motherboard data: {"UUID":"67c845a3-d827-47d1-8441-0639ef10391b","SerialNumber":"MB345688","Status":"1","ServerUUID":"null","Location":"Banglore","RackPosition":"Rack Z10","PurchaseDate":"2025-07-28","WarrantyEndDate":"2025-08-02","Flag":"Backup","Notes":"Brand: Supermicro, Series: X13, Model: X13DRi-N\n\nAdditional Notes: gigabyte godlike z790 "}
+[27-Jul-2025 14:09:43 UTC] Successfully added motherboard component with ID: 5
+[27-Jul-2025 14:09:46 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 14:09:46 UTC] Auth operation: verify_token
+[27-Jul-2025 14:09:46 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 14:09:46 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 14:09:46 UTC] API called with action: motherboard-list (Module: motherboard, Operation: list)
+[27-Jul-2025 14:09:46 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 14:10:52 UTC] API called with action: nic-list (Module: nic, Operation: list)
+[27-Jul-2025 14:10:52 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 14:10:54 UTC] API called with action: caddy-list (Module: caddy, Operation: list)
+[27-Jul-2025 14:10:54 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 14:10:55 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 14:10:55 UTC] Auth operation: verify_token
+[27-Jul-2025 14:11:02 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 14:11:02 UTC] Auth operation: verify_token
+[27-Jul-2025 14:11:02 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 14:11:02 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 14:11:02 UTC] API called with action: caddy-list (Module: caddy, Operation: list)
+[27-Jul-2025 14:11:02 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 14:11:06 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 14:11:06 UTC] Auth operation: verify_token
+[27-Jul-2025 14:11:31 UTC] API called with action: caddy-add (Module: caddy, Operation: add)
+[27-Jul-2025 14:11:31 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 14:11:44 UTC] API called with action: caddy-add (Module: caddy, Operation: add)
+[27-Jul-2025 14:11:44 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 14:11:44 UTC] Inserting caddy data: {"UUID":"505c1ec9-35cc-4da9-b555-b7d15c0d9d06","SerialNumber":"CDY789082","Status":"1","ServerUUID":"null","Location":"Himachal","RackPosition":"Rack Z5","PurchaseDate":"2025-07-29","WarrantyEndDate":"2025-07-17","Flag":"Critical","Notes":"Type: 3.5 Inch\n\nAdditional Notes: new caddy"}
+[27-Jul-2025 14:11:44 UTC] Successfully added caddy component with ID: 4
+[27-Jul-2025 14:11:47 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 14:11:47 UTC] Auth operation: verify_token
+[27-Jul-2025 14:11:47 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 14:11:47 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 14:11:47 UTC] API called with action: caddy-list (Module: caddy, Operation: list)
+[27-Jul-2025 14:11:47 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 14:11:51 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 14:11:51 UTC] Auth operation: verify_token
+[27-Jul-2025 14:11:51 UTC] API called with action: caddy-get (Module: caddy, Operation: get)
+[27-Jul-2025 14:11:51 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 14:11:53 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 14:11:53 UTC] Auth operation: verify_token
+[27-Jul-2025 14:11:53 UTC] API called with action: caddy-list (Module: caddy, Operation: list)
+[27-Jul-2025 14:11:53 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 14:11:53 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 14:11:53 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 14:12:53 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 14:12:53 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 14:13:18 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 14:13:18 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 14:37:40 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 14:37:40 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 14:37:40 UTC] Auth operation: verify_token
+[27-Jul-2025 14:37:40 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 14:37:52 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 14:37:52 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 14:37:52 UTC] Auth operation: verify_token
+[27-Jul-2025 14:37:52 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 14:37:57 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 14:37:57 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 14:38:21 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 14:38:21 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 14:38:21 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 14:38:21 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 14:38:21 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 14:38:21 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 14:38:22 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 14:38:22 UTC] Auth operation: verify_token
+[27-Jul-2025 14:38:22 UTC] API called with action: cpu-get (Module: cpu, Operation: get)
+[27-Jul-2025 14:38:22 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 14:38:43 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 14:38:43 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 14:38:43 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 14:38:43 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 14:38:43 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 14:38:43 UTC] Auth operation: verify_token
+[27-Jul-2025 14:38:53 UTC] API called with action: cpu-get (Module: cpu, Operation: get)
+[27-Jul-2025 14:38:53 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 14:38:53 UTC] Auth operation: verify_token
+[27-Jul-2025 14:38:53 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 14:39:00 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 14:39:00 UTC] Auth operation: verify_token
+[27-Jul-2025 14:39:00 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 14:39:00 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 14:39:00 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 14:39:00 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 14:39:09 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 14:39:09 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 15:33:13 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 15:33:13 UTC] JWT Authentication failed: Token has expired
+[27-Jul-2025 15:33:20 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 15:33:20 UTC] JWT Authentication failed: Token has expired
+[27-Jul-2025 15:34:15 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 15:34:15 UTC] JWT Authentication failed: Token has expired
+[27-Jul-2025 15:34:15 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 15:34:15 UTC] JWT Authentication failed: Token has expired
+[27-Jul-2025 15:34:22 UTC] API called with action: auth-logout (Module: auth, Operation: logout)
+[27-Jul-2025 15:34:22 UTC] Auth operation: logout
+[27-Jul-2025 15:34:22 UTC] JWT Authentication failed: Token has expired
+[27-Jul-2025 15:34:22 UTC] User logged out successfully
+[27-Jul-2025 15:34:31 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[27-Jul-2025 15:34:31 UTC] Auth operation: login
+[27-Jul-2025 15:34:31 UTC] Login attempt - Username: 'superadmin'
+[27-Jul-2025 15:34:31 UTC] Authentication attempt for: superadmin
+[27-Jul-2025 15:34:31 UTC] User found: superadmin (ID: 38)
+[27-Jul-2025 15:34:32 UTC] Authentication successful for user: superadmin
+[27-Jul-2025 15:34:32 UTC] Login successful for user: superadmin (ID: 38)
+[27-Jul-2025 15:34:34 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 15:34:34 UTC] Auth operation: verify_token
+[27-Jul-2025 15:34:34 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 15:34:34 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 15:34:43 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 15:34:43 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 15:34:46 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 15:34:46 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 15:34:46 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 15:34:46 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 15:34:52 UTC] API called with action: cpu-get (Module: cpu, Operation: get)
+[27-Jul-2025 15:34:52 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 15:34:52 UTC] Auth operation: verify_token
+[27-Jul-2025 15:34:52 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 15:35:09 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 15:35:09 UTC] Auth operation: verify_token
+[27-Jul-2025 15:35:09 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 15:35:09 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 15:35:09 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 15:35:09 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 15:35:11 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 15:35:11 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 15:35:14 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 15:35:14 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 15:35:19 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 15:35:19 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 15:35:34 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 15:35:34 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 15:36:02 UTC] API called with action: search-components (Module: search, Operation: components)
+[27-Jul-2025 15:36:02 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 15:37:00 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 15:37:00 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 15:37:04 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 15:37:04 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 15:44:21 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 15:44:21 UTC] Auth operation: verify_token
+[27-Jul-2025 15:44:21 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 15:44:21 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 15:44:21 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 15:44:21 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 15:44:33 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 15:44:33 UTC] Auth operation: verify_token
+[27-Jul-2025 15:44:33 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 15:44:33 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 15:44:33 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 15:44:33 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 15:50:33 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 15:50:33 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 15:50:36 UTC] API called with action: auth-logout (Module: auth, Operation: logout)
+[27-Jul-2025 15:50:36 UTC] Auth operation: logout
+[27-Jul-2025 15:50:36 UTC] User logged out successfully
+[27-Jul-2025 15:53:02 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[27-Jul-2025 15:53:02 UTC] Auth operation: login
+[27-Jul-2025 15:53:02 UTC] Login attempt - Username: 'superadmin'
+[27-Jul-2025 15:53:02 UTC] Authentication attempt for: superadmin
+[27-Jul-2025 15:53:02 UTC] User found: superadmin (ID: 38)
+[27-Jul-2025 15:53:03 UTC] Authentication successful for user: superadmin
+[27-Jul-2025 15:53:03 UTC] Login successful for user: superadmin (ID: 38)
+[27-Jul-2025 15:53:05 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 15:53:05 UTC] Auth operation: verify_token
+[27-Jul-2025 15:53:05 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 15:53:05 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 15:53:09 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 15:53:09 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 15:53:11 UTC] API called with action: cpu-get (Module: cpu, Operation: get)
+[27-Jul-2025 15:53:11 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 15:53:11 UTC] Auth operation: verify_token
+[27-Jul-2025 15:53:11 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 15:54:01 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 15:54:01 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 15:54:01 UTC] Auth operation: verify_token
+[27-Jul-2025 15:54:01 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 15:54:01 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 15:54:01 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 16:00:00 UTC] API called with action: cpu-get (Module: cpu, Operation: get)
+[27-Jul-2025 16:00:00 UTC] JWT Authentication failed: Token has expired
+[27-Jul-2025 16:00:05 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[27-Jul-2025 16:00:05 UTC] Auth operation: login
+[27-Jul-2025 16:00:05 UTC] Login attempt - Username: 'superadmin'
+[27-Jul-2025 16:00:05 UTC] Authentication attempt for: superadmin
+[27-Jul-2025 16:00:05 UTC] User found: superadmin (ID: 38)
+[27-Jul-2025 16:00:05 UTC] Authentication successful for user: superadmin
+[27-Jul-2025 16:00:05 UTC] Login successful for user: superadmin (ID: 38)
+[27-Jul-2025 16:00:19 UTC] API called with action: cpu-get (Module: cpu, Operation: get)
+[27-Jul-2025 16:00:19 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 16:00:36 UTC] API called with action: cpu-get (Module: cpu, Operation: get)
+[27-Jul-2025 16:00:36 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 16:43:17 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 16:43:17 UTC] Auth operation: verify_token
+[27-Jul-2025 16:43:24 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 16:43:24 UTC] Auth operation: verify_token
+[27-Jul-2025 16:43:35 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 16:43:35 UTC] Auth operation: verify_token
+[27-Jul-2025 16:43:35 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 16:43:35 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 16:43:35 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 16:43:35 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 16:43:59 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 16:43:59 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 17:25:02 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 17:25:02 UTC] JWT Authentication failed: Token has expired
+[27-Jul-2025 18:00:47 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 18:00:47 UTC] JWT Authentication failed: Token has expired
+[27-Jul-2025 20:05:29 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 20:05:29 UTC] JWT Authentication failed: Token has expired
+[27-Jul-2025 20:05:29 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 20:05:29 UTC] Auth operation: verify_token
+[27-Jul-2025 20:05:29 UTC] JWT Authentication failed: Token has expired
+[27-Jul-2025 20:05:29 UTC] API called with action: auth-refresh (Module: auth, Operation: refresh)
+[27-Jul-2025 20:05:29 UTC] Auth operation: refresh
+[27-Jul-2025 20:05:29 UTC] Token refresh successful for user: superadmin
+[27-Jul-2025 20:06:04 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[27-Jul-2025 20:06:04 UTC] Auth operation: login
+[27-Jul-2025 20:06:04 UTC] Login attempt - Username: 'superadmin'
+[27-Jul-2025 20:06:04 UTC] Authentication attempt for: superadmin
+[27-Jul-2025 20:06:04 UTC] User found: superadmin (ID: 38)
+[27-Jul-2025 20:06:04 UTC] Authentication successful for user: superadmin
+[27-Jul-2025 20:06:04 UTC] Login successful for user: superadmin (ID: 38)
+[27-Jul-2025 20:06:07 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 20:06:07 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 20:06:07 UTC] Auth operation: verify_token
+[27-Jul-2025 20:06:07 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 20:06:12 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 20:06:12 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 20:06:14 UTC] API called with action: cpu-get (Module: cpu, Operation: get)
+[27-Jul-2025 20:06:14 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 20:06:16 UTC] API called with action: cpu-get (Module: cpu, Operation: get)
+[27-Jul-2025 20:06:16 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 20:06:22 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 20:06:22 UTC] Auth operation: verify_token
+[27-Jul-2025 20:06:24 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[27-Jul-2025 20:06:24 UTC] Auth operation: verify_token
+[27-Jul-2025 20:06:24 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 20:06:24 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 20:06:24 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 20:06:24 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 20:06:29 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[27-Jul-2025 20:06:29 UTC] Authenticated user: superadmin (ID: 38)
+[27-Jul-2025 20:06:33 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[27-Jul-2025 20:06:33 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 00:41:49 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[28-Jul-2025 00:41:49 UTC] Auth operation: verify_token
+[28-Jul-2025 00:41:49 UTC] JWT Authentication failed: Token has expired
+[28-Jul-2025 00:41:56 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[28-Jul-2025 00:41:56 UTC] Auth operation: login
+[28-Jul-2025 00:41:56 UTC] Login attempt - Username: 'superadmin'
+[28-Jul-2025 00:41:56 UTC] Authentication attempt for: superadmin
+[28-Jul-2025 00:41:56 UTC] User found: superadmin (ID: 38)
+[28-Jul-2025 00:41:56 UTC] Authentication successful for user: superadmin
+[28-Jul-2025 00:41:57 UTC] Login successful for user: superadmin (ID: 38)
+[28-Jul-2025 00:42:00 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[28-Jul-2025 00:42:00 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[28-Jul-2025 00:42:00 UTC] Auth operation: verify_token
+[28-Jul-2025 00:42:00 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 00:42:05 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[28-Jul-2025 00:42:05 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 00:42:11 UTC] API called with action: cpu-get (Module: cpu, Operation: get)
+[28-Jul-2025 00:42:11 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 00:42:15 UTC] API called with action: cpu-get (Module: cpu, Operation: get)
+[28-Jul-2025 00:42:15 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 00:47:30 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[28-Jul-2025 00:47:30 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 00:47:30 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[28-Jul-2025 00:47:30 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 00:47:30 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[28-Jul-2025 00:47:30 UTC] Auth operation: verify_token
+[28-Jul-2025 00:47:32 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[28-Jul-2025 00:47:32 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 00:47:35 UTC] API called with action: auth-logout (Module: auth, Operation: logout)
+[28-Jul-2025 00:47:35 UTC] Auth operation: logout
+[28-Jul-2025 00:47:35 UTC] User logged out successfully
+[28-Jul-2025 00:47:42 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[28-Jul-2025 00:47:42 UTC] Auth operation: login
+[28-Jul-2025 00:47:42 UTC] Login attempt - Username: 'superadmin'
+[28-Jul-2025 00:47:42 UTC] Authentication attempt for: superadmin
+[28-Jul-2025 00:47:42 UTC] User found: superadmin (ID: 38)
+[28-Jul-2025 00:47:42 UTC] Authentication successful for user: superadmin
+[28-Jul-2025 00:47:42 UTC] Login successful for user: superadmin (ID: 38)
+[28-Jul-2025 00:47:44 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[28-Jul-2025 00:47:44 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 00:47:44 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[28-Jul-2025 00:47:44 UTC] Auth operation: verify_token
+[28-Jul-2025 00:47:47 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[28-Jul-2025 00:47:47 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 00:47:48 UTC] API called with action: cpu-get (Module: cpu, Operation: get)
+[28-Jul-2025 00:47:48 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 00:48:05 UTC] API called with action: cpu-update (Module: cpu, Operation: update)
+[28-Jul-2025 00:48:05 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 00:48:06 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[28-Jul-2025 00:48:06 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 00:48:06 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[28-Jul-2025 00:48:06 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 00:48:22 UTC] API called with action: ram-list (Module: ram, Operation: list)
+[28-Jul-2025 00:48:22 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 00:48:24 UTC] API called with action: ram-list (Module: ram, Operation: list)
+[28-Jul-2025 00:48:24 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 00:48:25 UTC] API called with action: storage-list (Module: storage, Operation: list)
+[28-Jul-2025 00:48:25 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 00:48:35 UTC] API called with action: motherboard-list (Module: motherboard, Operation: list)
+[28-Jul-2025 00:48:35 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 00:48:39 UTC] API called with action: motherboard-get (Module: motherboard, Operation: get)
+[28-Jul-2025 00:48:39 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 00:48:55 UTC] API called with action: motherboard-update (Module: motherboard, Operation: update)
+[28-Jul-2025 00:48:55 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 00:48:56 UTC] API called with action: motherboard-list (Module: motherboard, Operation: list)
+[28-Jul-2025 00:48:56 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 00:48:56 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[28-Jul-2025 00:48:56 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 00:49:06 UTC] API called with action: motherboard-list (Module: motherboard, Operation: list)
+[28-Jul-2025 00:49:06 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 00:57:15 UTC] API called with action: motherboard-list (Module: motherboard, Operation: list)
+[28-Jul-2025 00:57:15 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 00:57:17 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[28-Jul-2025 00:57:17 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 00:57:29 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[28-Jul-2025 00:57:29 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 00:57:32 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[28-Jul-2025 00:57:32 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 00:57:32 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[28-Jul-2025 00:57:32 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 00:57:32 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[28-Jul-2025 00:57:32 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 00:57:32 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[28-Jul-2025 00:57:32 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 00:57:32 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[28-Jul-2025 00:57:32 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 01:10:58 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[28-Jul-2025 01:10:58 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 01:21:57 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[28-Jul-2025 01:21:57 UTC] Auth operation: verify_token
+[28-Jul-2025 01:21:58 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[28-Jul-2025 01:21:58 UTC] Auth operation: verify_token
+[28-Jul-2025 01:21:58 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[28-Jul-2025 01:21:58 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 01:22:01 UTC] API called with action: auth-logout (Module: auth, Operation: logout)
+[28-Jul-2025 01:22:01 UTC] Auth operation: logout
+[28-Jul-2025 01:22:01 UTC] User logged out successfully
+[28-Jul-2025 01:23:43 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[28-Jul-2025 01:23:43 UTC] Auth operation: login
+[28-Jul-2025 01:23:43 UTC] Login attempt - Username: 'superadmin'
+[28-Jul-2025 01:23:43 UTC] Authentication attempt for: superadmin
+[28-Jul-2025 01:23:43 UTC] User found: superadmin (ID: 38)
+[28-Jul-2025 01:23:43 UTC] Authentication successful for user: superadmin
+[28-Jul-2025 01:23:43 UTC] Login successful for user: superadmin (ID: 38)
+[28-Jul-2025 01:23:46 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[28-Jul-2025 01:23:46 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[28-Jul-2025 01:23:46 UTC] Auth operation: verify_token
+[28-Jul-2025 01:23:46 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 01:23:51 UTC] API called with action: auth-logout (Module: auth, Operation: logout)
+[28-Jul-2025 01:23:51 UTC] Auth operation: logout
+[28-Jul-2025 01:23:51 UTC] User logged out successfully
+[28-Jul-2025 01:24:58 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[28-Jul-2025 01:24:58 UTC] Auth operation: login
+[28-Jul-2025 01:24:58 UTC] Login attempt - Username: 'superadmin'
+[28-Jul-2025 01:24:58 UTC] Authentication attempt for: superadmin
+[28-Jul-2025 01:24:58 UTC] User found: superadmin (ID: 38)
+[28-Jul-2025 01:24:58 UTC] Authentication successful for user: superadmin
+[28-Jul-2025 01:24:58 UTC] Login successful for user: superadmin (ID: 38)
+[28-Jul-2025 01:25:00 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[28-Jul-2025 01:25:00 UTC] Auth operation: verify_token
+[28-Jul-2025 01:25:01 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[28-Jul-2025 01:25:01 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 01:25:05 UTC] API called with action: auth-logout (Module: auth, Operation: logout)
+[28-Jul-2025 01:25:05 UTC] Auth operation: logout
+[28-Jul-2025 01:25:05 UTC] User logged out successfully
+[28-Jul-2025 01:25:18 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[28-Jul-2025 01:26:11 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[28-Jul-2025 01:26:27 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[28-Jul-2025 01:26:27 UTC] Auth operation: login
+[28-Jul-2025 01:26:27 UTC] Login attempt - Username: 'superadmin'
+[28-Jul-2025 01:26:27 UTC] Authentication attempt for: superadmin
+[28-Jul-2025 01:26:27 UTC] User found: superadmin (ID: 38)
+[28-Jul-2025 01:26:27 UTC] Authentication successful for user: superadmin
+[28-Jul-2025 01:26:27 UTC] Login successful for user: superadmin (ID: 38)
+[28-Jul-2025 01:26:30 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[28-Jul-2025 01:26:30 UTC] Auth operation: verify_token
+[28-Jul-2025 01:26:30 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[28-Jul-2025 01:26:31 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 01:26:35 UTC] API called with action: auth-logout (Module: auth, Operation: logout)
+[28-Jul-2025 01:26:35 UTC] Auth operation: logout
+[28-Jul-2025 01:26:35 UTC] User logged out successfully
+[28-Jul-2025 04:19:25 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[28-Jul-2025 04:19:25 UTC] Auth operation: login
+[28-Jul-2025 04:19:25 UTC] Login attempt - Username: 'superadmin'
+[28-Jul-2025 04:19:25 UTC] Authentication attempt for: superadmin
+[28-Jul-2025 04:19:25 UTC] User found: superadmin (ID: 38)
+[28-Jul-2025 04:19:25 UTC] Authentication successful for user: superadmin
+[28-Jul-2025 04:19:25 UTC] Login successful for user: superadmin (ID: 38)
+[28-Jul-2025 04:19:27 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[28-Jul-2025 04:19:27 UTC] Auth operation: verify_token
+[28-Jul-2025 04:19:27 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[28-Jul-2025 04:19:27 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 04:19:29 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[28-Jul-2025 04:19:29 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 04:19:30 UTC] API called with action: cpu-get (Module: cpu, Operation: get)
+[28-Jul-2025 04:19:30 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 04:20:26 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[28-Jul-2025 04:20:26 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 04:20:27 UTC] API called with action: cpu-get (Module: cpu, Operation: get)
+[28-Jul-2025 04:20:27 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 04:21:24 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[28-Jul-2025 04:21:24 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 04:21:46 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[28-Jul-2025 04:21:46 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 04:22:08 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[28-Jul-2025 04:22:08 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 04:42:33 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[28-Jul-2025 04:42:33 UTC] Auth operation: login
+[28-Jul-2025 04:42:33 UTC] Login attempt - Username: 'superadmin'
+[28-Jul-2025 04:42:33 UTC] Authentication attempt for: superadmin
+[28-Jul-2025 04:42:33 UTC] User found: superadmin (ID: 38)
+[28-Jul-2025 04:42:33 UTC] Authentication successful for user: superadmin
+[28-Jul-2025 04:42:33 UTC] Login successful for user: superadmin (ID: 38)
+[28-Jul-2025 04:42:36 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[28-Jul-2025 04:42:36 UTC] Auth operation: verify_token
+[28-Jul-2025 04:42:36 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[28-Jul-2025 04:42:36 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 04:42:37 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[28-Jul-2025 04:42:37 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 04:42:38 UTC] API called with action: cpu-get (Module: cpu, Operation: get)
+[28-Jul-2025 04:42:38 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 04:42:46 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[28-Jul-2025 04:42:46 UTC] Auth operation: verify_token
+[28-Jul-2025 04:42:49 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[28-Jul-2025 04:42:49 UTC] Auth operation: verify_token
+[28-Jul-2025 04:42:49 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[28-Jul-2025 04:42:49 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 04:42:49 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[28-Jul-2025 04:42:49 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 04:42:54 UTC] API called with action: auth-logout (Module: auth, Operation: logout)
+[28-Jul-2025 04:42:54 UTC] Auth operation: logout
+[28-Jul-2025 04:42:54 UTC] User logged out successfully
+[28-Jul-2025 04:43:39 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[28-Jul-2025 04:43:39 UTC] Auth operation: verify_token
+[28-Jul-2025 04:43:40 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[28-Jul-2025 04:43:40 UTC] Auth operation: verify_token
+[28-Jul-2025 04:43:40 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[28-Jul-2025 04:43:40 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 04:43:44 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[28-Jul-2025 04:43:44 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 04:43:46 UTC] API called with action: cpu-get (Module: cpu, Operation: get)
+[28-Jul-2025 04:43:46 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 04:44:06 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[28-Jul-2025 04:44:06 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 04:44:07 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[28-Jul-2025 04:44:07 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[28-Jul-2025 04:44:07 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 04:44:07 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 04:44:07 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[28-Jul-2025 04:44:07 UTC] Auth operation: verify_token
+[28-Jul-2025 04:44:18 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[28-Jul-2025 04:44:18 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 04:44:20 UTC] API called with action: auth-logout (Module: auth, Operation: logout)
+[28-Jul-2025 04:44:20 UTC] Auth operation: logout
+[28-Jul-2025 04:44:20 UTC] User logged out successfully
+[28-Jul-2025 04:44:31 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[28-Jul-2025 04:44:31 UTC] Auth operation: login
+[28-Jul-2025 04:44:31 UTC] Login attempt - Username: 'superadmin'
+[28-Jul-2025 04:44:31 UTC] Authentication attempt for: superadmin
+[28-Jul-2025 04:44:31 UTC] User found: superadmin (ID: 38)
+[28-Jul-2025 04:44:32 UTC] Authentication successful for user: superadmin
+[28-Jul-2025 04:44:32 UTC] Login successful for user: superadmin (ID: 38)
+[28-Jul-2025 04:44:34 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[28-Jul-2025 04:44:34 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 04:44:34 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[28-Jul-2025 04:44:34 UTC] Auth operation: verify_token
+[28-Jul-2025 04:44:35 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[28-Jul-2025 04:44:35 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 04:44:37 UTC] API called with action: cpu-get (Module: cpu, Operation: get)
+[28-Jul-2025 04:44:37 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 04:44:43 UTC] API called with action: cpu-update (Module: cpu, Operation: update)
+[28-Jul-2025 04:44:43 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 04:44:44 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[28-Jul-2025 04:44:44 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 04:44:44 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[28-Jul-2025 04:44:44 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 04:44:50 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[28-Jul-2025 04:44:50 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 06:51:11 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[28-Jul-2025 06:51:11 UTC] Auth operation: login
+[28-Jul-2025 06:51:11 UTC] Login attempt - Username: 'superadmin'
+[28-Jul-2025 06:51:11 UTC] Authentication attempt for: superadmin
+[28-Jul-2025 06:51:11 UTC] User found: superadmin (ID: 38)
+[28-Jul-2025 06:51:11 UTC] Authentication successful for user: superadmin
+[28-Jul-2025 06:51:11 UTC] Login successful for user: superadmin (ID: 38)
+[28-Jul-2025 06:51:15 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[28-Jul-2025 06:51:15 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 06:51:15 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[28-Jul-2025 06:51:15 UTC] Auth operation: verify_token
+[28-Jul-2025 06:51:21 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[28-Jul-2025 06:51:21 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 06:51:26 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[28-Jul-2025 06:51:26 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 06:51:34 UTC] API called with action: cpu-get (Module: cpu, Operation: get)
+[28-Jul-2025 06:51:34 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 06:51:38 UTC] API called with action: ram-list (Module: ram, Operation: list)
+[28-Jul-2025 06:51:38 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 06:51:41 UTC] API called with action: storage-list (Module: storage, Operation: list)
+[28-Jul-2025 06:51:41 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 06:51:44 UTC] API called with action: motherboard-list (Module: motherboard, Operation: list)
+[28-Jul-2025 06:51:44 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 06:51:46 UTC] API called with action: nic-list (Module: nic, Operation: list)
+[28-Jul-2025 06:51:46 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 06:51:47 UTC] API called with action: caddy-list (Module: caddy, Operation: list)
+[28-Jul-2025 06:51:47 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 06:51:49 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[28-Jul-2025 06:51:49 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 06:51:50 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[28-Jul-2025 06:51:50 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 06:51:53 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[28-Jul-2025 06:51:53 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[28-Jul-2025 06:51:53 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 06:51:53 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 06:51:53 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[28-Jul-2025 06:51:53 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 06:52:04 UTC] API called with action: caddy-list (Module: caddy, Operation: list)
+[28-Jul-2025 06:52:04 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 06:52:16 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[28-Jul-2025 06:52:16 UTC] Auth operation: verify_token
+[28-Jul-2025 06:52:37 UTC] API called with action: caddy-list (Module: caddy, Operation: list)
+[28-Jul-2025 06:52:37 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 06:52:38 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[28-Jul-2025 06:52:38 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 06:52:53 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[28-Jul-2025 06:52:54 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 06:55:56 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[28-Jul-2025 06:55:56 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 06:56:25 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[28-Jul-2025 06:56:25 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 06:56:27 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[28-Jul-2025 06:56:27 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 06:57:33 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[28-Jul-2025 06:57:33 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 06:57:37 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[28-Jul-2025 06:57:37 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 06:57:37 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[28-Jul-2025 06:57:37 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 06:57:37 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[28-Jul-2025 06:57:37 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 06:57:37 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[28-Jul-2025 06:57:37 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 06:57:37 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[28-Jul-2025 06:57:37 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 06:57:37 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[28-Jul-2025 06:57:37 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 06:57:37 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[28-Jul-2025 06:57:37 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 06:57:37 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[28-Jul-2025 06:57:37 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 06:57:37 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[28-Jul-2025 06:57:37 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 06:57:47 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[28-Jul-2025 06:57:47 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 06:57:51 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[28-Jul-2025 06:57:51 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 06:57:53 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[28-Jul-2025 06:57:53 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 06:57:56 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[28-Jul-2025 06:57:56 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 06:57:58 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[28-Jul-2025 06:57:58 UTC] Auth operation: verify_token
+[28-Jul-2025 06:59:25 UTC] API called with action: cpu-add (Module: cpu, Operation: add)
+[28-Jul-2025 06:59:25 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 06:59:25 UTC] Inserting cpu data: {"UUID":"5f67a7a1-842d-4137-b1b6-fde29f5d49e7","SerialNumber":"fhdjfhskjfhsjkdf","Status":"2","ServerUUID":"In Use","Location":"Noida","RackPosition":"Rack B4","PurchaseDate":"2025-07-16","WarrantyEndDate":"2025-08-08","Flag":"Backup","Notes":"Brand: Intel, Series: Xeon Scalable, Model: Platinum 8480+"}
+[28-Jul-2025 06:59:25 UTC] Successfully added cpu component with ID: 18
+[28-Jul-2025 06:59:28 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[28-Jul-2025 06:59:28 UTC] Auth operation: verify_token
+[28-Jul-2025 06:59:28 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[28-Jul-2025 06:59:28 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 06:59:28 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[28-Jul-2025 06:59:28 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 06:59:35 UTC] API called with action: cpu-delete (Module: cpu, Operation: delete)
+[28-Jul-2025 06:59:35 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 06:59:36 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[28-Jul-2025 06:59:36 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 06:59:36 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[28-Jul-2025 06:59:36 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 06:59:42 UTC] API called with action: cpu-get (Module: cpu, Operation: get)
+[28-Jul-2025 06:59:42 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 06:59:54 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[28-Jul-2025 06:59:54 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 07:00:29 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[28-Jul-2025 07:00:29 UTC] Authenticated user: superadmin (ID: 38)
+[28-Jul-2025 14:44:32 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[28-Jul-2025 14:44:32 UTC] JWT Authentication failed: Token has expired
+[28-Jul-2025 14:44:32 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[28-Jul-2025 14:44:32 UTC] JWT Authentication failed: Token has expired
+[29-Jul-2025 03:21:02 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[29-Jul-2025 03:21:02 UTC] Auth operation: login
+[29-Jul-2025 03:21:02 UTC] Login attempt - Username: 'superadmin'
+[29-Jul-2025 03:21:02 UTC] Authentication attempt for: superadmin
+[29-Jul-2025 03:21:02 UTC] User found: superadmin (ID: 38)
+[29-Jul-2025 03:21:02 UTC] Authentication successful for user: superadmin
+[29-Jul-2025 03:21:02 UTC] Login successful for user: superadmin (ID: 38)
+[29-Jul-2025 03:21:21 UTC] API called with action: acl-get_all_roles (Module: acl, Operation: get_all_roles)
+[29-Jul-2025 03:21:21 UTC] Authenticated user: superadmin (ID: 38)
+[29-Jul-2025 03:22:24 UTC] API called with action: acl-get_user_permissions (Module: acl, Operation: get_user_permissions)
+[29-Jul-2025 03:22:24 UTC] Authenticated user: superadmin (ID: 38)
+[29-Jul-2025 03:22:59 UTC] API called with action: acl-get_user_permissions (Module: acl, Operation: get_user_permissions)
+[29-Jul-2025 03:23:00 UTC] Authenticated user: superadmin (ID: 38)
+[29-Jul-2025 03:23:32 UTC] API called with action: acl-assign_role (Module: acl, Operation: assign_role)
+[29-Jul-2025 03:23:32 UTC] Authenticated user: superadmin (ID: 38)
+[29-Jul-2025 03:38:57 UTC] API called with action: users-create (Module: users, Operation: create)
+[29-Jul-2025 03:38:57 UTC] Authenticated user: superadmin (ID: 38)
+[29-Jul-2025 03:41:02 UTC] API called with action: roles-create (Module: roles, Operation: create)
+[29-Jul-2025 03:41:02 UTC] Authenticated user: superadmin (ID: 38)
+[29-Jul-2025 03:41:02 UTC] Invalid module requested: roles
+[29-Jul-2025 03:45:59 UTC] PHP Fatal error:  Uncaught Error: Call to undefined function getACL() in /home/shubhams/public_html/bdc_ims/api/acl/roles_api.php:23
+Stack trace:
+#0 /home/shubhams/public_html/bdc_ims/api/api.php(57): require_once()
+#1 {main}
+  thrown in /home/shubhams/public_html/bdc_ims/api/acl/roles_api.php on line 23
+[29-Jul-2025 03:46:28 UTC] API called with action: roles-create (Module: roles, Operation: create)
+[29-Jul-2025 03:46:28 UTC] Authenticated user: superadmin (ID: 38)
+[29-Jul-2025 03:46:28 UTC] Invalid module requested: roles
+[29-Jul-2025 03:54:58 UTC] API called with action: roles-create (Module: roles, Operation: create)
+[29-Jul-2025 03:54:58 UTC] Authenticated user: superadmin (ID: 38)
+[29-Jul-2025 03:55:14 UTC] API called with action: acl-get_all_roles (Module: acl, Operation: get_all_roles)
+[29-Jul-2025 03:55:14 UTC] Authenticated user: superadmin (ID: 38)
+[29-Jul-2025 03:57:25 UTC] API called with action: permissions-get_all (Module: permissions, Operation: get_all)
+[29-Jul-2025 03:57:25 UTC] Authenticated user: superadmin (ID: 38)
+[29-Jul-2025 03:57:25 UTC] Uncaught exception: Call to undefined function getACL()
+[29-Jul-2025 04:03:05 UTC] API called with action: permissions-get_all (Module: permissions, Operation: get_all)
+[29-Jul-2025 04:03:05 UTC] Authenticated user: superadmin (ID: 38)
+[29-Jul-2025 04:05:31 UTC] API called with action: roles-update_permissions (Module: roles, Operation: update_permissions)
+[29-Jul-2025 04:05:31 UTC] Authenticated user: superadmin (ID: 38)
+[29-Jul-2025 04:06:17 UTC] API called with action: roles-update_permissions (Module: roles, Operation: update_permissions)
+[29-Jul-2025 04:06:17 UTC] Authenticated user: superadmin (ID: 38)
+[29-Jul-2025 04:06:32 UTC] API called with action: acl-get_all_roles (Module: acl, Operation: get_all_roles)
+[29-Jul-2025 04:06:32 UTC] Authenticated user: superadmin (ID: 38)
+[29-Jul-2025 04:13:49 UTC] API called with action: users-assign_role (Module: users, Operation: assign_role)
+[29-Jul-2025 04:13:49 UTC] Authenticated user: superadmin (ID: 38)
+[29-Jul-2025 04:17:03 UTC] API called with action: acl-assign_role (Module: acl, Operation: assign_role)
+[29-Jul-2025 04:17:03 UTC] Authenticated user: superadmin (ID: 38)
+[29-Jul-2025 04:17:54 UTC] API called with action: acl-get_all_roles (Module: acl, Operation: get_all_roles)
+[29-Jul-2025 04:17:54 UTC] Authenticated user: superadmin (ID: 38)
+[29-Jul-2025 04:18:36 UTC] API called with action: acl-assign_role (Module: acl, Operation: assign_role)
+[29-Jul-2025 04:18:36 UTC] Authenticated user: superadmin (ID: 38)
+[29-Jul-2025 04:18:48 UTC] API called with action: acl-remove_role (Module: acl, Operation: remove_role)
+[29-Jul-2025 04:18:48 UTC] Authenticated user: superadmin (ID: 38)
+[29-Jul-2025 04:18:55 UTC] API called with action: acl-get_all_roles (Module: acl, Operation: get_all_roles)
+[29-Jul-2025 04:18:55 UTC] Authenticated user: superadmin (ID: 38)
+[29-Jul-2025 04:20:48 UTC] API called with action: acl-check_permission (Module: acl, Operation: check_permission)
+[29-Jul-2025 04:20:48 UTC] Authenticated user: superadmin (ID: 38)
+[29-Jul-2025 04:21:23 UTC] API called with action: acl-check_permission (Module: acl, Operation: check_permission)
+[29-Jul-2025 04:21:23 UTC] JWT Authentication failed: Token has expired
+[29-Jul-2025 04:21:32 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[29-Jul-2025 04:21:32 UTC] Auth operation: login
+[29-Jul-2025 04:21:32 UTC] Login attempt - Username: 'superadmin'
+[29-Jul-2025 04:21:32 UTC] Authentication attempt for: superadmin
+[29-Jul-2025 04:21:32 UTC] User found: superadmin (ID: 38)
+[29-Jul-2025 04:21:32 UTC] Authentication successful for user: superadmin
+[29-Jul-2025 04:21:32 UTC] Login successful for user: superadmin (ID: 38)
+[29-Jul-2025 04:21:37 UTC] API called with action: acl-check_permission (Module: acl, Operation: check_permission)
+[29-Jul-2025 04:21:37 UTC] JWT Authentication failed: Token has expired
+[29-Jul-2025 04:22:21 UTC] API called with action: acl-check_permission (Module: acl, Operation: check_permission)
+[29-Jul-2025 04:22:21 UTC] Authenticated user: superadmin (ID: 38)
+[29-Jul-2025 04:23:48 UTC] API called with action: permissions-search (Module: permissions, Operation: search)
+[29-Jul-2025 04:23:48 UTC] Authenticated user: superadmin (ID: 38)
+[29-Jul-2025 04:25:01 UTC] API called with action: roles-get (Module: roles, Operation: get)
+[29-Jul-2025 04:25:01 UTC] Authenticated user: superadmin (ID: 38)
+[29-Jul-2025 04:25:18 UTC] API called with action: roles-get (Module: roles, Operation: get)
+[29-Jul-2025 04:25:18 UTC] Authenticated user: superadmin (ID: 38)
+[29-Jul-2025 04:26:07 UTC] API called with action: roles-get (Module: roles, Operation: get)
+[29-Jul-2025 04:26:07 UTC] Authenticated user: superadmin (ID: 38)
+[29-Jul-2025 04:27:40 UTC] API called with action: roles-update (Module: roles, Operation: update)
+[29-Jul-2025 04:27:40 UTC] Authenticated user: superadmin (ID: 38)
+[29-Jul-2025 04:28:00 UTC] API called with action: acl-get_all_roles (Module: acl, Operation: get_all_roles)
+[29-Jul-2025 04:28:01 UTC] Authenticated user: superadmin (ID: 38)
+[29-Jul-2025 04:36:09 UTC] API called with action: search-components (Module: search, Operation: components)
+[29-Jul-2025 04:36:09 UTC] Authenticated user: superadmin (ID: 38)
+[29-Jul-2025 04:38:13 UTC] API called with action: roles-update (Module: roles, Operation: update)
+[29-Jul-2025 04:38:13 UTC] Authenticated user: superadmin (ID: 38)
+[29-Jul-2025 04:38:38 UTC] API called with action: search-components (Module: search, Operation: components)
+[29-Jul-2025 04:38:38 UTC] Authenticated user: superadmin (ID: 38)
+[29-Jul-2025 12:37:35 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[29-Jul-2025 12:37:35 UTC] Auth operation: verify_token
+[29-Jul-2025 12:37:35 UTC] JWT Authentication failed: Token has expired
+[29-Jul-2025 13:09:12 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[29-Jul-2025 13:09:12 UTC] Auth operation: login
+[29-Jul-2025 13:09:12 UTC] Login attempt - Username: 'superadmin'
+[29-Jul-2025 13:09:12 UTC] Authentication attempt for: superadmin
+[29-Jul-2025 13:09:12 UTC] User found: superadmin (ID: 38)
+[29-Jul-2025 13:09:12 UTC] Authentication successful for user: superadmin
+[29-Jul-2025 13:09:12 UTC] Login successful for user: superadmin (ID: 38)
+[29-Jul-2025 13:09:15 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[29-Jul-2025 13:09:15 UTC] Authenticated user: superadmin (ID: 38)
+[29-Jul-2025 13:09:15 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[29-Jul-2025 13:09:15 UTC] Auth operation: verify_token
+[29-Jul-2025 13:09:51 UTC] API called with action: nic-list (Module: nic, Operation: list)
+[29-Jul-2025 13:09:51 UTC] Authenticated user: superadmin (ID: 38)
+[29-Jul-2025 13:10:05 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[29-Jul-2025 13:10:05 UTC] Authenticated user: superadmin (ID: 38)
+[29-Jul-2025 13:11:56 UTC] API called with action: ram-list (Module: ram, Operation: list)
+[29-Jul-2025 13:11:56 UTC] Authenticated user: superadmin (ID: 38)
+[29-Jul-2025 13:11:58 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[29-Jul-2025 13:11:58 UTC] Authenticated user: superadmin (ID: 38)
+[29-Jul-2025 13:12:06 UTC] API called with action: caddy-list (Module: caddy, Operation: list)
+[29-Jul-2025 13:12:06 UTC] Authenticated user: superadmin (ID: 38)
+[29-Jul-2025 13:15:37 UTC] API called with action: ram-list (Module: ram, Operation: list)
+[29-Jul-2025 13:15:37 UTC] Authenticated user: superadmin (ID: 38)
+[29-Jul-2025 13:19:07 UTC] API called with action: ram-list (Module: ram, Operation: list)
+[29-Jul-2025 13:19:07 UTC] Authenticated user: superadmin (ID: 38)
+[29-Jul-2025 13:21:33 UTC] API called with action: ram-list (Module: ram, Operation: list)
+[29-Jul-2025 13:21:33 UTC] Authenticated user: superadmin (ID: 38)
+[29-Jul-2025 13:22:10 UTC] API called with action: ram-list (Module: ram, Operation: list)
+[29-Jul-2025 13:22:10 UTC] Authenticated user: superadmin (ID: 38)
+[29-Jul-2025 13:22:55 UTC] API called with action: ram-list (Module: ram, Operation: list)
+[29-Jul-2025 13:22:55 UTC] Authenticated user: superadmin (ID: 38)
+[29-Jul-2025 13:23:40 UTC] API called with action: auth-logout (Module: auth, Operation: logout)
+[29-Jul-2025 13:23:40 UTC] Auth operation: logout
+[29-Jul-2025 13:23:40 UTC] User logged out successfully
+[30-Jul-2025 00:39:53 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[30-Jul-2025 00:39:53 UTC] Auth operation: login
+[30-Jul-2025 00:39:53 UTC] Login attempt - Username: 'superadmin'
+[30-Jul-2025 00:39:53 UTC] Authentication attempt for: superadmin
+[30-Jul-2025 00:39:53 UTC] User found: superadmin (ID: 38)
+[30-Jul-2025 00:39:53 UTC] Authentication successful for user: superadmin
+[30-Jul-2025 00:39:53 UTC] Login successful for user: superadmin (ID: 38)
+[30-Jul-2025 00:39:55 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[30-Jul-2025 00:39:55 UTC] Auth operation: verify_token
+[30-Jul-2025 00:39:55 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[30-Jul-2025 00:39:55 UTC] Authenticated user: superadmin (ID: 38)
+[30-Jul-2025 00:40:26 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[30-Jul-2025 00:40:26 UTC] Authenticated user: superadmin (ID: 38)
+[30-Jul-2025 00:43:52 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[30-Jul-2025 00:43:52 UTC] Authenticated user: superadmin (ID: 38)
+[30-Jul-2025 00:52:50 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[30-Jul-2025 00:52:50 UTC] Authenticated user: superadmin (ID: 38)
+[30-Jul-2025 00:56:58 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[30-Jul-2025 00:56:58 UTC] Authenticated user: superadmin (ID: 38)
+[30-Jul-2025 01:07:53 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[30-Jul-2025 01:07:53 UTC] Auth operation: verify_token
+[30-Jul-2025 01:07:53 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[30-Jul-2025 01:07:53 UTC] Authenticated user: superadmin (ID: 38)
+[30-Jul-2025 01:07:55 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[30-Jul-2025 01:07:55 UTC] Auth operation: verify_token
+[30-Jul-2025 01:07:55 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[30-Jul-2025 01:07:55 UTC] Authenticated user: superadmin (ID: 38)
+[30-Jul-2025 01:08:18 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[30-Jul-2025 01:08:18 UTC] Auth operation: verify_token
+[30-Jul-2025 01:08:18 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[30-Jul-2025 01:08:18 UTC] Authenticated user: superadmin (ID: 38)
+[30-Jul-2025 01:08:19 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[30-Jul-2025 01:08:19 UTC] Auth operation: verify_token
+[30-Jul-2025 01:08:19 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[30-Jul-2025 01:08:19 UTC] Authenticated user: superadmin (ID: 38)
+[30-Jul-2025 01:10:59 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[30-Jul-2025 01:10:59 UTC] Authenticated user: superadmin (ID: 38)
+[30-Jul-2025 01:10:59 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[30-Jul-2025 01:10:59 UTC] Auth operation: verify_token
+[30-Jul-2025 01:11:01 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[30-Jul-2025 01:11:01 UTC] Auth operation: verify_token
+[30-Jul-2025 01:11:01 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[30-Jul-2025 01:11:01 UTC] Authenticated user: superadmin (ID: 38)
+[30-Jul-2025 01:11:45 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[30-Jul-2025 01:11:45 UTC] Auth operation: verify_token
+[30-Jul-2025 01:11:46 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[30-Jul-2025 01:11:46 UTC] Auth operation: verify_token
+[30-Jul-2025 01:11:46 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[30-Jul-2025 01:11:46 UTC] Authenticated user: superadmin (ID: 38)
+[30-Jul-2025 01:12:41 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[30-Jul-2025 01:12:41 UTC] Auth operation: verify_token
+[30-Jul-2025 01:12:41 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[30-Jul-2025 01:12:41 UTC] Auth operation: verify_token
+[30-Jul-2025 01:12:41 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[30-Jul-2025 01:12:41 UTC] Authenticated user: superadmin (ID: 38)
+[30-Jul-2025 01:12:47 UTC] API called with action: auth-logout (Module: auth, Operation: logout)
+[30-Jul-2025 01:12:47 UTC] Auth operation: logout
+[30-Jul-2025 01:12:47 UTC] User logged out successfully
+[30-Jul-2025 01:13:00 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[30-Jul-2025 01:13:00 UTC] Auth operation: login
+[30-Jul-2025 01:13:00 UTC] Login attempt - Username: 'superadmin'
+[30-Jul-2025 01:13:00 UTC] Authentication attempt for: superadmin
+[30-Jul-2025 01:13:00 UTC] User found: superadmin (ID: 38)
+[30-Jul-2025 01:13:00 UTC] Authentication successful for user: superadmin
+[30-Jul-2025 01:13:00 UTC] Login successful for user: superadmin (ID: 38)
+[30-Jul-2025 01:13:03 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[30-Jul-2025 01:13:03 UTC] Authenticated user: superadmin (ID: 38)
+[30-Jul-2025 01:13:03 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[30-Jul-2025 01:13:03 UTC] Auth operation: verify_token
+[30-Jul-2025 01:13:07 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[30-Jul-2025 01:13:07 UTC] Authenticated user: superadmin (ID: 38)
+[30-Jul-2025 01:13:14 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[30-Jul-2025 01:13:14 UTC] Authenticated user: superadmin (ID: 38)
+[30-Jul-2025 01:13:14 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[30-Jul-2025 01:13:14 UTC] Authenticated user: superadmin (ID: 38)
+[30-Jul-2025 01:13:15 UTC] API called with action: ram-list (Module: ram, Operation: list)
+[30-Jul-2025 01:13:15 UTC] Authenticated user: superadmin (ID: 38)
+[30-Jul-2025 01:13:16 UTC] API called with action: storage-list (Module: storage, Operation: list)
+[30-Jul-2025 01:13:16 UTC] Authenticated user: superadmin (ID: 38)
+[30-Jul-2025 01:13:17 UTC] API called with action: motherboard-list (Module: motherboard, Operation: list)
+[30-Jul-2025 01:13:17 UTC] Authenticated user: superadmin (ID: 38)
+[30-Jul-2025 01:13:18 UTC] API called with action: nic-list (Module: nic, Operation: list)
+[30-Jul-2025 01:13:18 UTC] Authenticated user: superadmin (ID: 38)
+[30-Jul-2025 01:13:19 UTC] API called with action: caddy-list (Module: caddy, Operation: list)
+[30-Jul-2025 01:13:19 UTC] Authenticated user: superadmin (ID: 38)
+[30-Jul-2025 01:13:20 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[30-Jul-2025 01:13:20 UTC] Authenticated user: superadmin (ID: 38)
+[30-Jul-2025 01:13:23 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[30-Jul-2025 01:13:23 UTC] Authenticated user: superadmin (ID: 38)
+[30-Jul-2025 01:13:23 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[30-Jul-2025 01:13:23 UTC] Authenticated user: superadmin (ID: 38)
+[30-Jul-2025 01:13:23 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[30-Jul-2025 01:13:23 UTC] Authenticated user: superadmin (ID: 38)
+[30-Jul-2025 01:13:25 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[30-Jul-2025 01:13:25 UTC] Authenticated user: superadmin (ID: 38)
+[30-Jul-2025 01:13:26 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[30-Jul-2025 01:13:26 UTC] Authenticated user: superadmin (ID: 38)
+[30-Jul-2025 01:13:45 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[30-Jul-2025 01:13:45 UTC] Authenticated user: superadmin (ID: 38)
+[30-Jul-2025 01:13:45 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[30-Jul-2025 01:13:45 UTC] Authenticated user: superadmin (ID: 38)
+[30-Jul-2025 05:07:13 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[30-Jul-2025 05:07:13 UTC] JWT Authentication failed: Token has expired
+[30-Jul-2025 05:07:13 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[30-Jul-2025 05:07:13 UTC] JWT Authentication failed: Token has expired
+[30-Jul-2025 05:07:22 UTC] API called with action: auth-logout (Module: auth, Operation: logout)
+[30-Jul-2025 05:07:22 UTC] Auth operation: logout
+[30-Jul-2025 05:07:22 UTC] JWT Authentication failed: Token has expired
+[30-Jul-2025 05:07:22 UTC] User logged out successfully
+[30-Jul-2025 12:31:08 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[31-Jul-2025 16:32:55 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[31-Jul-2025 16:32:55 UTC] Auth operation: login
+[31-Jul-2025 16:32:55 UTC] Login attempt - Username: 'superadmin'
+[31-Jul-2025 16:32:55 UTC] Authentication attempt for: superadmin
+[31-Jul-2025 16:32:55 UTC] User found: superadmin (ID: 38)
+[31-Jul-2025 16:32:55 UTC] Authentication successful for user: superadmin
+[31-Jul-2025 16:32:55 UTC] Login successful for user: superadmin (ID: 38)
+[31-Jul-2025 16:32:57 UTC] API called with action: auth-verify_token (Module: auth, Operation: verify_token)
+[31-Jul-2025 16:32:57 UTC] Auth operation: verify_token
+[31-Jul-2025 16:32:57 UTC] API called with action: dashboard-get_data (Module: dashboard, Operation: get_data)
+[31-Jul-2025 16:32:57 UTC] Authenticated user: superadmin (ID: 38)
+[31-Jul-2025 16:33:02 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[31-Jul-2025 16:33:02 UTC] Authenticated user: superadmin (ID: 38)
+[31-Jul-2025 16:34:08 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[31-Jul-2025 16:34:08 UTC] Authenticated user: superadmin (ID: 38)
+[31-Jul-2025 16:46:00 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[31-Jul-2025 16:46:00 UTC] Authenticated user: superadmin (ID: 38)
+[31-Jul-2025 16:46:04 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[31-Jul-2025 16:46:04 UTC] Authenticated user: superadmin (ID: 38)
+[31-Jul-2025 17:00:16 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[31-Jul-2025 17:00:16 UTC] Authenticated user: superadmin (ID: 38)
+[31-Jul-2025 17:00:18 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[31-Jul-2025 17:00:18 UTC] Authenticated user: superadmin (ID: 38)
+[31-Jul-2025 17:00:19 UTC] API called with action: auth-logout (Module: auth, Operation: logout)
+[31-Jul-2025 17:00:19 UTC] Auth operation: logout
+[31-Jul-2025 17:00:19 UTC] User logged out successfully

@@ -1,6 +1,6 @@
 <?php
 /**
- * Complete BaseFunctions.php with JWT Authentication and ACL System
+ * Complete BaseFunctions.php with JWT Authentication, ACL System, and Server Management
  * File: includes/BaseFunctions.php
  */
 
@@ -482,10 +482,125 @@ if (!function_exists('initializeACLSystem')) {
             $acl->initializeDefaultPermissions();
             $acl->initializeDefaultRoles();
             
+            // Add server-specific permissions if they don't exist
+            initializeServerPermissions($pdo);
+            
             return true;
         } catch (Exception $e) {
             error_log("Error initializing ACL system: " . $e->getMessage());
             return false;
+        }
+    }
+}
+
+/**
+ * Initialize server-specific permissions
+ */
+if (!function_exists('initializeServerPermissions')) {
+    function initializeServerPermissions($pdo) {
+        try {
+            // Server management permissions
+            $serverPermissions = [
+                ['server.view', 'View Server Configurations', 'View server configuration details', 'server_management'],
+                ['server.create', 'Create Server Configurations', 'Create new server configurations', 'server_management'],
+                ['server.edit', 'Edit Server Configurations', 'Modify existing server configurations', 'server_management'],
+                ['server.delete', 'Delete Server Configurations', 'Delete server configurations', 'server_management'],
+                ['server.view_all', 'View All Server Configurations', 'View server configurations created by other users', 'server_management'],
+                ['server.delete_all', 'Delete Any Server Configuration', 'Delete server configurations created by other users', 'server_management'],
+                ['server.view_statistics', 'View Server Statistics', 'View server configuration statistics and reports', 'server_management'],
+                
+                // Compatibility permissions
+                ['compatibility.check', 'Check Component Compatibility', 'Run compatibility checks between components', 'compatibility'],
+                ['compatibility.view_statistics', 'View Compatibility Statistics', 'View compatibility check statistics', 'compatibility'],
+                ['compatibility.manage_rules', 'Manage Compatibility Rules', 'Create and modify compatibility rules', 'compatibility']
+            ];
+            
+            foreach ($serverPermissions as $permission) {
+                $stmt = $pdo->prepare("
+                    INSERT IGNORE INTO permissions (name, display_name, description, category, is_basic) 
+                    VALUES (?, ?, ?, ?, 0)
+                ");
+                $stmt->execute($permission);
+            }
+            
+            // Assign server permissions to existing roles
+            assignServerPermissionsToRoles($pdo);
+            
+        } catch (Exception $e) {
+            error_log("Error initializing server permissions: " . $e->getMessage());
+        }
+    }
+}
+
+/**
+ * Assign server permissions to existing roles
+ */
+if (!function_exists('assignServerPermissionsToRoles')) {
+    function assignServerPermissionsToRoles($pdo) {
+        try {
+            // Super Admin gets all permissions
+            $stmt = $pdo->prepare("
+                INSERT IGNORE INTO role_permissions (role_id, permission_id, granted) 
+                SELECT 1, p.id, 1 FROM permissions p WHERE p.name LIKE 'server.%' OR p.name LIKE 'compatibility.%'
+            ");
+            $stmt->execute();
+            
+            // Admin gets most permissions
+            $adminPermissions = [
+                'server.view', 'server.create', 'server.edit', 'server.delete', 'server.view_statistics',
+                'compatibility.check', 'compatibility.view_statistics'
+            ];
+            
+            foreach ($adminPermissions as $permission) {
+                $stmt = $pdo->prepare("
+                    INSERT IGNORE INTO role_permissions (role_id, permission_id, granted) 
+                    SELECT 2, p.id, 1 FROM permissions p WHERE p.name = ?
+                ");
+                $stmt->execute([$permission]);
+            }
+            
+            // Manager gets basic server permissions
+            $managerPermissions = [
+                'server.view', 'server.create', 'server.edit', 'server.view_statistics',
+                'compatibility.check'
+            ];
+            
+            foreach ($managerPermissions as $permission) {
+                $stmt = $pdo->prepare("
+                    INSERT IGNORE INTO role_permissions (role_id, permission_id, granted) 
+                    SELECT 3, p.id, 1 FROM permissions p WHERE p.name = ?
+                ");
+                $stmt->execute([$permission]);
+            }
+            
+            // Technician gets basic permissions
+            $techPermissions = [
+                'server.view', 'server.create', 'compatibility.check'
+            ];
+            
+            foreach ($techPermissions as $permission) {
+                $stmt = $pdo->prepare("
+                    INSERT IGNORE INTO role_permissions (role_id, permission_id, granted) 
+                    SELECT 4, p.id, 1 FROM permissions p WHERE p.name = ?
+                ");
+                $stmt->execute([$permission]);
+            }
+            
+            // Viewer gets read-only permissions
+            $viewerPermissions = [
+                'server.view', 'compatibility.check'
+            ];
+            
+            foreach ($viewerPermissions as $permission) {
+                $stmt = $pdo->prepare("
+                    INSERT IGNORE INTO role_permissions (role_id, permission_id, granted) 
+                    SELECT 5, p.id, 1 FROM permissions p WHERE p.name = ?
+                ");
+                $stmt->execute([$permission]);
+            }
+            
+        } catch (Exception $e) {
+            error_log("Error assigning server permissions to roles: " . $e->getMessage());
         }
     }
 }
@@ -558,7 +673,7 @@ if (!function_exists('getUserInfo')) {
 }
 
 /**
- * Get system statistics with permission-aware data
+ * Get system statistics with permission-aware data and server information
  */
 if (!function_exists('getSystemStats')) {
     function getSystemStats($pdo) {
@@ -619,11 +734,114 @@ if (!function_exists('getSystemStats')) {
                 $stats['users'] = ['total' => 0];
             }
             
+            // Add server configuration statistics if user has permission
+            if (hasPermission($pdo, 'server.view_statistics')) {
+                $stats['server_configurations'] = getServerConfigurationStatsSummary($pdo);
+            }
+            
+            // Add compatibility statistics if user has permission
+            if (hasPermission($pdo, 'compatibility.view_statistics')) {
+                $stats['compatibility'] = getCompatibilityStatsSummary($pdo);
+            }
+            
         } catch (PDOException $e) {
             error_log("Error getting system stats: " . $e->getMessage());
         }
         
         return $stats;
+    }
+}
+
+/**
+ * Get server configuration statistics summary
+ */
+if (!function_exists('getServerConfigurationStatsSummary')) {
+    function getServerConfigurationStatsSummary($pdo) {
+        try {
+            // Check if server_configurations table exists
+            $stmt = $pdo->query("SHOW TABLES LIKE 'server_configurations'");
+            if (!$stmt->fetch()) {
+                return ['total' => 0, 'note' => 'Server configuration system not initialized'];
+            }
+            
+            $stmt = $pdo->prepare("
+                SELECT 
+                    COUNT(*) as total,
+                    SUM(CASE WHEN configuration_status = 0 THEN 1 ELSE 0 END) as draft,
+                    SUM(CASE WHEN configuration_status = 1 THEN 1 ELSE 0 END) as validated,
+                    SUM(CASE WHEN configuration_status = 2 THEN 1 ELSE 0 END) as built,
+                    SUM(CASE WHEN configuration_status = 3 THEN 1 ELSE 0 END) as deployed,
+                    AVG(compatibility_score) as avg_compatibility_score
+                FROM server_configurations
+            ");
+            $stmt->execute();
+            $stats = $stmt->fetch(PDO::FETCH_ASSOC);
+            
+            // Recent activity
+            $stmt = $pdo->prepare("
+                SELECT COUNT(*) as recent_count 
+                FROM server_configurations 
+                WHERE created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+            ");
+            $stmt->execute();
+            $recentActivity = $stmt->fetch(PDO::FETCH_ASSOC);
+            
+            return [
+                'total' => (int)$stats['total'],
+                'by_status' => [
+                    'draft' => (int)$stats['draft'],
+                    'validated' => (int)$stats['validated'],
+                    'built' => (int)$stats['built'],
+                    'deployed' => (int)$stats['deployed']
+                ],
+                'average_compatibility_score' => round((float)$stats['avg_compatibility_score'], 2),
+                'recent_activity' => (int)$recentActivity['recent_count']
+            ];
+            
+        } catch (Exception $e) {
+            error_log("Error getting server configuration stats: " . $e->getMessage());
+            return ['total' => 0, 'error' => 'Failed to retrieve server statistics'];
+        }
+    }
+}
+
+/**
+ * Get compatibility statistics summary
+ */
+if (!function_exists('getCompatibilityStatsSummary')) {
+    function getCompatibilityStatsSummary($pdo) {
+        try {
+            // Check if compatibility_log table exists
+            $stmt = $pdo->query("SHOW TABLES LIKE 'compatibility_log'");
+            if (!$stmt->fetch()) {
+                return ['total_checks' => 0, 'note' => 'Compatibility system not initialized'];
+            }
+            
+            $stmt = $pdo->prepare("
+                SELECT 
+                    COUNT(*) as total_checks,
+                    SUM(CASE WHEN compatibility_result = 1 THEN 1 ELSE 0 END) as successful_checks,
+                    AVG(execution_time_ms) as avg_execution_time
+                FROM compatibility_log 
+                WHERE created_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)
+            ");
+            $stmt->execute();
+            $stats = $stmt->fetch(PDO::FETCH_ASSOC);
+            
+            $successRate = $stats['total_checks'] > 0 ? 
+                ($stats['successful_checks'] / $stats['total_checks']) * 100 : 0;
+            
+            return [
+                'total_checks_24h' => (int)$stats['total_checks'],
+                'successful_checks_24h' => (int)$stats['successful_checks'],
+                'success_rate_24h' => round($successRate, 1),
+                'avg_execution_time_ms' => round((float)$stats['avg_execution_time'], 2)
+            ];
+            
+        } catch (Exception $e) {
+            error_log("Error getting compatibility stats: " . $e->getMessage());
+            return ['total_checks' => 0, 'error' => 'Failed to retrieve compatibility statistics'];
+        }
     }
 }
 
@@ -700,7 +918,7 @@ if (!function_exists('logoutUser')) {
 }
 
 /**
- * Global search with permission filtering
+ * Global search with permission filtering and server configuration support
  */
 if (!function_exists('performGlobalSearch')) {
     function performGlobalSearch($pdo, $query, $componentType = 'all', $limit = 20) {
@@ -762,6 +980,41 @@ if (!function_exists('performGlobalSearch')) {
             }
         }
         
+        // Also search server configurations if user has permission
+        if (hasPermission($pdo, 'server.view')) {
+            try {
+                $stmt = $pdo->query("SHOW TABLES LIKE 'server_configurations'");
+                if ($stmt->fetch()) {
+                    $serverQuery = "
+                        SELECT 
+                            id,
+                            config_uuid as UUID,
+                            config_name as SerialNumber,
+                            configuration_status as Status,
+                            'server_configuration' as component_type,
+                            config_description as Notes,
+                            created_at as CreatedAt
+                        FROM server_configurations 
+                        WHERE 
+                            config_name LIKE ? 
+                            OR config_description LIKE ? 
+                            OR config_uuid LIKE ?
+                        ORDER BY created_at DESC 
+                        LIMIT ?
+                    ";
+                    
+                    $stmt = $pdo->prepare($serverQuery);
+                    $searchTerm = '%' . $query . '%';
+                    $stmt->execute([$searchTerm, $searchTerm, $searchTerm, $limit]);
+                    
+                    $serverResults = $stmt->fetchAll();
+                    $results = array_merge($results, $serverResults);
+                }
+            } catch (Exception $e) {
+                error_log("Search error for server configurations: " . $e->getMessage());
+            }
+        }
+        
         return array_slice($results, 0, $limit);
     }
 }
@@ -770,8 +1023,94 @@ if (!function_exists('performGlobalSearch')) {
  * Get current user from request (JWT or session)
  */
 if (!function_exists('getCurrentUser')) {
-    function getCurrentUser($pdo) {
+    function getCurrentUser() {
+        global $pdo;
         return authenticateUser($pdo);
+    }
+}
+
+/**
+ * Check if server configuration tables exist
+ */
+if (!function_exists('serverSystemInitialized')) {
+    function serverSystemInitialized($pdo) {
+        try {
+            $tables = ['server_configurations', 'component_compatibility', 'compatibility_rules'];
+            
+            foreach ($tables as $table) {
+                $stmt = $pdo->query("SHOW TABLES LIKE '$table'");
+                if (!$stmt->fetch()) {
+                    return false;
+                }
+            }
+            
+            return true;
+        } catch (Exception $e) {
+            return false;
+        }
+    }
+}
+
+/**
+ * Initialize server configuration system tables
+ */
+if (!function_exists('initializeServerSystem')) {
+    function initializeServerSystem($pdo) {
+        try {
+            // This would run the database migration scripts
+            // For now, we'll just check if tables exist
+            if (!serverSystemInitialized($pdo)) {
+                error_log("Server configuration system requires database migration");
+                return false;
+            }
+            
+            return true;
+        } catch (Exception $e) {
+            error_log("Error initializing server system: " . $e->getMessage());
+            return false;
+        }
+    }
+}
+
+/**
+ * Get component compatibility metadata
+ */
+if (!function_exists('getComponentCompatibilityInfo')) {
+    function getComponentCompatibilityInfo($pdo, $componentType, $componentUuid) {
+        try {
+            if (!serverSystemInitialized($pdo)) {
+                return null;
+            }
+            
+            require_once(__DIR__ . '/models/ComponentCompatibility.php');
+            $componentCompatibility = new ComponentCompatibility($pdo);
+            
+            return $componentCompatibility->getComponentSpecifications($componentType, $componentUuid);
+        } catch (Exception $e) {
+            error_log("Error getting component compatibility info: " . $e->getMessage());
+            return null;
+        }
+    }
+}
+
+/**
+ * Check if two components are compatible
+ */
+if (!function_exists('checkComponentsCompatible')) {
+    function checkComponentsCompatible($pdo, $component1, $component2) {
+        try {
+            if (!serverSystemInitialized($pdo)) {
+                return ['compatible' => true, 'note' => 'Compatibility system not available'];
+            }
+            
+            require_once(__DIR__ . '/models/CompatibilityEngine.php');
+            $compatibilityEngine = new CompatibilityEngine($pdo);
+            
+            return $compatibilityEngine->checkCompatibility($component1, $component2);
+        } catch (Exception $e) {
+            error_log("Error checking component compatibility: " . $e->getMessage());
+            return ['compatible' => false, 'error' => 'Compatibility check failed'];
+        }
     }
 }
 ?>

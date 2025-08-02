@@ -4,31 +4,30 @@
  * File: api/acl/roles_api.php
  */
 
-require_once(__DIR__ . '/../../includes/db_config.php');
-require_once(__DIR__ . '/../../includes/BaseFunctions.php');
+// This file is included from api.php, so we don't need to include headers or dependencies again
+// Get the ACL instance from global scope (set in api.php)
+$acl = $GLOBALS['acl'] ?? null;
 
-header('Content-Type: application/json');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
-
-// Handle preflight OPTIONS requests
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
-    exit();
+if (!$acl) {
+    // Fallback: create new ACL instance if not set
+    $acl = new ACL($pdo);
 }
 
-// Require authentication
-$user = requireLogin($pdo);
-$acl = getACL($pdo);
+// The user is already authenticated in api.php
+// $user variable is available from the parent scope
 
-$action = $_GET['action'] ?? $_POST['action'] ?? 'list';
+// Parse the operation from the original action
+$originalAction = $_POST['action'] ?? $_GET['action'] ?? '';
+$parts = explode('-', $originalAction, 2);
+$operation = $parts[1] ?? 'list';
 
-switch ($action) {
+switch ($operation) {
     case 'list':
     case 'get_all':
         // Require permission to view roles
-        requirePermission($pdo, 'roles.view');
+        if (!hasPermission($pdo, 'roles.view', $user['id'])) {
+            send_json_response(0, 1, 403, "You don't have permission to view roles");
+        }
         
         try {
             $roles = $acl->getAllRoles();
@@ -45,7 +44,9 @@ switch ($action) {
         
     case 'get':
         // Require permission to view roles
-        requirePermission($pdo, 'roles.view');
+        if (!hasPermission($pdo, 'roles.view', $user['id'])) {
+            send_json_response(0, 1, 403, "You don't have permission to view roles");
+        }
         
         $roleId = $_GET['id'] ?? $_POST['id'] ?? '';
         if (empty($roleId)) {
@@ -90,7 +91,9 @@ switch ($action) {
         
     case 'create':
         // Require permission to create roles
-        requirePermission($pdo, 'roles.create');
+        if (!hasPermission($pdo, 'roles.create', $user['id'])) {
+            send_json_response(0, 1, 403, "You don't have permission to create roles");
+        }
         
         $name = trim($_POST['name'] ?? '');
         $displayName = trim($_POST['display_name'] ?? '');
@@ -134,7 +137,9 @@ switch ($action) {
         
     case 'update':
         // Require permission to edit roles
-        requirePermission($pdo, 'roles.edit');
+        if (!hasPermission($pdo, 'roles.edit', $user['id'])) {
+            send_json_response(0, 1, 403, "You don't have permission to edit roles");
+        }
         
         $roleId = $_POST['id'] ?? '';
         $displayName = trim($_POST['display_name'] ?? '');
@@ -177,7 +182,9 @@ switch ($action) {
         
     case 'update_permissions':
         // Require permission to edit roles
-        requirePermission($pdo, 'roles.edit');
+        if (!hasPermission($pdo, 'roles.edit', $user['id'])) {
+            send_json_response(0, 1, 403, "You don't have permission to edit role permissions");
+        }
         
         $roleId = $_POST['role_id'] ?? '';
         $permissions = $_POST['permissions'] ?? [];
@@ -201,7 +208,7 @@ switch ($action) {
             }
             
             // Prevent modification of super_admin role by non-super-admins
-            if ($role['name'] === 'super_admin' && !hasAnyRole($pdo, ['super_admin'])) {
+            if ($role['name'] === 'super_admin' && !$acl->hasRole($user['id'], ['super_admin'])) {
                 send_json_response(0, 1, 403, "Only super administrators can modify super admin role");
             }
             
@@ -221,7 +228,9 @@ switch ($action) {
         
     case 'delete':
         // Require permission to delete roles
-        requirePermission($pdo, 'roles.delete');
+        if (!hasPermission($pdo, 'roles.delete', $user['id'])) {
+            send_json_response(0, 1, 403, "You don't have permission to delete roles");
+        }
         
         $roleId = $_POST['id'] ?? $_GET['id'] ?? '';
         
@@ -267,8 +276,11 @@ switch ($action) {
         break;
         
     case 'assign_user':
+    case 'assign':
         // Require permission to manage user roles
-        requirePermission($pdo, 'users.manage_roles');
+        if (!hasPermission($pdo, 'users.manage_roles', $user['id'])) {
+            send_json_response(0, 1, 403, "You don't have permission to assign roles to users");
+        }
         
         $userId = $_POST['user_id'] ?? '';
         $roleId = $_POST['role_id'] ?? '';
@@ -293,8 +305,11 @@ switch ($action) {
         break;
         
     case 'remove_user':
+    case 'remove':
         // Require permission to manage user roles
-        requirePermission($pdo, 'users.manage_roles');
+        if (!hasPermission($pdo, 'users.manage_roles', $user['id'])) {
+            send_json_response(0, 1, 403, "You don't have permission to remove roles from users");
+        }
         
         $userId = $_POST['user_id'] ?? '';
         $roleId = $_POST['role_id'] ?? '';
@@ -328,7 +343,7 @@ switch ($action) {
         break;
         
     default:
-        send_json_response(0, 1, 400, "Invalid action: $action");
+        send_json_response(0, 1, 400, "Invalid roles operation: $operation");
         break;
 }
 ?>

@@ -4,31 +4,30 @@
  * File: api/acl/permissions_api.php
  */
 
-require_once(__DIR__ . '/../../includes/db_config.php');
-require_once(__DIR__ . '/../../includes/BaseFunctions.php');
+// This file is included from api.php, so we don't need to include headers or dependencies again
+// Get the ACL instance from global scope (set in api.php)
+$acl = $GLOBALS['acl'] ?? null;
 
-header('Content-Type: application/json');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
-
-// Handle preflight OPTIONS requests
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
-    exit();
+if (!$acl) {
+    // Fallback: create new ACL instance if not set
+    $acl = new ACL($pdo);
 }
 
-// Require authentication
-$user = requireLogin($pdo);
-$acl = getACL($pdo);
+// The user is already authenticated in api.php
+// $user variable is available from the parent scope
 
-$action = $_GET['action'] ?? $_POST['action'] ?? 'list';
+// Parse the operation from the original action
+$originalAction = $_POST['action'] ?? $_GET['action'] ?? '';
+$parts = explode('-', $originalAction, 2);
+$operation = $parts[1] ?? 'list';
 
-switch ($action) {
+switch ($operation) {
     case 'list':
     case 'get_all':
         // Require permission to view roles (permissions are part of role management)
-        requirePermission($pdo, 'roles.view');
+        if (!hasPermission($pdo, 'roles.view', $user['id'])) {
+            send_json_response(0, 1, 403, "You don't have permission to view permissions");
+        }
         
         try {
             $permissions = $acl->getAllPermissions();
@@ -53,7 +52,9 @@ switch ($action) {
         
     case 'get_by_category':
         // Require permission to view roles
-        requirePermission($pdo, 'roles.view');
+        if (!hasPermission($pdo, 'roles.view', $user['id'])) {
+            send_json_response(0, 1, 403, "You don't have permission to view permissions");
+        }
         
         $category = $_GET['category'] ?? $_POST['category'] ?? '';
         
@@ -88,12 +89,27 @@ switch ($action) {
         
         // If requesting another user's permissions, need admin access
         if ($requestedUserId != $user['id']) {
-            requirePermission($pdo, 'users.view');
+            if (!hasPermission($pdo, 'users.view', $user['id'])) {
+                send_json_response(0, 1, 403, "You don't have permission to view other users' permissions");
+            }
         }
         
         try {
-            $userPermissions = getUserPermissions($pdo, $requestedUserId);
-            $userRoles = getUserRoles($pdo, $requestedUserId);
+            // Get user permissions directly using ACL
+            $userPermissions = [];
+            $userRoles = $acl->getUserRoles($requestedUserId);
+            
+            // Get all permissions and check which ones the user has
+            $allPermissions = $acl->getAllPermissions();
+            foreach ($allPermissions as $category => $categoryPermissions) {
+                foreach ($categoryPermissions as $permission) {
+                    $hasPermission = $acl->hasPermission($requestedUserId, $permission['name']);
+                    if ($hasPermission) {
+                        $permission['granted'] = true;
+                        $userPermissions[] = $permission;
+                    }
+                }
+            }
             
             // Group permissions by category
             $groupedPermissions = [];
@@ -125,7 +141,9 @@ switch ($action) {
         
         // If checking another user's permissions, need admin access
         if ($checkUserId != $user['id']) {
-            requirePermission($pdo, 'users.view');
+            if (!hasPermission($pdo, 'users.view', $user['id'])) {
+                send_json_response(0, 1, 403, "You don't have permission to check other users' permissions");
+            }
         }
         
         try {
@@ -145,7 +163,9 @@ switch ($action) {
         
     case 'get_role_permissions':
         // Require permission to view roles
-        requirePermission($pdo, 'roles.view');
+        if (!hasPermission($pdo, 'roles.view', $user['id'])) {
+            send_json_response(0, 1, 403, "You don't have permission to view role permissions");
+        }
         
         $roleId = $_GET['role_id'] ?? $_POST['role_id'] ?? '';
         
@@ -185,7 +205,9 @@ switch ($action) {
         
     case 'get_categories':
         // Require permission to view roles
-        requirePermission($pdo, 'roles.view');
+        if (!hasPermission($pdo, 'roles.view', $user['id'])) {
+            send_json_response(0, 1, 403, "You don't have permission to view permission categories");
+        }
         
         try {
             $stmt = $pdo->prepare("
@@ -210,8 +232,11 @@ switch ($action) {
         break;
         
     case 'create_permission':
+    case 'create':
         // Only super admins can create new permissions
-        requireSuperAdminAccess($pdo);
+        if (!$acl->hasRole($user['id'], ['super_admin'])) {
+            send_json_response(0, 1, 403, "Only super administrators can create new permissions");
+        }
         
         $name = trim($_POST['name'] ?? '');
         $displayName = trim($_POST['display_name'] ?? '');
@@ -270,7 +295,9 @@ switch ($action) {
         
         // If checking another user's permissions, need admin access
         if ($checkUserId != $user['id']) {
-            requirePermission($pdo, 'users.view');
+            if (!hasPermission($pdo, 'users.view', $user['id'])) {
+                send_json_response(0, 1, 403, "You don't have permission to check other users' permissions");
+            }
         }
         
         try {
@@ -301,10 +328,10 @@ switch ($action) {
         
         try {
             $componentPermissions = [
-                'view' => canViewComponent($pdo, $componentType),
-                'create' => canCreateComponent($pdo, $componentType),
-                'edit' => canEditComponent($pdo, $componentType),
-                'delete' => canDeleteComponent($pdo, $componentType)
+                'view' => hasPermission($pdo, "$componentType.view", $user['id']),
+                'create' => hasPermission($pdo, "$componentType.create", $user['id']),
+                'edit' => hasPermission($pdo, "$componentType.edit", $user['id']),
+                'delete' => hasPermission($pdo, "$componentType.delete", $user['id'])
             ];
             
             send_json_response(1, 1, 200, "Component permissions retrieved successfully", [
@@ -319,7 +346,7 @@ switch ($action) {
         break;
         
     default:
-        send_json_response(0, 1, 400, "Invalid action: $action");
+        send_json_response(0, 1, 400, "Invalid permissions operation: $operation");
         break;
 }
 ?>
