@@ -59,12 +59,20 @@ try {
             handleLoadDraft();
             break;
             
+        case 'get_server_progress':
+            handleGetServerProgress();
+            break;
+            
+        case 'reset_configuration':
+            handleResetConfiguration();
+            break;
+            
         default:
             send_json_response(0, 1, 400, "Invalid server creation action: $action");
     }
 } catch (Exception $e) {
     error_log("Server creation error: " . $e->getMessage());
-    send_json_response(0, 1, 500, "Server creation failed");
+    send_json_response(0, 1, 500, "Server creation failed: " . $e->getMessage());
 }
 
 /**
@@ -168,6 +176,75 @@ function handleStepAddComponent() {
             $config->set('updated_by', $user['id']);
             $config->save();
             
+            // Determine next step and options
+            $nextStep = determineNextStep($serverBuilder);
+            $nextOptions = $nextStep ? $serverBuilder->getCompatibleComponentsForType($nextStep) : [];
+            
+            // Calculate progress
+            $progress = calculateProgress($serverBuilder);
+            
+            send_json_response(1, 1, 200, $result['message'], [
+                'component_added' => [
+                    'type' => $componentType,
+                    'uuid' => $componentUuid,
+                    'quantity' => $quantity
+                ],
+                'current_configuration' => $result['current_configuration'],
+                'compatibility_results' => $result['compatibility_results'] ?? [],
+                'next_step' => $nextStep,
+                'next_options' => $nextOptions,
+                'remaining_options' => $result['compatible_components'] ?? [],
+                'progress' => $progress,
+                'recommendations' => $result['next_recommendations'] ?? []
+            ]);
+        } else {
+            send_json_response(0, 1, 409, $result['message'], [
+                'compatibility_issues' => $result['compatibility_issues'] ?? [],
+                'can_override' => $result['can_override'] ?? false,
+                'current_configuration' => $serverBuilder->getCurrentConfigurationSummary()
+            ]);
+        }
+        
+    } catch (Exception $e) {
+        error_log("Error adding component in step process: " . $e->getMessage());
+        send_json_response(0, 1, 500, "Failed to add component");
+    }
+}
+
+/**
+ * Remove component in step-by-step process
+ */
+function handleStepRemoveComponent() {
+    global $pdo, $user;
+    
+    $configUuid = $_POST['config_uuid'] ?? '';
+    $componentType = $_POST['component_type'] ?? '';
+    $componentUuid = $_POST['component_uuid'] ?? null;
+    
+    if (empty($configUuid) || empty($componentType)) {
+        send_json_response(0, 1, 400, "Config UUID and component type are required");
+    }
+    
+    try {
+        // Load existing configuration
+        $config = ServerConfiguration::loadFromDatabase($pdo, $configUuid);
+        if (!$config) {
+            send_json_response(0, 1, 404, "Server configuration not found");
+        }
+        
+        // Initialize server builder with current config
+        $serverBuilder = new ServerBuilder($pdo);
+        $serverBuilder->setCurrentConfiguration($config->getData());
+        
+        // Remove component
+        $result = $serverBuilder->removeComponent($componentType, $componentUuid);
+        
+        if ($result['success']) {
+            // Update configuration in database
+            $config->setData($serverBuilder->getCurrentConfiguration());
+            $config->set('updated_by', $user['id']);
+            $config->save();
+            
             // Recalculate next step and options
             $nextStep = determineNextStep($serverBuilder);
             $allOptions = $serverBuilder->getCompatibleComponentsForAll();
@@ -180,13 +257,16 @@ function handleStepAddComponent() {
                     'type' => $componentType,
                     'uuid' => $componentUuid
                 ],
-                'current_configuration' => $result['current_configuration'],
+                'current_configuration' => $serverBuilder->getCurrentConfigurationSummary(),
                 'next_step' => $nextStep,
                 'all_options' => $allOptions,
-                'progress' => $progress
+                'progress' => $progress,
+                'updated_compatible_components' => $result['updated_compatible_components'] ?? []
             ]);
         } else {
-            send_json_response(0, 1, 400, $result['message']);
+            send_json_response(0, 1, 400, $result['message'], [
+                'current_configuration' => $serverBuilder->getCurrentConfigurationSummary()
+            ]);
         }
         
     } catch (Exception $e) {
@@ -449,6 +529,123 @@ function handleLoadDraft() {
 }
 
 /**
+ * Get server creation progress
+ */
+function handleGetServerProgress() {
+    global $pdo;
+    
+    $configUuid = $_GET['config_uuid'] ?? $_POST['config_uuid'] ?? '';
+    
+    if (empty($configUuid)) {
+        send_json_response(0, 1, 400, "Config UUID is required");
+    }
+    
+    try {
+        // Load configuration
+        $config = ServerConfiguration::loadFromDatabase($pdo, $configUuid);
+        if (!$config) {
+            send_json_response(0, 1, 404, "Server configuration not found");
+        }
+        
+        // Initialize server builder with config
+        $serverBuilder = new ServerBuilder($pdo);
+        $serverBuilder->setCurrentConfiguration($config->getData());
+        
+        // Calculate detailed progress
+        $progress = calculateProgress($serverBuilder);
+        $validation = $serverBuilder->validateConfiguration();
+        
+        send_json_response(1, 1, 200, "Progress retrieved", [
+            'progress' => $progress,
+            'validation_status' => $validation['valid'],
+            'configuration_summary' => $serverBuilder->getCurrentConfigurationSummary(),
+            'next_recommended' => determineNextStep($serverBuilder),
+            'completion_percentage' => $progress['percentage']
+        ]);
+        
+    } catch (Exception $e) {
+        error_log("Error getting server progress: " . $e->getMessage());
+        send_json_response(0, 1, 500, "Failed to get progress");
+    }
+}
+
+/**
+ * Reset configuration to start over
+ */
+function handleResetConfiguration() {
+    global $pdo, $user;
+    
+    $configUuid = $_POST['config_uuid'] ?? '';
+    $keepBasicInfo = filter_var($_POST['keep_basic_info'] ?? true, FILTER_VALIDATE_BOOLEAN);
+    
+    if (empty($configUuid)) {
+        send_json_response(0, 1, 400, "Config UUID is required");
+    }
+    
+    try {
+        // Load configuration
+        $config = ServerConfiguration::loadFromDatabase($pdo, $configUuid);
+        if (!$config) {
+            send_json_response(0, 1, 404, "Server configuration not found");
+        }
+        
+        // Store basic info if keeping it
+        $basicInfo = [];
+        if ($keepBasicInfo) {
+            $basicInfo = [
+                'config_name' => $config->get('config_name'),
+                'config_description' => $config->get('config_description')
+            ];
+        }
+        
+        // Reset configuration data
+        $resetData = [
+            'config_uuid' => $configUuid,
+            'cpu_uuid' => null,
+            'motherboard_uuid' => null,
+            'ram_configuration' => [],
+            'storage_configuration' => [],
+            'nic_configuration' => [],
+            'caddy_configuration' => [],
+            'compatibility_results' => [],
+            'configuration_status' => 0,
+            'created_by' => $config->get('created_by'),
+            'updated_by' => $user['id']
+        ];
+        
+        // Merge basic info if keeping it
+        if ($keepBasicInfo) {
+            $resetData = array_merge($resetData, $basicInfo);
+        }
+        
+        $config->setData($resetData);
+        $result = $config->save();
+        
+        if ($result) {
+            // Initialize fresh server builder
+            $serverBuilder = new ServerBuilder($pdo);
+            $serverBuilder->setCurrentConfiguration($resetData);
+            
+            // Get fresh options
+            $allOptions = $serverBuilder->getCompatibleComponentsForAll();
+            
+            send_json_response(1, 1, 200, "Configuration reset successfully", [
+                'config_uuid' => $configUuid,
+                'fresh_options' => $allOptions,
+                'reset_configuration' => $resetData,
+                'progress' => calculateProgress($serverBuilder)
+            ]);
+        } else {
+            send_json_response(0, 1, 500, "Failed to reset configuration");
+        }
+        
+    } catch (Exception $e) {
+        error_log("Error resetting configuration: " . $e->getMessage());
+        send_json_response(0, 1, 500, "Failed to reset configuration");
+    }
+}
+
+/**
  * Helper function to determine next recommended step
  */
 function determineNextStep($serverBuilder) {
@@ -467,19 +664,19 @@ function determineNextStep($serverBuilder) {
         return 'cpu'; // Add CPU after motherboard
     }
     
-    if (empty($config['ram_configuration'])) {
+    if (empty($config['ram_configuration']) || count($config['ram_configuration']) === 0) {
         return 'ram'; // Add RAM after CPU/MB
     }
     
-    if (empty($config['storage_configuration'])) {
+    if (empty($config['storage_configuration']) || count($config['storage_configuration']) === 0) {
         return 'storage'; // Add storage after RAM
     }
     
-    if (empty($config['nic_configuration'])) {
+    if (empty($config['nic_configuration']) || count($config['nic_configuration']) === 0) {
         return 'nic'; // Add NIC if needed
     }
     
-    if (empty($config['caddy_configuration'])) {
+    if (empty($config['caddy_configuration']) || count($config['caddy_configuration']) === 0) {
         return 'caddy'; // Add caddy if needed
     }
     
@@ -497,15 +694,17 @@ function calculateProgress($serverBuilder) {
     
     if (!empty($config['cpu_uuid'])) $completedSteps++;
     if (!empty($config['motherboard_uuid'])) $completedSteps++;
-    if (!empty($config['ram_configuration'])) $completedSteps++;
-    if (!empty($config['storage_configuration'])) $completedSteps++;
-    if (!empty($config['nic_configuration'])) $completedSteps++;
+    if (!empty($config['ram_configuration']) && count($config['ram_configuration']) > 0) $completedSteps++;
+    if (!empty($config['storage_configuration']) && count($config['storage_configuration']) > 0) $completedSteps++;
+    if (!empty($config['nic_configuration']) && count($config['nic_configuration']) > 0) $completedSteps++;
     
     // Check if ready for validation (minimum components)
     $readyForValidation = !empty($config['cpu_uuid']) && 
                          !empty($config['motherboard_uuid']) && 
                          !empty($config['ram_configuration']) && 
-                         !empty($config['storage_configuration']);
+                         count($config['ram_configuration']) > 0 &&
+                         !empty($config['storage_configuration']) &&
+                         count($config['storage_configuration']) > 0;
     
     if ($readyForValidation) $completedSteps++;
     
@@ -515,109 +714,15 @@ function calculateProgress($serverBuilder) {
         'percentage' => round(($completedSteps / $totalSteps) * 100),
         'current_phase' => $completedSteps < 4 ? 'component_selection' : ($readyForValidation ? 'validation' : 'optimization'),
         'ready_for_validation' => $readyForValidation,
-        'ready_for_finalization' => $completedSteps >= 5
+        'ready_for_finalization' => $completedSteps >= 5,
+        'components_status' => [
+            'cpu' => !empty($config['cpu_uuid']) ? 'completed' : 'pending',
+            'motherboard' => !empty($config['motherboard_uuid']) ? 'completed' : 'pending',
+            'ram' => (!empty($config['ram_configuration']) && count($config['ram_configuration']) > 0) ? 'completed' : 'pending',
+            'storage' => (!empty($config['storage_configuration']) && count($config['storage_configuration']) > 0) ? 'completed' : 'pending',
+            'nic' => (!empty($config['nic_configuration']) && count($config['nic_configuration']) > 0) ? 'completed' : 'optional',
+            'caddy' => (!empty($config['caddy_configuration']) && count($config['caddy_configuration']) > 0) ? 'completed' : 'optional'
+        ]
     ];
 }
 ?>
-            // Update configuration in database
-            $config->setData($serverBuilder->getCurrentConfiguration());
-            $config->set('updated_by', $user['id']);
-            $config->save();
-            
-            // Determine next step and options
-            $nextStep = determineNextStep($serverBuilder);
-            $nextOptions = $nextStep ? $serverBuilder->getCompatibleComponentsForType($nextStep) : [];
-            
-            // Calculate progress
-            $progress = calculateProgress($serverBuilder);
-            
-            send_json_response(1, 1, 200, $result['message'], [
-                'component_added' => [
-                    'type' => $componentType,
-                    'uuid' => $componentUuid
-                ],
-                'current_configuration' => $result['current_configuration'],
-                'compatibility_results' => $result['compatibility_results'] ?? [],
-                'next_step' => $nextStep,
-                'next_options' => $nextOptions,
-                'remaining_options' => $result['compatible_components'] ?? [],
-                'progress' => $progress,
-                'recommendations' => $result['next_recommendations'] ?? []
-            ]);
-        } else {
-            send_json_response(0, 1, 409, $result['message'], [
-                'compatibility_issues' => $result['compatibility_issues'] ?? [],
-                'can_override' => $result['can_override'] ?? false,
-                'current_configuration' => $serverBuilder->getCurrentConfigurationSummary()
-            ]);
-        }
-        
-    } catch (Exception $e) {
-        error_log("Error adding component in step process: " . $e->getMessage());
-        send_json_response(0, 1, 500, "Failed to add component");
-    }
-}
-
-/**
- * Remove component in step-by-step process
- */
-function handleStepRemoveComponent() {
-    global $pdo, $user;
-    
-    $configUuid = $_POST['config_uuid'] ?? '';
-    $componentType = $_POST['component_type'] ?? '';
-    $componentUuid = $_POST['component_uuid'] ?? null;
-    
-    if (empty($configUuid) || empty($componentType)) {
-        send_json_response(0, 1, 400, "Config UUID and component type are required");
-    }
-    
-    try {
-        // Load existing configuration
-        $config = ServerConfiguration::loadFromDatabase($pdo, $configUuid);
-        if (!$config) {
-            send_json_response(0, 1, 404, "Server configuration not found");
-        }
-        
-        // Initialize server builder with current config
-        $serverBuilder = new ServerBuilder($pdo);
-        $serverBuilder->setCurrentConfiguration($config->getData());
-        
-        // Remove component
-        $result = $serverBuilder->removeComponent($componentType, $componentUuid);
-        
-        if ($result['success']) {
-            // Update configuration in database
-            $config->setData($serverBuilder->getCurrentConfiguration());
-            $config->set('updated_by', $user['id']);
-            $config->save();
-            
-            // Recalculate next step and options
-            $nextStep = determineNextStep($serverBuilder);
-            $allOptions = $serverBuilder->getCompatibleComponentsForAll();
-            
-            // Calculate progress
-            $progress = calculateProgress($serverBuilder);
-            
-            send_json_response(1, 1, 200, $result['message'], [
-                'component_removed' => [
-                    'type' => $componentType,
-                    'uuid' => $componentUuid
-                ],
-                'current_configuration' => $serverBuilder->getCurrentConfigurationSummary(),
-                'next_step' => $nextStep,
-                'all_options' => $allOptions,
-                'progress' => $progress,
-                'updated_compatible_components' => $result['updated_compatible_components'] ?? []
-            ]);
-        } else {
-            send_json_response(0, 1, 400, $result['message'], [
-                'current_configuration' => $serverBuilder->getCurrentConfigurationSummary()
-            ]);
-        }
-        
-    } catch (Exception $e) {
-        error_log("Error removing component in step process: " . $e->getMessage());
-        send_json_response(0, 1, 500, "Failed to remove component");
-    }
-}
