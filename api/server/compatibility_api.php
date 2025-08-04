@@ -59,12 +59,28 @@ try {
             handleGetCompatibilityStatistics();
             break;
             
+        case 'clear_cache':
+            handleClearCompatibilityCache();
+            break;
+            
+        case 'benchmark_performance':
+            handleBenchmarkPerformance();
+            break;
+            
+        case 'export_rules':
+            handleExportCompatibilityRules();
+            break;
+            
+        case 'import_rules':
+            handleImportCompatibilityRules();
+            break;
+            
         default:
             send_json_response(0, 1, 400, "Invalid compatibility action: $action");
     }
 } catch (Exception $e) {
     error_log("Compatibility API error: " . $e->getMessage());
-    send_json_response(0, 1, 500, "Compatibility check failed");
+    send_json_response(0, 1, 500, "Compatibility check failed: " . $e->getMessage());
 }
 
 /**
@@ -111,230 +127,6 @@ function handleCheckPairCompatibility() {
         send_json_response(1, 1, 200, "Compatibility check completed", $response);
         
     } catch (Exception $e) {
-        error_log("Error getting compatibility rules: " . $e->getMessage());
-        send_json_response(0, 1, 500, "Failed to get compatibility rules");
-    }
-}
-
-/**
- * Test a compatibility rule
- */
-function handleTestCompatibilityRule() {
-    global $pdo;
-    
-    $ruleId = $_POST['rule_id'] ?? '';
-    $testComponents = $_POST['test_components'] ?? [];
-    
-    if (empty($ruleId) || empty($testComponents)) {
-        send_json_response(0, 1, 400, "Rule ID and test components are required");
-    }
-    
-    try {
-        // Get the rule
-        $stmt = $pdo->prepare("SELECT * FROM compatibility_rules WHERE id = ?");
-        $stmt->execute([$ruleId]);
-        $rule = $stmt->fetch(PDO::FETCH_ASSOC);
-        
-        if (!$rule) {
-            send_json_response(0, 1, 404, "Compatibility rule not found");
-        }
-        
-        $rule['rule_definition'] = json_decode($rule['rule_definition'], true);
-        
-        // Test the rule against provided components
-        $compatibilityEngine = new CompatibilityEngine($pdo);
-        $testResults = [];
-        
-        foreach ($testComponents as $testPair) {
-            if (isset($testPair['component1']) && isset($testPair['component2'])) {
-                $result = $compatibilityEngine->checkCompatibility($testPair['component1'], $testPair['component2']);
-                
-                $testResults[] = [
-                    'component_1' => $testPair['component1'],
-                    'component_2' => $testPair['component2'],
-                    'rule_applied' => in_array($rule['rule_name'], $result['applied_rules']),
-                    'result' => $result
-                ];
-            }
-        }
-        
-        send_json_response(1, 1, 200, "Rule test completed", [
-            'rule' => $rule,
-            'test_results' => $testResults,
-            'test_summary' => [
-                'total_tests' => count($testResults),
-                'rule_triggered' => count(array_filter($testResults, function($test) { return $test['rule_applied']; }))
-            ]
-        ]);
-        
-    } catch (Exception $e) {
-        error_log("Error testing compatibility rule: " . $e->getMessage());
-        send_json_response(0, 1, 500, "Failed to test compatibility rule");
-    }
-}
-
-/**
- * Get compatibility statistics
- */
-function handleGetCompatibilityStatistics() {
-    global $pdo;
-    
-    $timeframe = $_GET['timeframe'] ?? $_POST['timeframe'] ?? '24 HOUR';
-    $includeDetails = filter_var($_GET['include_details'] ?? $_POST['include_details'] ?? false, FILTER_VALIDATE_BOOLEAN);
-    
-    try {
-        $compatibilityEngine = new CompatibilityEngine($pdo);
-        $statistics = $compatibilityEngine->getCompatibilityStatistics($timeframe);
-        
-        $response = [
-            'timeframe' => $timeframe,
-            'statistics' => $statistics
-        ];
-        
-        if ($includeDetails) {
-            // Get additional detailed statistics
-            $response['detailed_stats'] = getDetailedCompatibilityStats($pdo, $timeframe);
-        }
-        
-        send_json_response(1, 1, 200, "Compatibility statistics retrieved", $response);
-        
-    } catch (Exception $e) {
-        error_log("Error getting compatibility statistics: " . $e->getMessage());
-        send_json_response(0, 1, 500, "Failed to get compatibility statistics");
-    }
-}
-
-/**
- * Generate configuration recommendations
- */
-function generateConfigurationRecommendations($validationResult) {
-    $recommendations = [];
-    
-    // Performance recommendations
-    if ($validationResult['overall_score'] < 0.8) {
-        $recommendations[] = [
-            'type' => 'performance',
-            'priority' => 'medium',
-            'message' => 'Consider optimizing component selection for better compatibility',
-            'details' => 'Current compatibility score is below optimal threshold'
-        ];
-    }
-    
-    // Power recommendations
-    if ($validationResult['estimated_power'] > 500) {
-        $recommendations[] = [
-            'type' => 'power',
-            'priority' => 'high',
-            'message' => 'High power consumption detected',
-            'details' => "Estimated power consumption: {$validationResult['estimated_power']}W - ensure adequate PSU capacity"
-        ];
-    } elseif ($validationResult['estimated_power'] > 300) {
-        $recommendations[] = [
-            'type' => 'power',
-            'priority' => 'medium',
-            'message' => 'Moderate power consumption',
-            'details' => "Estimated power consumption: {$validationResult['estimated_power']}W - consider energy efficiency"
-        ];
-    }
-    
-    // Component-specific recommendations
-    foreach ($validationResult['component_checks'] as $check) {
-        if (!$check['compatible']) {
-            $recommendations[] = [
-                'type' => 'compatibility',
-                'priority' => 'high',
-                'message' => "Compatibility issue: {$check['components']}",
-                'details' => implode(', ', $check['issues'])
-            ];
-        } elseif (!empty($check['warnings'])) {
-            $recommendations[] = [
-                'type' => 'warning',
-                'priority' => 'low',
-                'message' => "Minor issue: {$check['components']}",
-                'details' => implode(', ', $check['warnings'])
-            ];
-        }
-    }
-    
-    // Global check recommendations
-    foreach ($validationResult['global_checks'] as $check) {
-        if (!$check['passed']) {
-            $recommendations[] = [
-                'type' => 'system',
-                'priority' => 'medium',
-                'message' => "System requirement: {$check['check']}",
-                'details' => $check['message']
-            ];
-        }
-    }
-    
-    return $recommendations;
-}
-
-/**
- * Get detailed compatibility statistics
- */
-function getDetailedCompatibilityStats($pdo, $timeframe) {
-    try {
-        $stats = [];
-        
-        // Most common compatibility failures
-        $stmt = $pdo->prepare("
-            SELECT 
-                component_type_1,
-                component_type_2,
-                COUNT(*) as failure_count
-            FROM compatibility_log 
-            WHERE compatibility_result = 0 
-                AND created_at >= DATE_SUB(NOW(), INTERVAL 1 $timeframe)
-            GROUP BY component_type_1, component_type_2
-            ORDER BY failure_count DESC
-            LIMIT 10
-        ");
-        $stmt->execute();
-        $stats['common_failures'] = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        
-        // Performance metrics by component type
-        $stmt = $pdo->prepare("
-            SELECT 
-                CONCAT(component_type_1, '-', component_type_2) as component_pair,
-                COUNT(*) as check_count,
-                AVG(execution_time_ms) as avg_execution_time,
-                SUM(CASE WHEN compatibility_result = 1 THEN 1 ELSE 0 END) as success_count
-            FROM compatibility_log 
-            WHERE created_at >= DATE_SUB(NOW(), INTERVAL 1 $timeframe)
-                AND execution_time_ms IS NOT NULL
-            GROUP BY component_type_1, component_type_2
-            ORDER BY check_count DESC
-        ");
-        $stmt->execute();
-        $stats['performance_metrics'] = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        
-        // Rule effectiveness
-        $stmt = $pdo->prepare("
-            SELECT 
-                JSON_EXTRACT(applied_rules, '$[*]') as rules,
-                COUNT(*) as usage_count,
-                SUM(CASE WHEN compatibility_result = 1 THEN 1 ELSE 0 END) as success_count
-            FROM compatibility_log 
-            WHERE created_at >= DATE_SUB(NOW(), INTERVAL 1 $timeframe)
-                AND applied_rules IS NOT NULL
-                AND applied_rules != '[]'
-            GROUP BY applied_rules
-            ORDER BY usage_count DESC
-            LIMIT 10
-        ");
-        $stmt->execute();
-        $stats['rule_usage'] = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        
-        return $stats;
-        
-    } catch (Exception $e) {
-        error_log("Error getting detailed compatibility stats: " . $e->getMessage());
-        return [];
-    }
-}
-?>
         error_log("Error in pair compatibility check: " . $e->getMessage());
         send_json_response(0, 1, 500, "Failed to check compatibility");
     }
@@ -675,8 +467,699 @@ function handleGetCompatibilityRules() {
             ]
         ]);
         
-    }  catch (Exception $e) {
+    } catch (Exception $e) {
         error_log("Error getting compatibility rules: " . $e->getMessage());
         send_json_response(0, 1, 500, "Failed to get compatibility rules");
     }
 }
+
+/**
+ * Test a compatibility rule
+ */
+function handleTestCompatibilityRule() {
+    global $pdo;
+    
+    $ruleId = $_POST['rule_id'] ?? '';
+    $testComponents = $_POST['test_components'] ?? [];
+    
+    if (empty($ruleId) || empty($testComponents)) {
+        send_json_response(0, 1, 400, "Rule ID and test components are required");
+    }
+    
+    try {
+        // Get the rule
+        $stmt = $pdo->prepare("SELECT * FROM compatibility_rules WHERE id = ?");
+        $stmt->execute([$ruleId]);
+        $rule = $stmt->fetch(PDO::FETCH_ASSOC);
+        
+        if (!$rule) {
+            send_json_response(0, 1, 404, "Compatibility rule not found");
+        }
+        
+        $rule['rule_definition'] = json_decode($rule['rule_definition'], true);
+        
+        // Test the rule against provided components
+        $compatibilityEngine = new CompatibilityEngine($pdo);
+        $testResults = [];
+        
+        foreach ($testComponents as $testPair) {
+            if (isset($testPair['component1']) && isset($testPair['component2'])) {
+                $result = $compatibilityEngine->checkCompatibility($testPair['component1'], $testPair['component2']);
+                
+                $testResults[] = [
+                    'component_1' => $testPair['component1'],
+                    'component_2' => $testPair['component2'],
+                    'rule_applied' => in_array($rule['rule_name'], $result['applied_rules']),
+                    'result' => $result
+                ];
+            }
+        }
+        
+        send_json_response(1, 1, 200, "Rule test completed", [
+            'rule' => $rule,
+            'test_results' => $testResults,
+            'test_summary' => [
+                'total_tests' => count($testResults),
+                'rule_triggered' => count(array_filter($testResults, function($test) { return $test['rule_applied']; }))
+            ]
+        ]);
+        
+    } catch (Exception $e) {
+        error_log("Error testing compatibility rule: " . $e->getMessage());
+        send_json_response(0, 1, 500, "Failed to test compatibility rule");
+    }
+}
+
+/**
+ * Get compatibility statistics
+ */
+function handleGetCompatibilityStatistics() {
+    global $pdo;
+    
+    $timeframe = $_GET['timeframe'] ?? $_POST['timeframe'] ?? '24 HOUR';
+    $includeDetails = filter_var($_GET['include_details'] ?? $_POST['include_details'] ?? false, FILTER_VALIDATE_BOOLEAN);
+    
+    try {
+        $compatibilityEngine = new CompatibilityEngine($pdo);
+        $statistics = $compatibilityEngine->getCompatibilityStatistics($timeframe);
+        
+        $response = [
+            'timeframe' => $timeframe,
+            'statistics' => $statistics
+        ];
+        
+        if ($includeDetails) {
+            // Get additional detailed statistics
+            $response['detailed_stats'] = getDetailedCompatibilityStats($pdo, $timeframe);
+        }
+        
+        send_json_response(1, 1, 200, "Compatibility statistics retrieved", $response);
+        
+    } catch (Exception $e) {
+        error_log("Error getting compatibility statistics: " . $e->getMessage());
+        send_json_response(0, 1, 500, "Failed to get compatibility statistics");
+    }
+}
+
+/**
+ * Clear compatibility cache
+ */
+function handleClearCompatibilityCache() {
+    global $pdo;
+    
+    $cacheType = $_POST['cache_type'] ?? 'all'; // 'rules', 'components', 'results', 'all'
+    
+    try {
+        $clearedItems = 0;
+        
+        switch ($cacheType) {
+            case 'rules':
+                // Clear rules cache (implementation depends on caching system)
+                $clearedItems = clearRulesCache($pdo);
+                break;
+                
+            case 'components':
+                // Clear component data cache
+                $componentCompatibility = new ComponentCompatibility($pdo);
+                $componentCompatibility->clearCache();
+                $clearedItems = count($componentCompatibility->getCacheStats()['cached_components']);
+                break;
+                
+            case 'results':
+                // Clear compatibility results cache
+                $stmt = $pdo->prepare("DELETE FROM compatibility_log WHERE created_at < DATE_SUB(NOW(), INTERVAL 24 HOUR)");
+                $stmt->execute();
+                $clearedItems = $stmt->rowCount();
+                break;
+                
+            case 'all':
+                // Clear all caches
+                $clearedItems += clearRulesCache($pdo);
+                $componentCompatibility = new ComponentCompatibility($pdo);
+                $componentCompatibility->clearCache();
+                $stmt = $pdo->prepare("DELETE FROM compatibility_log WHERE created_at < DATE_SUB(NOW(), INTERVAL 24 HOUR)");
+                $stmt->execute();
+                $clearedItems += $stmt->rowCount();
+                break;
+                
+            default:
+                send_json_response(0, 1, 400, "Invalid cache type. Use: rules, components, results, or all");
+        }
+        
+        send_json_response(1, 1, 200, "Cache cleared successfully", [
+            'cache_type' => $cacheType,
+            'items_cleared' => $clearedItems,
+            'timestamp' => date('Y-m-d H:i:s')
+        ]);
+        
+    } catch (Exception $e) {
+        error_log("Error clearing compatibility cache: " . $e->getMessage());
+        send_json_response(0, 1, 500, "Failed to clear compatibility cache");
+    }
+}
+
+/**
+ * Benchmark compatibility engine performance
+ */
+function handleBenchmarkPerformance() {
+    global $pdo;
+    
+    $iterations = (int)($_POST['iterations'] ?? 100);
+    $includeDetails = filter_var($_POST['include_details'] ?? false, FILTER_VALIDATE_BOOLEAN);
+    
+    if ($iterations < 1 || $iterations > 1000) {
+        send_json_response(0, 1, 400, "Iterations must be between 1 and 1000");
+    }
+    
+    try {
+        $compatibilityEngine = new CompatibilityEngine($pdo);
+        
+        // Get sample components for testing
+        $sampleComponents = getSampleComponentsForBenchmark($pdo);
+        
+        if (count($sampleComponents) < 2) {
+            send_json_response(0, 1, 400, "Insufficient components for benchmarking");
+        }
+        
+        $results = [];
+        $totalTime = 0;
+        $successCount = 0;
+        
+        for ($i = 0; $i < $iterations; $i++) {
+            // Select random components
+            $component1 = $sampleComponents[array_rand($sampleComponents)];
+            $component2 = $sampleComponents[array_rand($sampleComponents)];
+            
+            if ($component1['type'] === $component2['type']) {
+                continue; // Skip same type components
+            }
+            
+            $startTime = microtime(true);
+            
+            $result = $compatibilityEngine->checkCompatibility($component1, $component2);
+            
+            $endTime = microtime(true);
+            $executionTime = ($endTime - $startTime) * 1000;
+            
+            $totalTime += $executionTime;
+            
+            if ($result['compatible']) {
+                $successCount++;
+            }
+            
+            if ($includeDetails) {
+                $results[] = [
+                    'iteration' => $i + 1,
+                    'component_1' => $component1,
+                    'component_2' => $component2,
+                    'execution_time_ms' => round($executionTime, 3),
+                    'compatible' => $result['compatible'],
+                    'score' => $result['compatibility_score']
+                ];
+            }
+        }
+        
+        $benchmarkResults = [
+            'iterations_completed' => count($includeDetails ? $results : [$iterations]),
+            'total_execution_time_ms' => round($totalTime, 3),
+            'average_execution_time_ms' => round($totalTime / $iterations, 3),
+            'success_rate' => round(($successCount / $iterations) * 100, 2),
+            'checks_per_second' => round($iterations / ($totalTime / 1000), 2)
+        ];
+        
+        if ($includeDetails) {
+            $benchmarkResults['detailed_results'] = $results;
+        }
+        
+        send_json_response(1, 1, 200, "Performance benchmark completed", $benchmarkResults);
+        
+    } catch (Exception $e) {
+        error_log("Error in performance benchmark: " . $e->getMessage());
+        send_json_response(0, 1, 500, "Failed to run performance benchmark");
+    }
+}
+
+/**
+ * Export compatibility rules
+ */
+function handleExportCompatibilityRules() {
+    global $pdo;
+    
+    $format = $_GET['format'] ?? $_POST['format'] ?? 'json';
+    $activeOnly = filter_var($_GET['active_only'] ?? $_POST['active_only'] ?? true, FILTER_VALIDATE_BOOLEAN);
+    
+    try {
+        $query = "SELECT * FROM compatibility_rules";
+        $params = [];
+        
+        if ($activeOnly) {
+            $query .= " WHERE is_active = 1";
+        }
+        
+        $query .= " ORDER BY rule_priority ASC, rule_name ASC";
+        
+        $stmt = $pdo->prepare($query);
+        $stmt->execute($params);
+        $rules = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        
+        // Decode JSON rule definitions
+        foreach ($rules as &$rule) {
+            $rule['rule_definition'] = json_decode($rule['rule_definition'], true);
+        }
+        
+        $exportData = [
+            'export_timestamp' => date('Y-m-d H:i:s'),
+            'total_rules' => count($rules),
+            'active_only' => $activeOnly,
+            'rules' => $rules
+        ];
+        
+        switch ($format) {
+            case 'json':
+                header('Content-Type: application/json');
+                header('Content-Disposition: attachment; filename="compatibility_rules_' . date('Y-m-d_H-i-s') . '.json"');
+                echo json_encode($exportData, JSON_PRETTY_PRINT);
+                exit();
+                
+            case 'csv':
+                header('Content-Type: text/csv');
+                header('Content-Disposition: attachment; filename="compatibility_rules_' . date('Y-m-d_H-i-s') . '.csv"');
+                
+                $output = fopen('php://output', 'w');
+                fputcsv($output, ['ID', 'Rule Name', 'Rule Type', 'Component Types', 'Priority', 'Active', 'Created At']);
+                
+                foreach ($rules as $rule) {
+                    fputcsv($output, [
+                        $rule['id'],
+                        $rule['rule_name'],
+                        $rule['rule_type'],
+                        $rule['component_types'],
+                        $rule['rule_priority'],
+                        $rule['is_active'] ? 'Yes' : 'No',
+                        $rule['created_at']
+                    ]);
+                }
+                
+                fclose($output);
+                exit();
+                
+            default:
+                send_json_response(0, 1, 400, "Invalid export format. Use: json or csv");
+        }
+        
+    } catch (Exception $e) {
+        error_log("Error exporting compatibility rules: " . $e->getMessage());
+        send_json_response(0, 1, 500, "Failed to export compatibility rules");
+    }
+}
+
+/**
+ * Import compatibility rules
+ */
+function handleImportCompatibilityRules() {
+    global $pdo, $user;
+    
+    if (!isset($_FILES['rules_file'])) {
+        send_json_response(0, 1, 400, "Rules file is required");
+    }
+    
+    $file = $_FILES['rules_file'];
+    $overwriteExisting = filter_var($_POST['overwrite_existing'] ?? false, FILTER_VALIDATE_BOOLEAN);
+    
+    try {
+        $fileContent = file_get_contents($file['tmp_name']);
+        $importData = json_decode($fileContent, true);
+        
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            send_json_response(0, 1, 400, "Invalid JSON file format");
+        }
+        
+        if (!isset($importData['rules']) || !is_array($importData['rules'])) {
+            send_json_response(0, 1, 400, "Invalid rules file structure");
+        }
+        
+        $importedCount = 0;
+        $skippedCount = 0;
+        $errors = [];
+        
+        $pdo->beginTransaction();
+        
+        foreach ($importData['rules'] as $ruleData) {
+            try {
+                // Check if rule already exists
+                $stmt = $pdo->prepare("SELECT id FROM compatibility_rules WHERE rule_name = ?");
+                $stmt->execute([$ruleData['rule_name']]);
+                $existingRule = $stmt->fetch();
+                
+                if ($existingRule && !$overwriteExisting) {
+                    $skippedCount++;
+                    continue;
+                }
+                
+                // Prepare rule data
+                $ruleDefinition = is_array($ruleData['rule_definition']) 
+                    ? json_encode($ruleData['rule_definition']) 
+                    : $ruleData['rule_definition'];
+                
+                if ($existingRule && $overwriteExisting) {
+                    // Update existing rule
+                    $stmt = $pdo->prepare("
+                        UPDATE compatibility_rules 
+                        SET rule_type = ?, component_types = ?, rule_definition = ?, 
+                            rule_priority = ?, failure_message = ?, is_override_allowed = ?, 
+                            is_active = ?, updated_at = NOW()
+                        WHERE id = ?
+                    ");
+                    $stmt->execute([
+                        $ruleData['rule_type'],
+                        $ruleData['component_types'],
+                        $ruleDefinition,
+                        $ruleData['rule_priority'],
+                        $ruleData['failure_message'],
+                        $ruleData['is_override_allowed'] ?? 0,
+                        $ruleData['is_active'] ?? 1,
+                        $existingRule['id']
+                    ]);
+                } else {
+                    // Insert new rule
+                    $stmt = $pdo->prepare("
+                        INSERT INTO compatibility_rules 
+                        (rule_name, rule_type, component_types, rule_definition, rule_priority, 
+                         failure_message, is_override_allowed, is_active, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+                    ");
+                    $stmt->execute([
+                        $ruleData['rule_name'],
+                        $ruleData['rule_type'],
+                        $ruleData['component_types'],
+                        $ruleDefinition,
+                        $ruleData['rule_priority'],
+                        $ruleData['failure_message'],
+                        $ruleData['is_override_allowed'] ?? 0,
+                        $ruleData['is_active'] ?? 1
+                    ]);
+                }
+                
+                $importedCount++;
+                
+            } catch (Exception $e) {
+                $errors[] = "Rule '{$ruleData['rule_name']}': " . $e->getMessage();
+            }
+        }
+        
+        $pdo->commit();
+        
+        send_json_response(1, 1, 200, "Rules import completed", [
+            'imported_count' => $importedCount,
+            'skipped_count' => $skippedCount,
+            'error_count' => count($errors),
+            'errors' => $errors,
+            'overwrite_mode' => $overwriteExisting
+        ]);
+        
+    } catch (Exception $e) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        error_log("Error importing compatibility rules: " . $e->getMessage());
+        send_json_response(0, 1, 500, "Failed to import compatibility rules");
+    }
+}
+
+/**
+ * Generate configuration recommendations
+ */
+function generateConfigurationRecommendations($validationResult) {
+    $recommendations = [];
+    
+    // Performance recommendations
+    if ($validationResult['overall_score'] < 0.8) {
+        $recommendations[] = [
+            'type' => 'performance',
+            'priority' => 'medium',
+            'message' => 'Consider optimizing component selection for better compatibility',
+            'details' => 'Current compatibility score is below optimal threshold',
+            'suggested_actions' => [
+                'Review component compatibility matrix',
+                'Consider alternative components with higher compatibility scores',
+                'Check for newer component revisions'
+            ]
+        ];
+    }
+    
+    // Power recommendations
+    if ($validationResult['estimated_power'] > 500) {
+        $recommendations[] = [
+            'type' => 'power',
+            'priority' => 'high',
+            'message' => 'High power consumption detected',
+            'details' => "Estimated power consumption: {$validationResult['estimated_power']}W - ensure adequate PSU capacity",
+            'suggested_actions' => [
+                'Verify PSU wattage and efficiency rating',
+                'Consider power management features',
+                'Review component TDP specifications'
+            ]
+        ];
+    } elseif ($validationResult['estimated_power'] > 300) {
+        $recommendations[] = [
+            'type' => 'power',
+            'priority' => 'medium',
+            'message' => 'Moderate power consumption',
+            'details' => "Estimated power consumption: {$validationResult['estimated_power']}W - consider energy efficiency",
+            'suggested_actions' => [
+                'Look for energy-efficient alternatives',
+                'Enable power-saving features',
+                'Consider workload-appropriate sizing'
+            ]
+        ];
+    }
+    
+    // Component-specific recommendations
+    foreach ($validationResult['component_checks'] as $check) {
+        if (!$check['compatible']) {
+            $recommendations[] = [
+                'type' => 'compatibility',
+                'priority' => 'high',
+                'message' => "Compatibility issue: {$check['components']}",
+                'details' => implode(', ', $check['issues']),
+                'suggested_actions' => [
+                    'Review component specifications',
+                    'Consider alternative components',
+                    'Check for compatibility overrides if applicable'
+                ]
+            ];
+        } elseif (!empty($check['warnings'])) {
+            $recommendations[] = [
+                'type' => 'warning',
+                'priority' => 'low',
+                'message' => "Minor issue: {$check['components']}",
+                'details' => implode(', ', $check['warnings']),
+                'suggested_actions' => [
+                    'Monitor performance in production',
+                    'Consider optimization opportunities',
+                    'Review vendor compatibility notes'
+                ]
+            ];
+        }
+    }
+    
+    // Global check recommendations
+    foreach ($validationResult['global_checks'] as $check) {
+        if (!$check['passed']) {
+            $priority = strpos(strtolower($check['message']), 'critical') !== false ? 'high' : 'medium';
+            $recommendations[] = [
+                'type' => 'system',
+                'priority' => $priority,
+                'message' => "System requirement: {$check['check']}",
+                'details' => $check['message'],
+                'suggested_actions' => [
+                    'Address system-level requirements',
+                    'Verify configuration standards',
+                    'Consult documentation for best practices'
+                ]
+            ];
+        }
+    }
+    
+    // Cost optimization recommendations
+    if (isset($validationResult['estimated_cost']) && $validationResult['estimated_cost'] > 10000) {
+        $recommendations[] = [
+            'type' => 'cost',
+            'priority' => 'low',
+            'message' => 'High configuration cost detected',
+            'details' => "Estimated cost: $" . number_format($validationResult['estimated_cost'], 2),
+            'suggested_actions' => [
+                'Review component pricing alternatives',
+                'Consider phased deployment approach',
+                'Evaluate cost vs. performance benefits'
+            ]
+        ];
+    }
+    
+    return $recommendations;
+}
+
+/**
+ * Get detailed compatibility statistics
+ */
+function getDetailedCompatibilityStats($pdo, $timeframe) {
+    try {
+        $stats = [];
+        
+        // Most common compatibility failures
+        $stmt = $pdo->prepare("
+            SELECT 
+                component_type_1,
+                component_type_2,
+                COUNT(*) as failure_count,
+                AVG(compatibility_score) as avg_score
+            FROM compatibility_log 
+            WHERE compatibility_result = 0 
+                AND created_at >= DATE_SUB(NOW(), INTERVAL 1 $timeframe)
+            GROUP BY component_type_1, component_type_2
+            ORDER BY failure_count DESC
+            LIMIT 10
+        ");
+        $stmt->execute();
+        $stats['common_failures'] = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        
+        // Performance metrics by component type
+        $stmt = $pdo->prepare("
+            SELECT 
+                CONCAT(component_type_1, '-', component_type_2) as component_pair,
+                COUNT(*) as check_count,
+                AVG(execution_time_ms) as avg_execution_time,
+                SUM(CASE WHEN compatibility_result = 1 THEN 1 ELSE 0 END) as success_count,
+                MIN(execution_time_ms) as min_execution_time,
+                MAX(execution_time_ms) as max_execution_time
+            FROM compatibility_log 
+            WHERE created_at >= DATE_SUB(NOW(), INTERVAL 1 $timeframe)
+                AND execution_time_ms IS NOT NULL
+            GROUP BY component_type_1, component_type_2
+            ORDER BY check_count DESC
+        ");
+        $stmt->execute();
+        $stats['performance_metrics'] = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        
+        // Rule effectiveness
+        $stmt = $pdo->prepare("
+            SELECT 
+                JSON_UNQUOTE(JSON_EXTRACT(applied_rules, '$[0]')) as primary_rule,
+                COUNT(*) as usage_count,
+                SUM(CASE WHEN compatibility_result = 1 THEN 1 ELSE 0 END) as success_count,
+                AVG(compatibility_score) as avg_score
+            FROM compatibility_log 
+            WHERE created_at >= DATE_SUB(NOW(), INTERVAL 1 $timeframe)
+                AND applied_rules IS NOT NULL
+                AND JSON_LENGTH(applied_rules) > 0
+            GROUP BY primary_rule
+            ORDER BY usage_count DESC
+            LIMIT 10
+        ");
+        $stmt->execute();
+        $stats['rule_usage'] = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        
+        // Hourly compatibility check trends
+        $stmt = $pdo->prepare("
+            SELECT 
+                DATE_FORMAT(created_at, '%Y-%m-%d %H:00:00') as hour_period,
+                COUNT(*) as total_checks,
+                SUM(CASE WHEN compatibility_result = 1 THEN 1 ELSE 0 END) as successful_checks,
+                AVG(execution_time_ms) as avg_execution_time
+            FROM compatibility_log 
+            WHERE created_at >= DATE_SUB(NOW(), INTERVAL 1 $timeframe)
+            GROUP BY hour_period
+            ORDER BY hour_period DESC
+            LIMIT 24
+        ");
+        $stmt->execute();
+        $stats['hourly_trends'] = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        
+        // Component usage statistics
+        $stmt = $pdo->prepare("
+            SELECT 
+                component_type_1 as component_type,
+                COUNT(*) as usage_count
+            FROM compatibility_log 
+            WHERE created_at >= DATE_SUB(NOW(), INTERVAL 1 $timeframe)
+            GROUP BY component_type_1
+            UNION ALL
+            SELECT 
+                component_type_2 as component_type,
+                COUNT(*) as usage_count
+            FROM compatibility_log 
+            WHERE created_at >= DATE_SUB(NOW(), INTERVAL 1 $timeframe)
+            GROUP BY component_type_2
+        ");
+        $stmt->execute();
+        $componentUsage = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        
+        // Aggregate component usage
+        $aggregatedUsage = [];
+        foreach ($componentUsage as $usage) {
+            if (!isset($aggregatedUsage[$usage['component_type']])) {
+                $aggregatedUsage[$usage['component_type']] = 0;
+            }
+            $aggregatedUsage[$usage['component_type']] += $usage['usage_count'];
+        }
+        arsort($aggregatedUsage);
+        $stats['component_usage'] = $aggregatedUsage;
+        
+        return $stats;
+        
+    } catch (Exception $e) {
+        error_log("Error getting detailed compatibility stats: " . $e->getMessage());
+        return [];
+    }
+}
+
+/**
+ * Clear rules cache helper function
+ */
+function clearRulesCache($pdo) {
+    try {
+        // Implementation depends on your caching system
+        // For now, just return a placeholder count
+        return 0;
+    } catch (Exception $e) {
+        error_log("Error clearing rules cache: " . $e->getMessage());
+        return 0;
+    }
+}
+
+/**
+ * Get sample components for benchmark testing
+ */
+function getSampleComponentsForBenchmark($pdo) {
+    try {
+        $components = [];
+        $tables = [
+            'cpu' => 'cpuinventory',
+            'motherboard' => 'motherboardinventory',
+            'ram' => 'raminventory',
+            'storage' => 'storageinventory',
+            'nic' => 'nicinventory',
+            'caddy' => 'caddyinventory'
+        ];
+        
+        foreach ($tables as $type => $table) {
+            $stmt = $pdo->prepare("SELECT UUID FROM $table WHERE Status = 1 LIMIT 5");
+            $stmt->execute();
+            $results = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            
+            foreach ($results as $result) {
+                $components[] = [
+                    'type' => $type,
+                    'uuid' => $result['UUID']
+                ];
+            }
+        }
+        
+        return $components;
+        
+    } catch (Exception $e) {
+        error_log("Error getting sample components: " . $e->getMessage());
+        return [];
+    }
+}
+?>
