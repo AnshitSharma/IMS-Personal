@@ -1,6 +1,6 @@
 <?php
 /**
- * Complete JWT-Based API with ACL Integration and Server Management
+ * Complete JWT-Based API with ACL Integration, Server Management, and Compatibility System
  * File: api/api.php
  */
 
@@ -146,7 +146,10 @@ function handleServerModule($operation, $user) {
         'list-configs' => 'server.view',
         'delete-config' => 'server.delete',
         'clone-config' => 'server.create',
-        'get-statistics' => 'server.view_statistics'
+        'get-statistics' => 'server.view_statistics',
+        'update-config' => 'server.edit',
+        'get-components' => 'server.view',
+        'export-config' => 'server.view'
     ];
     
     $requiredPermission = $permissionMap[$operation] ?? 'server.view';
@@ -155,8 +158,13 @@ function handleServerModule($operation, $user) {
         send_json_response(0, 1, 403, "Insufficient permissions: $requiredPermission required");
     }
     
+    // Check if server system is initialized
+    if (!serverSystemInitialized($pdo)) {
+        send_json_response(0, 1, 503, "Server system not initialized. Please run database migrations first.");
+    }
+    
     // Include server API handler
-    require_once(__DIR__ . '/server/server_api.php');
+    require_once(__DIR__ . '/server/create_server.php');
 }
 
 /**
@@ -182,6 +190,11 @@ function handleCompatibilityModule($operation, $user) {
     
     if (!hasPermission($pdo, $requiredPermission, $user['id'])) {
         send_json_response(0, 1, 403, "Insufficient permissions: $requiredPermission required");
+    }
+    
+    // Check if compatibility system is initialized
+    if (!serverSystemInitialized($pdo)) {
+        send_json_response(0, 1, 503, "Compatibility system not initialized. Please run database migrations first.");
     }
     
     // Include compatibility API handler
@@ -358,6 +371,10 @@ function handleComponentOperations($module, $operation, $user) {
             send_json_response(0, 1, 403, "Insufficient permissions");
         }
         
+        if (!serverSystemInitialized($pdo)) {
+            send_json_response(0, 1, 503, "Compatibility system not available");
+        }
+        
         require_once(__DIR__ . '/../includes/models/CompatibilityEngine.php');
         
         $componentUuid = $_GET['component_uuid'] ?? $_POST['component_uuid'] ?? '';
@@ -394,7 +411,10 @@ function handleComponentOperations($module, $operation, $user) {
                 
                 send_json_response(1, 1, 200, "All compatible components retrieved", [
                     'base_component' => $baseComponent,
-                    'compatible_components' => $allCompatible
+                    'compatible_components' => $allCompatible,
+                    'summary' => array_map(function($components) {
+                        return ['count' => count($components)];
+                    }, $allCompatible)
                 ]);
             }
         } catch (Exception $e) {
@@ -423,10 +443,23 @@ function handleDashboardOperations($operation, $user) {
             try {
                 $stats = getSystemStats($pdo);
                 
-                // Add server configuration statistics if user has permission
-                if (hasPermission($pdo, 'server.view_statistics', $user['id'])) {
+                // Add server configuration statistics if user has permission and system is available
+                if (hasPermission($pdo, 'server.view_statistics', $user['id']) && serverSystemInitialized($pdo)) {
                     $serverStats = getServerConfigurationStats($pdo);
                     $stats['server_configurations'] = $serverStats;
+                }
+                
+                // Add compatibility statistics if available
+                if (hasPermission($pdo, 'compatibility.view_statistics', $user['id']) && serverSystemInitialized($pdo)) {
+                    try {
+                        require_once(__DIR__ . '/../includes/models/CompatibilityEngine.php');
+                        $compatibilityEngine = new CompatibilityEngine($pdo);
+                        $compatibilityStats = $compatibilityEngine->getCompatibilityStatistics();
+                        $stats['compatibility'] = $compatibilityStats;
+                    } catch (Exception $e) {
+                        error_log("Error getting compatibility stats: " . $e->getMessage());
+                        $stats['compatibility'] = null;
+                    }
                 }
                 
                 send_json_response(1, 1, 200, "Dashboard stats retrieved successfully", ['stats' => $stats]);
@@ -439,6 +472,10 @@ function handleDashboardOperations($operation, $user) {
         case 'server-summary':
             requirePermission($pdo, 'server.view_statistics', $user['id']);
             
+            if (!serverSystemInitialized($pdo)) {
+                send_json_response(0, 1, 503, "Server system not available");
+            }
+            
             try {
                 $serverStats = getServerConfigurationStats($pdo);
                 send_json_response(1, 1, 200, "Server statistics retrieved", $serverStats);
@@ -450,6 +487,10 @@ function handleDashboardOperations($operation, $user) {
             
         case 'compatibility-summary':
             requirePermission($pdo, 'compatibility.view_statistics', $user['id']);
+            
+            if (!serverSystemInitialized($pdo)) {
+                send_json_response(0, 1, 503, "Compatibility system not available");
+            }
             
             try {
                 require_once(__DIR__ . '/../includes/models/CompatibilityEngine.php');
@@ -482,6 +523,7 @@ function handleSearchOperations($operation, $user) {
                 $query = $_GET['q'] ?? $_POST['q'] ?? '';
                 $componentType = $_GET['type'] ?? $_POST['type'] ?? 'all';
                 $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 20;
+                $includeCompatibility = filter_var($_GET['include_compatibility'] ?? $_POST['include_compatibility'] ?? false, FILTER_VALIDATE_BOOLEAN);
                 
                 if (empty($query)) {
                     send_json_response(0, 1, 400, "Search query is required");
@@ -489,15 +531,73 @@ function handleSearchOperations($operation, $user) {
                 
                 $results = performGlobalSearch($pdo, $query, $componentType, $limit);
                 
+                // Add compatibility information if requested and available
+                if ($includeCompatibility && serverSystemInitialized($pdo) && hasPermission($pdo, 'compatibility.check', $user['id'])) {
+                    foreach ($results as &$result) {
+                        if (!empty($result['UUID'])) {
+                            $result['compatibility_available'] = true;
+                        }
+                    }
+                }
+                
                 send_json_response(1, 1, 200, "Search completed successfully", [
                     'results' => $results,
                     'query' => $query,
                     'type' => $componentType,
-                    'total' => count($results)
+                    'total' => count($results),
+                    'features' => [
+                        'compatibility_search' => serverSystemInitialized($pdo) && hasPermission($pdo, 'compatibility.check', $user['id'])
+                    ]
                 ]);
             } catch (Exception $e) {
                 error_log("Error in search: " . $e->getMessage());
                 send_json_response(0, 1, 500, "Search failed");
+            }
+            break;
+            
+        case 'compatible-components':
+            requirePermission($pdo, 'compatibility.check', $user['id']);
+            
+            if (!serverSystemInitialized($pdo)) {
+                send_json_response(0, 1, 503, "Compatibility system not available");
+            }
+            
+            try {
+                $baseComponentType = $_GET['base_type'] ?? $_POST['base_type'] ?? '';
+                $baseComponentUuid = $_GET['base_uuid'] ?? $_POST['base_uuid'] ?? '';
+                $query = $_GET['q'] ?? $_POST['q'] ?? '';
+                $targetType = $_GET['target_type'] ?? $_POST['target_type'] ?? '';
+                
+                if (empty($baseComponentType) || empty($baseComponentUuid)) {
+                    send_json_response(0, 1, 400, "Base component type and UUID are required");
+                }
+                
+                require_once(__DIR__ . '/../includes/models/CompatibilityEngine.php');
+                $compatibilityEngine = new CompatibilityEngine($pdo);
+                
+                $baseComponent = ['type' => $baseComponentType, 'uuid' => $baseComponentUuid];
+                $compatibleComponents = $compatibilityEngine->getCompatibleComponents($baseComponent, $targetType, true);
+                
+                // Filter by search query if provided
+                if (!empty($query)) {
+                    $compatibleComponents = array_filter($compatibleComponents, function($component) use ($query) {
+                        return stripos($component['SerialNumber'], $query) !== false ||
+                               stripos($component['Notes'] ?? '', $query) !== false ||
+                               stripos($component['Location'] ?? '', $query) !== false;
+                    });
+                }
+                
+                send_json_response(1, 1, 200, "Compatible components search completed", [
+                    'base_component' => $baseComponent,
+                    'query' => $query,
+                    'target_type' => $targetType,
+                    'results' => array_values($compatibleComponents),
+                    'total' => count($compatibleComponents)
+                ]);
+                
+            } catch (Exception $e) {
+                error_log("Error in compatibility search: " . $e->getMessage());
+                send_json_response(0, 1, 500, "Compatibility search failed");
             }
             break;
             
@@ -564,6 +664,36 @@ function handleUserOperations($operation, $user) {
             }
             break;
             
+        case 'profile':
+            // Get current user profile
+            $requestedUserId = $_GET['user_id'] ?? $_POST['user_id'] ?? $user['id'];
+            
+            // Check permissions
+            if ($requestedUserId != $user['id'] && !hasPermission($pdo, 'users.view', $user['id'])) {
+                send_json_response(0, 1, 403, "Insufficient permissions to view user profile");
+            }
+            
+            try {
+                $stmt = $pdo->prepare("SELECT id, username, email, firstname, lastname, created_at FROM users WHERE id = ?");
+                $stmt->execute([$requestedUserId]);
+                $userProfile = $stmt->fetch(PDO::FETCH_ASSOC);
+                
+                if (!$userProfile) {
+                    send_json_response(0, 1, 404, "User not found");
+                }
+                
+                // Get user roles
+                $acl = new ACL($pdo);
+                $userProfile['roles'] = $acl->getUserRoles($requestedUserId);
+                
+                send_json_response(1, 1, 200, "User profile retrieved", ['user' => $userProfile]);
+                
+            } catch (Exception $e) {
+                error_log("Error getting user profile: " . $e->getMessage());
+                send_json_response(0, 1, 500, "Failed to retrieve user profile");
+            }
+            break;
+            
         default:
             send_json_response(0, 1, 400, "Invalid user operation: $operation");
     }
@@ -582,7 +712,7 @@ function handleAuthOperations($operation) {
             $username = trim($_POST['username'] ?? '');
             $password = $_POST['password'] ?? '';
             
-            error_log("Login attempt - Username: '$username'");
+            error_log("Login attempt for username: $username");
             
             if (empty($username) || empty($password)) {
                 error_log("Login failed: Missing username or password");
@@ -654,6 +784,35 @@ function getServerConfigurationStats($pdo) {
     try {
         $stats = [];
         
+        // Check if server_configurations table exists
+        $tableExists = false;
+        try {
+            $stmt = $pdo->query("SHOW TABLES LIKE 'server_configurations'");
+            $tableExists = $stmt->rowCount() > 0;
+        } catch (Exception $e) {
+            error_log("Error checking server_configurations table: " . $e->getMessage());
+            return [];
+        }
+        
+        if (!$tableExists) {
+            return [
+                'configurations' => [
+                    'total' => 0,
+                    'draft' => 0,
+                    'validated' => 0,
+                    'built' => 0,
+                    'deployed' => 0
+                ],
+                'recent_activity' => ['recent_count' => 0],
+                'averages' => [
+                    'avg_score' => 0,
+                    'total_power' => 0,
+                    'total_cost' => 0
+                ],
+                'popular_cpus' => []
+            ];
+        }
+        
         // Configuration counts by status
         $stmt = $pdo->prepare("
             SELECT configuration_status, COUNT(*) as count 
@@ -713,6 +872,19 @@ function getServerConfigurationStats($pdo) {
 }
 
 /**
+ * Check if server system is initialized
+ */
+function serverSystemInitialized($pdo) {
+    try {
+        $stmt = $pdo->query("SHOW TABLES LIKE 'server_configurations'");
+        return $stmt->rowCount() > 0;
+    } catch (Exception $e) {
+        error_log("Error checking server system initialization: " . $e->getMessage());
+        return false;
+    }
+}
+
+/**
  * Enhanced require permission function
  */
 function requirePermission($pdo, $permission, $userId = null) {
@@ -736,5 +908,218 @@ function checkUserPermission($permission) {
 function getCurrentUser() {
     global $pdo;
     return authenticateWithJWT($pdo);
+}
+
+/**
+ * Enhanced global search with compatibility information
+ */
+function performGlobalSearch($pdo, $query, $componentType = 'all', $limit = 20) {
+    $results = [];
+    $searchTerm = "%$query%";
+    
+    $tables = [
+        'cpu' => 'cpuinventory',
+        'ram' => 'raminventory',
+        'storage' => 'storageinventory',
+        'motherboard' => 'motherboardinventory',
+        'nic' => 'nicinventory',
+        'caddy' => 'caddyinventory'
+    ];
+    
+    $searchFields = ['SerialNumber', 'UUID', 'Location', 'Notes'];
+    
+    foreach ($tables as $type => $table) {
+        if ($componentType !== 'all' && $componentType !== $type) {
+            continue;
+        }
+        
+        try {
+            $whereConditions = array_map(function($field) {
+                return "$field LIKE :search";
+            }, $searchFields);
+            
+            $sql = "SELECT *, '$type' as component_type FROM $table WHERE " . implode(' OR ', $whereConditions) . " LIMIT :limit";
+            
+            $stmt = $pdo->prepare($sql);
+            $stmt->bindValue(':search', $searchTerm, PDO::PARAM_STR);
+            $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+            $stmt->execute();
+            
+            $typeResults = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            $results = array_merge($results, $typeResults);
+            
+        } catch (PDOException $e) {
+            error_log("Search error for table $table: " . $e->getMessage());
+        }
+    }
+    
+    // Sort by relevance (exact matches first)
+    usort($results, function($a, $b) use ($query) {
+        $aExact = (stripos($a['SerialNumber'], $query) === 0) ? 1 : 0;
+        $bExact = (stripos($b['SerialNumber'], $query) === 0) ? 1 : 0;
+        return $bExact - $aExact;
+    });
+    
+    return array_slice($results, 0, $limit);
+}
+
+/**
+ * Enhanced system stats with server and compatibility information
+ */
+function getSystemStats($pdo) {
+    $stats = [];
+    
+    $tables = [
+        'cpu' => 'cpuinventory',
+        'ram' => 'raminventory',
+        'storage' => 'storageinventory',
+        'motherboard' => 'motherboardinventory',
+        'nic' => 'nicinventory',
+        'caddy' => 'caddyinventory'
+    ];
+    
+    $totalComponents = 0;
+    $totalAvailable = 0;
+    $totalInUse = 0;
+    $totalFailed = 0;
+    
+    foreach ($tables as $type => $table) {
+        try {
+            $stmt = $pdo->prepare("
+                SELECT 
+                    COUNT(*) as total,
+                    SUM(CASE WHEN Status = 1 THEN 1 ELSE 0 END) as available,
+                    SUM(CASE WHEN Status = 2 THEN 1 ELSE 0 END) as in_use,
+                    SUM(CASE WHEN Status = 0 THEN 1 ELSE 0 END) as failed
+                FROM $table
+            ");
+            $stmt->execute();
+            $result = $stmt->fetch(PDO::FETCH_ASSOC);
+            
+            $stats['components'][$type] = $result;
+            $totalComponents += $result['total'];
+            $totalAvailable += $result['available'];
+            $totalInUse += $result['in_use'];
+            $totalFailed += $result['failed'];
+            
+        } catch (PDOException $e) {
+            error_log("Error getting stats for $type: " . $e->getMessage());
+            $stats['components'][$type] = [
+                'total' => 0,
+                'available' => 0,
+                'in_use' => 0,
+                'failed' => 0
+            ];
+        }
+    }
+    
+    $stats['summary'] = [
+        'total_components' => $totalComponents,
+        'total_available' => $totalAvailable,
+        'total_in_use' => $totalInUse,
+        'total_failed' => $totalFailed,
+        'utilization_rate' => $totalComponents > 0 ? round(($totalInUse / $totalComponents) * 100, 2) : 0,
+        'availability_rate' => $totalComponents > 0 ? round(($totalAvailable / $totalComponents) * 100, 2) : 0,
+        'failure_rate' => $totalComponents > 0 ? round(($totalFailed / $totalComponents) * 100, 2) : 0
+    ];
+    
+    // Recent activity
+    try {
+        $recentActivity = [];
+        foreach ($tables as $type => $table) {
+            $stmt = $pdo->prepare("
+                SELECT COUNT(*) as recent_count 
+                FROM $table 
+                WHERE CreatedAt >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+            ");
+            $stmt->execute();
+            $result = $stmt->fetch(PDO::FETCH_ASSOC);
+            $recentActivity[$type] = $result['recent_count'];
+        }
+        $stats['recent_activity'] = $recentActivity;
+        $stats['summary']['recent_additions'] = array_sum($recentActivity);
+        
+    } catch (PDOException $e) {
+        error_log("Error getting recent activity: " . $e->getMessage());
+        $stats['recent_activity'] = [];
+        $stats['summary']['recent_additions'] = 0;
+    }
+    
+    // System features availability
+    $stats['system_features'] = [
+        'server_management' => serverSystemInitialized($pdo),
+        'compatibility_checking' => serverSystemInitialized($pdo),
+        'json_specifications' => true, // Always available based on file system
+        'audit_logging' => true,
+        'role_based_access' => true
+    ];
+    
+    return $stats;
+}
+
+/**
+ * Create a new user with optional role assignment
+ */
+function createUser($pdo, $username, $email, $password, $firstname = '', $lastname = '', $roleId = null) {
+    try {
+        $pdo->beginTransaction();
+        
+        $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
+        
+        $stmt = $pdo->prepare("
+            INSERT INTO users (username, email, password, firstname, lastname, created_at) 
+            VALUES (?, ?, ?, ?, ?, NOW())
+        ");
+        
+        if (!$stmt->execute([$username, $email, $hashedPassword, $firstname, $lastname])) {
+            $pdo->rollBack();
+            return false;
+        }
+        
+        $userId = $pdo->lastInsertId();
+        
+        // Assign role if provided
+        if ($roleId) {
+            $acl = new ACL($pdo);
+            if (!$acl->assignRole($userId, $roleId)) {
+                $pdo->rollBack();
+                return false;
+            }
+        }
+        
+        $pdo->commit();
+        return $userId;
+        
+    } catch (Exception $e) {
+        $pdo->rollBack();
+        error_log("Error creating user: " . $e->getMessage());
+        return false;
+    }
+}
+
+/**
+ * Log user activity
+ */
+function logActivity($pdo, $userId, $action, $category, $targetId = null, $description = '', $oldData = null, $newData = null) {
+    try {
+        $stmt = $pdo->prepare("
+            INSERT INTO activity_log (user_id, action, category, target_id, description, old_data, new_data, created_at) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, NOW())
+        ");
+        
+        $stmt->execute([
+            $userId,
+            $action,
+            $category,
+            $targetId,
+            $description,
+            $oldData ? json_encode($oldData) : null,
+            $newData ? json_encode($newData) : null
+        ]);
+        
+    } catch (Exception $e) {
+        error_log("Error logging activity: " . $e->getMessage());
+        // Don't fail the main operation if logging fails
+    }
 }
 ?>
