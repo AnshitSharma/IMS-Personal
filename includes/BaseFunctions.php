@@ -1,6 +1,6 @@
 <?php
 /**
- * Fixed BaseFunctions.php with proper authentication
+ * Complete BaseFunctions.php with JWT Authentication, ACL System, and Server Management
  * File: includes/BaseFunctions.php
  */
 
@@ -55,6 +55,17 @@ if (!function_exists('send_json_response')) {
 }
 
 /**
+ * Safe session start (kept for backward compatibility)
+ */
+if (!function_exists('safeSessionStart')) {
+    function safeSessionStart() {
+        if (session_status() === PHP_SESSION_NONE) {
+            session_start();
+        }
+    }
+}
+
+/**
  * JWT Authentication - Get authenticated user from JWT token
  */
 if (!function_exists('authenticateWithJWT')) {
@@ -68,8 +79,8 @@ if (!function_exists('authenticateWithJWT')) {
             
             $payload = JWTHelper::verifyToken($token);
             
-            // Get user from database - FIXED: Use correct column names
-            $stmt = $pdo->prepare("SELECT id, username, email, firstname, lastname, status FROM users WHERE id = ?");
+            // Get user from database
+            $stmt = $pdo->prepare("SELECT id, username, email, firstname, lastname FROM users WHERE id = ?");
             $stmt->execute([$payload['user_id']]);
             $user = $stmt->fetch(PDO::FETCH_ASSOC);
             
@@ -77,18 +88,9 @@ if (!function_exists('authenticateWithJWT')) {
                 return false;
             }
             
-            // Check if user is active
-            if (isset($user['status']) && $user['status'] !== 'active') {
-                return false;
-            }
-            
-            // Update last activity if auth_tokens table exists
-            try {
-                $stmt = $pdo->prepare("UPDATE auth_tokens SET last_used_at = NOW() WHERE user_id = ?");
-                $stmt->execute([$user['id']]);
-            } catch (Exception $e) {
-                // Ignore if auth_tokens table doesn't exist
-            }
+            // Update last activity
+            $stmt = $pdo->prepare("UPDATE auth_tokens SET last_used_at = NOW() WHERE user_id = ?");
+            $stmt->execute([$user['id']]);
             
             return $user;
         } catch (Exception $e) {
@@ -99,41 +101,32 @@ if (!function_exists('authenticateWithJWT')) {
 }
 
 /**
- * Authenticate user with username/password - FIXED VERSION
+ * Authenticate user with username/password
  */
 if (!function_exists('authenticateUser')) {
     function authenticateUser($pdo, $username, $password) {
         try {
             error_log("Authentication attempt for: $username");
             
-            // FIXED: Use correct column names
-            $stmt = $pdo->prepare("SELECT id, username, email, firstname, lastname, password, status FROM users WHERE username = ?");
+            $stmt = $pdo->prepare("SELECT id, username, email, firstname, lastname, password FROM users WHERE username = ? AND status = 'active'");
             $stmt->execute([$username]);
             $user = $stmt->fetch(PDO::FETCH_ASSOC);
             
-            if (!$user) {
-                error_log("User not found: $username");
-                return false;
-            }
-            
-            error_log("User found: " . $user['username'] . " (ID: " . $user['id'] . ")");
-            
-            // Check if user is active (with fallback if status column doesn't exist)
-            if (isset($user['status']) && $user['status'] !== 'active') {
-                error_log("User account is inactive: $username");
-                return false;
-            }
-            
-            // Verify password
-            if (password_verify($password, $user['password'])) {
-                error_log("Authentication successful for user: $username");
-                unset($user['password']); // Remove password from return data
-                return $user;
+            if ($user) {
+                error_log("User found: " . $user['username'] . " (ID: " . $user['id'] . ")");
+                
+                if (password_verify($password, $user['password'])) {
+                    error_log("Authentication successful for user: " . $user['username']);
+                    unset($user['password']); // Remove password from return data
+                    return $user;
+                } else {
+                    error_log("Password verification failed for user: " . $user['username']);
+                }
             } else {
-                error_log("Password verification failed for user: $username");
-                return false;
+                error_log("User not found or inactive: $username");
             }
             
+            return false;
         } catch (Exception $e) {
             error_log("Authentication error: " . $e->getMessage());
             return false;
@@ -148,14 +141,11 @@ if (!function_exists('initializeACLSystem')) {
     function initializeACLSystem($pdo) {
         try {
             // Check if ACL tables exist
-            $stmt = $pdo->query("SHOW TABLES LIKE 'permissions'");
+            $stmt = $pdo->query("SHOW TABLES LIKE 'acl_permissions'");
             if ($stmt->rowCount() == 0) {
-                // Create basic ACL tables if they don't exist
-                createBasicACLTables($pdo);
+                error_log("ACL tables not found. Please run database migrations.");
+                return false;
             }
-            
-            // Ensure admin user exists
-            ensureAdminUserExists($pdo);
             
             return true;
         } catch (Exception $e) {
@@ -171,8 +161,32 @@ if (!function_exists('initializeACLSystem')) {
 if (!function_exists('hasPermission')) {
     function hasPermission($pdo, $permission, $userId) {
         try {
-            $acl = new ACL($pdo);
-            return $acl->hasPermission($userId, $permission);
+            // Check direct user permissions
+            $stmt = $pdo->prepare("
+                SELECT COUNT(*) as count 
+                FROM user_permissions up 
+                JOIN acl_permissions ap ON up.permission_id = ap.id 
+                WHERE up.user_id = ? AND ap.permission_name = ?
+            ");
+            $stmt->execute([$userId, $permission]);
+            $result = $stmt->fetch(PDO::FETCH_ASSOC);
+            
+            if ($result['count'] > 0) {
+                return true;
+            }
+            
+            // Check role-based permissions
+            $stmt = $pdo->prepare("
+                SELECT COUNT(*) as count 
+                FROM user_roles ur 
+                JOIN role_permissions rp ON ur.role_id = rp.role_id 
+                JOIN acl_permissions ap ON rp.permission_id = ap.id 
+                WHERE ur.user_id = ? AND ap.permission_name = ?
+            ");
+            $stmt->execute([$userId, $permission]);
+            $result = $stmt->fetch(PDO::FETCH_ASSOC);
+            
+            return $result['count'] > 0;
         } catch (Exception $e) {
             error_log("Permission check error: " . $e->getMessage());
             return false;
@@ -186,8 +200,34 @@ if (!function_exists('hasPermission')) {
 if (!function_exists('getUserPermissions')) {
     function getUserPermissions($pdo, $userId) {
         try {
-            $acl = new ACL($pdo);
-            return $acl->getUserPermissions($userId);
+            $permissions = [];
+            
+            // Get direct permissions
+            $stmt = $pdo->prepare("
+                SELECT ap.permission_name 
+                FROM user_permissions up 
+                JOIN acl_permissions ap ON up.permission_id = ap.id 
+                WHERE up.user_id = ?
+            ");
+            $stmt->execute([$userId]);
+            while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                $permissions[] = $row['permission_name'];
+            }
+            
+            // Get role-based permissions
+            $stmt = $pdo->prepare("
+                SELECT ap.permission_name 
+                FROM user_roles ur 
+                JOIN role_permissions rp ON ur.role_id = rp.role_id 
+                JOIN acl_permissions ap ON rp.permission_id = ap.id 
+                WHERE ur.user_id = ?
+            ");
+            $stmt->execute([$userId]);
+            while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                $permissions[] = $row['permission_name'];
+            }
+            
+            return array_unique($permissions);
         } catch (Exception $e) {
             error_log("Get user permissions error: " . $e->getMessage());
             return [];
@@ -201,11 +241,68 @@ if (!function_exists('getUserPermissions')) {
 if (!function_exists('getUserRoles')) {
     function getUserRoles($pdo, $userId) {
         try {
-            $acl = new ACL($pdo);
-            return $acl->getUserRoles($userId);
+            $stmt = $pdo->prepare("
+                SELECT r.id, r.role_name, r.description 
+                FROM user_roles ur 
+                JOIN acl_roles r ON ur.role_id = r.id 
+                WHERE ur.user_id = ?
+            ");
+            $stmt->execute([$userId]);
+            return $stmt->fetchAll(PDO::FETCH_ASSOC);
         } catch (Exception $e) {
             error_log("Get user roles error: " . $e->getMessage());
             return [];
+        }
+    }
+}
+
+/**
+ * Assign permission to user
+ */
+if (!function_exists('assignPermissionToUser')) {
+    function assignPermissionToUser($pdo, $userId, $permission) {
+        try {
+            // Get permission ID
+            $stmt = $pdo->prepare("SELECT id FROM acl_permissions WHERE permission_name = ?");
+            $stmt->execute([$permission]);
+            $permissionData = $stmt->fetch(PDO::FETCH_ASSOC);
+            
+            if (!$permissionData) {
+                return false; // Permission doesn't exist
+            }
+            
+            // Check if already assigned
+            $stmt = $pdo->prepare("SELECT id FROM user_permissions WHERE user_id = ? AND permission_id = ?");
+            $stmt->execute([$userId, $permissionData['id']]);
+            if ($stmt->fetch()) {
+                return true; // Already assigned
+            }
+            
+            // Assign permission
+            $stmt = $pdo->prepare("INSERT INTO user_permissions (user_id, permission_id, created_at) VALUES (?, ?, NOW())");
+            return $stmt->execute([$userId, $permissionData['id']]);
+        } catch (Exception $e) {
+            error_log("Assign permission error: " . $e->getMessage());
+            return false;
+        }
+    }
+}
+
+/**
+ * Revoke permission from user
+ */
+if (!function_exists('revokePermissionFromUser')) {
+    function revokePermissionFromUser($pdo, $userId, $permission) {
+        try {
+            $stmt = $pdo->prepare("
+                DELETE up FROM user_permissions up 
+                JOIN acl_permissions ap ON up.permission_id = ap.id 
+                WHERE up.user_id = ? AND ap.permission_name = ?
+            ");
+            return $stmt->execute([$userId, $permission]);
+        } catch (Exception $e) {
+            error_log("Revoke permission error: " . $e->getMessage());
+            return false;
         }
     }
 }
@@ -216,8 +313,16 @@ if (!function_exists('getUserRoles')) {
 if (!function_exists('assignRoleToUser')) {
     function assignRoleToUser($pdo, $userId, $roleId) {
         try {
-            $acl = new ACL($pdo);
-            return $acl->assignRole($userId, $roleId);
+            // Check if already assigned
+            $stmt = $pdo->prepare("SELECT id FROM user_roles WHERE user_id = ? AND role_id = ?");
+            $stmt->execute([$userId, $roleId]);
+            if ($stmt->fetch()) {
+                return true; // Already assigned
+            }
+            
+            // Assign role
+            $stmt = $pdo->prepare("INSERT INTO user_roles (user_id, role_id, created_at) VALUES (?, ?, NOW())");
+            return $stmt->execute([$userId, $roleId]);
         } catch (Exception $e) {
             error_log("Assign role error: " . $e->getMessage());
             return false;
@@ -231,8 +336,8 @@ if (!function_exists('assignRoleToUser')) {
 if (!function_exists('revokeRoleFromUser')) {
     function revokeRoleFromUser($pdo, $userId, $roleId) {
         try {
-            $acl = new ACL($pdo);
-            return $acl->removeRole($userId, $roleId);
+            $stmt = $pdo->prepare("DELETE FROM user_roles WHERE user_id = ? AND role_id = ?");
+            return $stmt->execute([$userId, $roleId]);
         } catch (Exception $e) {
             error_log("Revoke role error: " . $e->getMessage());
             return false;
@@ -246,8 +351,9 @@ if (!function_exists('revokeRoleFromUser')) {
 if (!function_exists('getAllRoles')) {
     function getAllRoles($pdo) {
         try {
-            $acl = new ACL($pdo);
-            return $acl->getAllRoles();
+            $stmt = $pdo->prepare("SELECT id, role_name, description, created_at FROM acl_roles ORDER BY role_name");
+            $stmt->execute();
+            return $stmt->fetchAll(PDO::FETCH_ASSOC);
         } catch (Exception $e) {
             error_log("Get all roles error: " . $e->getMessage());
             return [];
@@ -261,11 +367,113 @@ if (!function_exists('getAllRoles')) {
 if (!function_exists('getAllPermissions')) {
     function getAllPermissions($pdo) {
         try {
-            $acl = new ACL($pdo);
-            return $acl->getAllPermissions();
+            $stmt = $pdo->prepare("SELECT id, permission_name, description, category FROM acl_permissions ORDER BY category, permission_name");
+            $stmt->execute();
+            return $stmt->fetchAll(PDO::FETCH_ASSOC);
         } catch (Exception $e) {
             error_log("Get all permissions error: " . $e->getMessage());
             return [];
+        }
+    }
+}
+
+/**
+ * Create new role
+ */
+if (!function_exists('createRole')) {
+    function createRole($pdo, $name, $description = '') {
+        try {
+            $stmt = $pdo->prepare("INSERT INTO acl_roles (role_name, description, created_at) VALUES (?, ?, NOW())");
+            $result = $stmt->execute([$name, $description]);
+            
+            if ($result) {
+                return $pdo->lastInsertId();
+            }
+            return false;
+        } catch (Exception $e) {
+            error_log("Create role error: " . $e->getMessage());
+            return false;
+        }
+    }
+}
+
+/**
+ * Update role
+ */
+if (!function_exists('updateRole')) {
+    function updateRole($pdo, $roleId, $name, $description = '') {
+        try {
+            $stmt = $pdo->prepare("UPDATE acl_roles SET role_name = ?, description = ? WHERE id = ?");
+            return $stmt->execute([$name, $description, $roleId]);
+        } catch (Exception $e) {
+            error_log("Update role error: " . $e->getMessage());
+            return false;
+        }
+    }
+}
+
+/**
+ * Delete role
+ */
+if (!function_exists('deleteRole')) {
+    function deleteRole($pdo, $roleId) {
+        try {
+            // Start transaction
+            $pdo->beginTransaction();
+            
+            // Remove role permissions
+            $stmt = $pdo->prepare("DELETE FROM role_permissions WHERE role_id = ?");
+            $stmt->execute([$roleId]);
+            
+            // Remove user roles
+            $stmt = $pdo->prepare("DELETE FROM user_roles WHERE role_id = ?");
+            $stmt->execute([$roleId]);
+            
+            // Delete role
+            $stmt = $pdo->prepare("DELETE FROM acl_roles WHERE id = ?");
+            $result = $stmt->execute([$roleId]);
+            
+            $pdo->commit();
+            return $result;
+        } catch (Exception $e) {
+            $pdo->rollBack();
+            error_log("Delete role error: " . $e->getMessage());
+            return false;
+        }
+    }
+}
+
+/**
+ * Server Management Functions
+ */
+
+/**
+ * Check if server system is initialized
+ */
+if (!function_exists('serverSystemInitialized')) {
+    function serverSystemInitialized($pdo) {
+        try {
+            $stmt = $pdo->query("SHOW TABLES LIKE 'server_configurations'");
+            return $stmt->rowCount() > 0;
+        } catch (Exception $e) {
+            return false;
+        }
+    }
+}
+
+/**
+ * Get system setting
+ */
+if (!function_exists('getSystemSetting')) {
+    function getSystemSetting($pdo, $setting, $default = null) {
+        try {
+            $stmt = $pdo->prepare("SELECT value FROM system_settings WHERE name = ?");
+            $stmt->execute([$setting]);
+            $result = $stmt->fetch(PDO::FETCH_ASSOC);
+            
+            return $result ? $result['value'] : $default;
+        } catch (Exception $e) {
+            return $default;
         }
     }
 }
@@ -279,7 +487,7 @@ if (!function_exists('getDashboardData')) {
         
         try {
             // Get component counts
-            $componentTypes = ['cpuinventory', 'raminventory', 'storageinventory', 'motherboardinventory', 'nicinventory', 'caddyinventory'];
+            $componentTypes = ['cpu', 'ram', 'storage', 'motherboard', 'nic', 'caddy'];
             $componentCounts = [];
             
             foreach ($componentTypes as $type) {
@@ -287,9 +495,9 @@ if (!function_exists('getDashboardData')) {
                     $stmt = $pdo->prepare("SELECT COUNT(*) as count FROM $type");
                     $stmt->execute();
                     $result = $stmt->fetch(PDO::FETCH_ASSOC);
-                    $componentCounts[str_replace('inventory', '', $type)] = (int)$result['count'];
+                    $componentCounts[$type] = (int)$result['count'];
                 } catch (Exception $e) {
-                    $componentCounts[str_replace('inventory', '', $type)] = 0;
+                    $componentCounts[$type] = 0;
                 }
             }
             
@@ -347,7 +555,7 @@ if (!function_exists('getDashboardData')) {
 if (!function_exists('performGlobalSearch')) {
     function performGlobalSearch($pdo, $query, $limit, $user) {
         $results = [];
-        $componentTypes = ['cpuinventory', 'raminventory', 'storageinventory', 'motherboardinventory', 'nicinventory', 'caddyinventory'];
+        $componentTypes = ['cpu', 'ram', 'storage', 'motherboard', 'nic', 'caddy'];
         
         try {
             foreach ($componentTypes as $type) {
@@ -391,19 +599,7 @@ if (!function_exists('performGlobalSearch')) {
 if (!function_exists('getComponentsByType')) {
     function getComponentsByType($pdo, $type) {
         try {
-            // Map component types to actual table names
-            $tableMap = [
-                'cpu' => 'cpuinventory',
-                'ram' => 'raminventory',
-                'storage' => 'storageinventory',
-                'motherboard' => 'motherboardinventory',
-                'nic' => 'nicinventory',
-                'caddy' => 'caddyinventory'
-            ];
-            
-            $tableName = $tableMap[$type] ?? $type;
-            
-            $stmt = $pdo->prepare("SELECT * FROM $tableName ORDER BY ID DESC");
+            $stmt = $pdo->prepare("SELECT * FROM $type ORDER BY id DESC");
             $stmt->execute();
             return $stmt->fetchAll(PDO::FETCH_ASSOC);
         } catch (Exception $e) {
@@ -419,19 +615,7 @@ if (!function_exists('getComponentsByType')) {
 if (!function_exists('getComponentById')) {
     function getComponentById($pdo, $type, $id) {
         try {
-            // Map component types to actual table names
-            $tableMap = [
-                'cpu' => 'cpuinventory',
-                'ram' => 'raminventory',
-                'storage' => 'storageinventory',
-                'motherboard' => 'motherboardinventory',
-                'nic' => 'nicinventory',
-                'caddy' => 'caddyinventory'
-            ];
-            
-            $tableName = $tableMap[$type] ?? $type;
-            
-            $stmt = $pdo->prepare("SELECT * FROM $tableName WHERE ID = ?");
+            $stmt = $pdo->prepare("SELECT * FROM $type WHERE id = ?");
             $stmt->execute([$id]);
             return $stmt->fetch(PDO::FETCH_ASSOC);
         } catch (Exception $e) {
@@ -447,18 +631,6 @@ if (!function_exists('getComponentById')) {
 if (!function_exists('addComponent')) {
     function addComponent($pdo, $type, $data, $userId) {
         try {
-            // Map component types to actual table names
-            $tableMap = [
-                'cpu' => 'cpuinventory',
-                'ram' => 'raminventory',
-                'storage' => 'storageinventory',
-                'motherboard' => 'motherboardinventory',
-                'nic' => 'nicinventory',
-                'caddy' => 'caddyinventory'
-            ];
-            
-            $tableName = $tableMap[$type] ?? $type;
-            
             // Generate UUID if not provided
             if (!isset($data['UUID']) || empty($data['UUID'])) {
                 $data['UUID'] = generateUUID();
@@ -469,38 +641,15 @@ if (!function_exists('addComponent')) {
             $placeholders = array_fill(0, count($columns), '?');
             $values = array_values($data);
             
-            $sql = "INSERT INTO $tableName (" . implode(', ', $columns) . ") VALUES (" . implode(', ', $placeholders) . ")";
+            $sql = "INSERT INTO $type (" . implode(', ', $columns) . ") VALUES (" . implode(', ', $placeholders) . ")";
             
-            error_log("Inserting $type data into $tableName: " . json_encode($data));
+            error_log("Inserting $type data: " . json_encode($data));
             
             $stmt = $pdo->prepare($sql);
             $result = $stmt->execute($values);
             
             if ($result) {
-                $insertId = $pdo->lastInsertId();
-                
-                // Log the action
-                try {
-                    $stmt = $pdo->prepare("
-                        INSERT INTO inventory_log (user_id, component_type, component_id, action, new_data, notes, ip_address, user_agent, created_at) 
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())
-                    ");
-                    $stmt->execute([
-                        $userId,
-                        $type,
-                        $insertId,
-                        'Component created',
-                        json_encode($data),
-                        'Created new ' . $type . ' component',
-                        $_SERVER['REMOTE_ADDR'] ?? 'unknown',
-                        $_SERVER['HTTP_USER_AGENT'] ?? 'unknown'
-                    ]);
-                } catch (Exception $e) {
-                    // Ignore logging errors
-                    error_log("Error logging component creation: " . $e->getMessage());
-                }
-                
-                return $insertId;
+                return $pdo->lastInsertId();
             }
             
             return false;
@@ -513,84 +662,60 @@ if (!function_exists('addComponent')) {
 }
 
 /**
- * Get system setting
+ * Update component
  */
-if (!function_exists('getSystemSetting')) {
-    function getSystemSetting($pdo, $setting, $default = null) {
+if (!function_exists('updateComponent')) {
+    function updateComponent($pdo, $type, $id, $data, $userId) {
         try {
-            $stmt = $pdo->prepare("SELECT value FROM system_settings WHERE name = ?");
-            $stmt->execute([$setting]);
-            $result = $stmt->fetch(PDO::FETCH_ASSOC);
+            $columns = array_keys($data);
+            $setClause = implode(' = ?, ', $columns) . ' = ?';
+            $values = array_values($data);
+            $values[] = $id; // Add ID for WHERE clause
             
-            return $result ? $result['value'] : $default;
+            $sql = "UPDATE $type SET $setClause WHERE id = ?";
+            
+            $stmt = $pdo->prepare($sql);
+            return $stmt->execute($values);
+            
         } catch (Exception $e) {
-            return $default;
+            error_log("Error updating $type component: " . $e->getMessage());
+            throw $e;
         }
     }
 }
 
 /**
- * Create basic ACL tables if they don't exist
+ * Delete component
  */
-if (!function_exists('createBasicACLTables')) {
-    function createBasicACLTables($pdo) {
-        // This function is kept for backward compatibility
-        // The actual ACL tables already exist in your database
-        return true;
+if (!function_exists('deleteComponent')) {
+    function deleteComponent($pdo, $type, $id, $userId) {
+        try {
+            $stmt = $pdo->prepare("DELETE FROM $type WHERE id = ?");
+            return $stmt->execute([$id]);
+            
+        } catch (Exception $e) {
+            error_log("Error deleting $type component: " . $e->getMessage());
+            throw $e;
+        }
     }
 }
 
 /**
- * Auto-create admin user if no admin users exist
+ * User Management Functions
  */
-if (!function_exists('ensureAdminUserExists')) {
-    function ensureAdminUserExists($pdo) {
+
+/**
+ * Get all users
+ */
+if (!function_exists('getAllUsers')) {
+    function getAllUsers($pdo) {
         try {
-            // Check if any admin users exist
-            $stmt = $pdo->prepare("
-                SELECT COUNT(*) as count 
-                FROM users u 
-                JOIN user_roles ur ON u.id = ur.user_id 
-                JOIN roles r ON ur.role_id = r.id 
-                WHERE r.name IN ('super_admin', 'admin')
-            ");
+            $stmt = $pdo->prepare("SELECT id, username, email, firstname, lastname, status, created_at FROM users ORDER BY username");
             $stmt->execute();
-            $result = $stmt->fetch(PDO::FETCH_ASSOC);
-            
-            if ($result['count'] == 0) {
-                // No admin users exist, create default admin
-                $adminPassword = 'password'; // Default password
-                $hashedPassword = password_hash($adminPassword, PASSWORD_DEFAULT);
-                
-                $stmt = $pdo->prepare("
-                    INSERT INTO users (firstname, lastname, username, password, email, status, created_at) 
-                    VALUES (?, ?, ?, ?, ?, ?, NOW())
-                ");
-                $stmt->execute([
-                    'System',
-                    'Administrator',
-                    'admin',
-                    $hashedPassword,
-                    'admin@system.com',
-                    'active'
-                ]);
-                
-                $userId = $pdo->lastInsertId();
-                
-                // Assign super_admin role
-                $stmt = $pdo->prepare("SELECT id FROM roles WHERE name = 'super_admin' LIMIT 1");
-                $stmt->execute();
-                $role = $stmt->fetch(PDO::FETCH_ASSOC);
-                
-                if ($role) {
-                    $stmt = $pdo->prepare("INSERT INTO user_roles (user_id, role_id, assigned_at) VALUES (?, ?, NOW())");
-                    $stmt->execute([$userId, $role['id']]);
-                }
-                
-                error_log("Created default admin user (username: admin, password: $adminPassword)");
-            }
+            return $stmt->fetchAll(PDO::FETCH_ASSOC);
         } catch (Exception $e) {
-            error_log("Error ensuring admin user exists: " . $e->getMessage());
+            error_log("Error getting all users: " . $e->getMessage());
+            return [];
         }
     }
 }
@@ -617,18 +742,7 @@ if (!function_exists('createUser')) {
             $result = $stmt->execute([$username, $email, $hashedPassword, $firstname, $lastname]);
             
             if ($result) {
-                $userId = $pdo->lastInsertId();
-                
-                // Assign default role (viewer role)
-                $stmt = $pdo->prepare("SELECT id FROM roles WHERE name = 'viewer' LIMIT 1");
-                $stmt->execute();
-                $role = $stmt->fetch(PDO::FETCH_ASSOC);
-                
-                if ($role) {
-                    assignRoleToUser($pdo, $userId, $role['id']);
-                }
-                
-                return $userId;
+                return $pdo->lastInsertId();
             }
             
             return false;
@@ -641,28 +755,83 @@ if (!function_exists('createUser')) {
 }
 
 /**
- * Get all users
+ * Update user
  */
-if (!function_exists('getAllUsers')) {
-    function getAllUsers($pdo) {
+if (!function_exists('updateUser')) {
+    function updateUser($pdo, $userId, $data) {
         try {
-            $stmt = $pdo->prepare("SELECT id, username, email, firstname, lastname, status, created_at FROM users ORDER BY username");
-            $stmt->execute();
-            return $stmt->fetchAll(PDO::FETCH_ASSOC);
+            // Remove password from direct updates for security
+            if (isset($data['password'])) {
+                $data['password'] = password_hash($data['password'], PASSWORD_DEFAULT);
+            }
+            
+            $columns = array_keys($data);
+            $setClause = implode(' = ?, ', $columns) . ' = ?';
+            $values = array_values($data);
+            $values[] = $userId;
+            
+            $sql = "UPDATE users SET $setClause WHERE id = ?";
+            
+            $stmt = $pdo->prepare($sql);
+            return $stmt->execute($values);
+            
         } catch (Exception $e) {
-            error_log("Error getting all users: " . $e->getMessage());
-            return [];
+            error_log("Error updating user: " . $e->getMessage());
+            return false;
         }
     }
 }
 
-// Auto-initialize system on first load
-try {
-    if (isset($pdo)) {
-        initializeACLSystem($pdo);
+/**
+ * Delete user
+ */
+if (!function_exists('deleteUser')) {
+    function deleteUser($pdo, $userId) {
+        try {
+            // Start transaction
+            $pdo->beginTransaction();
+            
+            // Delete user role assignments
+            $stmt = $pdo->prepare("DELETE FROM user_roles WHERE user_id = ?");
+            $stmt->execute([$userId]);
+            
+            // Delete user permission assignments
+            $stmt = $pdo->prepare("DELETE FROM user_permissions WHERE user_id = ?");
+            $stmt->execute([$userId]);
+            
+            // Delete user auth tokens
+            $stmt = $pdo->prepare("DELETE FROM auth_tokens WHERE user_id = ?");
+            $stmt->execute([$userId]);
+            
+            // Delete user
+            $stmt = $pdo->prepare("DELETE FROM users WHERE id = ?");
+            $result = $stmt->execute([$userId]);
+            
+            $pdo->commit();
+            return $result;
+            
+        } catch (Exception $e) {
+            $pdo->rollBack();
+            error_log("Error deleting user: " . $e->getMessage());
+            return false;
+        }
     }
-} catch (Exception $e) {
-    error_log("Error in auto-initialization: " . $e->getMessage());
+}
+
+/**
+ * Get user by ID
+ */
+if (!function_exists('getUserById')) {
+    function getUserById($pdo, $userId) {
+        try {
+            $stmt = $pdo->prepare("SELECT id, username, email, firstname, lastname, status, created_at FROM users WHERE id = ?");
+            $stmt->execute([$userId]);
+            return $stmt->fetch(PDO::FETCH_ASSOC);
+        } catch (Exception $e) {
+            error_log("Error getting user by ID: " . $e->getMessage());
+            return null;
+        }
+    }
 }
 
 ?>
