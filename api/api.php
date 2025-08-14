@@ -129,6 +129,88 @@ try {
 }
 
 /**
+ * Handle server creation and management operations
+ */
+function handleServerModule($operation, $user) {
+    global $pdo;
+    
+    // Map operations to their required permissions and internal actions
+    $permissionMap = [
+        'create-start' => 'server.create',
+        'add-component' => 'server.create',
+        'remove-component' => 'server.edit',
+        'get-compatible' => 'server.view',
+        'validate-config' => 'server.view',
+        'save-config' => 'server.create',
+        'load-config' => 'server.view',
+        'list-configs' => 'server.view',
+        'delete-config' => 'server.delete',
+        'clone-config' => 'server.create',
+        'get-statistics' => 'server.view_statistics',
+        'update-config' => 'server.edit',
+        'get-components' => 'server.view',
+        'export-config' => 'server.view',
+        'initialize' => 'server.create',
+        'get_next_options' => 'server.view',
+        'validate_current' => 'server.view',
+        'finalize' => 'server.create',
+        'save_draft' => 'server.create',
+        'load_draft' => 'server.view',
+        'get_server_progress' => 'server.view',
+        'reset_configuration' => 'server.edit'
+    ];
+    
+    // Map external operations to internal actions
+    $actionMap = [
+        'add-component' => 'step_add_component',
+        'remove-component' => 'step_remove_component'
+    ];
+    
+    $requiredPermission = $permissionMap[$operation] ?? 'server.view';
+    
+    if (!hasPermission($pdo, $requiredPermission, $user['id'])) {
+        send_json_response(0, 1, 403, "Insufficient permissions: $requiredPermission required");
+    }
+    
+    // Convert external action to internal action if needed
+    $internalAction = $actionMap[$operation] ?? $operation;
+    $_POST['action'] = $internalAction;
+    $_GET['action'] = $internalAction;
+    
+    // Include server creation handler
+    require_once(__DIR__ . '/server/create_server.php');
+}
+
+/**
+ * Handle compatibility checking operations
+ */
+function handleCompatibilityModule($operation, $user) {
+    global $pdo;
+    
+    // Map operations to their required permissions
+    $permissionMap = [
+        'check' => 'compatibility.check',
+        'check-pair' => 'compatibility.check',
+        'check-multiple' => 'compatibility.check',
+        'get-compatible-for' => 'compatibility.check',
+        'batch-check' => 'compatibility.check',
+        'analyze-configuration' => 'compatibility.check',
+        'get-rules' => 'compatibility.view_statistics',
+        'test-rule' => 'compatibility.manage_rules',
+        'get-statistics' => 'compatibility.view_statistics'
+    ];
+    
+    $requiredPermission = $permissionMap[$operation] ?? 'compatibility.check';
+    
+    if (!hasPermission($pdo, $requiredPermission, $user['id'])) {
+        send_json_response(0, 1, 403, "Insufficient permissions: $requiredPermission required");
+    }
+    
+    // Include compatibility API handler
+    require_once(__DIR__ . '/server/compatibility_api.php');
+}
+
+/**
  * Handle authentication operations (no login required)
  */
 function handleAuthOperations($operation) {
@@ -171,7 +253,7 @@ function handleAuthOperations($operation) {
 }
 
 /**
- * Handle login request with improved error handling
+ * Handle login request
  */
 function handleLogin() {
     global $pdo;
@@ -187,31 +269,15 @@ function handleLogin() {
     }
     
     try {
-        // Get user from database with detailed error handling
-        $stmt = $pdo->prepare("SELECT id, username, email, firstname, lastname, password, status FROM users WHERE username = ?");
-        $stmt->execute([$username]);
-        $user = $stmt->fetch(PDO::FETCH_ASSOC);
+        // Authenticate user
+        $user = authenticateUser($pdo, $username, $password);
         
         if (!$user) {
-            error_log("User not found: $username");
+            error_log("Authentication failed for: $username");
             send_json_response(0, 0, 401, "Invalid credentials");
         }
         
-        // Check if user is active
-        if (isset($user['status']) && $user['status'] !== 'active') {
-            error_log("User account is inactive: $username");
-            send_json_response(0, 0, 401, "Account is inactive");
-        }
-        
-        error_log("User found: " . $user['username'] . " (ID: " . $user['id'] . ")");
-        
-        // Verify password
-        if (!password_verify($password, $user['password'])) {
-            error_log("Password verification failed for user: $username");
-            send_json_response(0, 0, 401, "Invalid credentials");
-        }
-        
-        error_log("Authentication successful for user: $username");
+        error_log("Login successful for user: $username (ID: " . $user['id'] . ")");
         
         // Generate JWT tokens
         $accessTokenExpiry = $rememberMe ? 86400 : 3600; // 24h or 1h
@@ -229,7 +295,6 @@ function handleLogin() {
         
         // Get user permissions
         $permissions = getUserPermissions($pdo, $user['id']);
-        $roles = getUserRoles($pdo, $user['id']);
         
         send_json_response(1, 1, 200, "Login successful", [
             'user' => [
@@ -242,11 +307,9 @@ function handleLogin() {
             'tokens' => [
                 'access_token' => $accessToken,
                 'refresh_token' => $refreshToken,
-                'expires_in' => $accessTokenExpiry,
-                'token_type' => 'Bearer'
+                'expires_in' => $accessTokenExpiry
             ],
-            'permissions' => $permissions,
-            'roles' => $roles
+            'permissions' => $permissions
         ]);
         
     } catch (Exception $e) {
@@ -308,12 +371,12 @@ function handleTokenRefresh() {
         }
         
         // Get user data
-        $stmt = $pdo->prepare("SELECT id, username, email, firstname, lastname FROM users WHERE id = ? AND status = 'active'");
+        $stmt = $pdo->prepare("SELECT id, username, email, firstname, lastname FROM users WHERE id = ?");
         $stmt->execute([$tokenData['user_id']]);
         $user = $stmt->fetch(PDO::FETCH_ASSOC);
         
         if (!$user) {
-            send_json_response(0, 0, 401, "User not found or inactive");
+            send_json_response(0, 0, 401, "User not found");
         }
         
         // Generate new access token
@@ -325,7 +388,6 @@ function handleTokenRefresh() {
         send_json_response(1, 1, 200, "Token refreshed successfully", [
             'access_token' => $accessToken,
             'expires_in' => 3600,
-            'token_type' => 'Bearer',
             'user' => [
                 'id' => (int)$user['id'],
                 'username' => $user['username'],
@@ -354,9 +416,6 @@ function handleTokenVerification() {
             send_json_response(0, 0, 401, "Invalid token");
         }
         
-        $permissions = getUserPermissions($pdo, $user['id']);
-        $roles = getUserRoles($pdo, $user['id']);
-        
         send_json_response(1, 1, 200, "Token is valid", [
             'user' => [
                 'id' => (int)$user['id'],
@@ -364,9 +423,7 @@ function handleTokenVerification() {
                 'email' => $user['email'],
                 'firstname' => $user['firstname'],
                 'lastname' => $user['lastname']
-            ],
-            'permissions' => $permissions,
-            'roles' => $roles
+            ]
         ]);
         
     } catch (Exception $e) {
@@ -409,8 +466,8 @@ function handleRegistration() {
         $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
         
         $stmt = $pdo->prepare("
-            INSERT INTO users (username, email, password, firstname, lastname, status, created_at) 
-            VALUES (?, ?, ?, ?, ?, 'active', NOW())
+            INSERT INTO users (username, email, password, firstname, lastname, created_at) 
+            VALUES (?, ?, ?, ?, ?, NOW())
         ");
         $stmt->execute([$username, $email, $hashedPassword, $firstname, $lastname]);
         
@@ -451,59 +508,6 @@ function handleForgotPassword() {
  */
 function handleResetPassword() {
     send_json_response(0, 0, 501, "Password reset functionality not implemented");
-}
-
-/**
- * Handle server creation and management operations
- */
-function handleServerModule($operation, $user) {
-    global $pdo;
-    
-    // Map operations to their required permissions and internal actions
-    $permissionMap = [
-        'create-start' => 'server.create',
-        'add-component' => 'server.create',
-        'remove-component' => 'server.edit',
-        'get-compatible' => 'server.view',
-        'validate-config' => 'server.view',
-        'save-config' => 'server.create',
-        'load-config' => 'server.view',
-        'list-configs' => 'server.view',
-        'delete-config' => 'server.delete',
-        'clone-config' => 'server.create',
-        'get-statistics' => 'server.view_statistics',
-        'update-config' => 'server.edit',
-        'get-components' => 'server.view',
-        'export-config' => 'server.view',
-        'initialize' => 'server.create',
-        'get_next_options' => 'server.view',
-        'validate_current' => 'server.view',
-        'finalize' => 'server.create',
-        'save_draft' => 'server.create',
-        'load_draft' => 'server.view',
-        'get_server_progress' => 'server.view',
-        'reset_configuration' => 'server.edit'
-    ];
-    
-    // Map external operations to internal actions
-    $actionMap = [
-        'add-component' => 'step_add_component',
-        'remove-component' => 'step_remove_component'
-    ];
-    
-    $requiredPermission = $permissionMap[$operation] ?? 'server.view';
-    
-    if (!hasPermission($pdo, $requiredPermission, $user['id'])) {
-        send_json_response(0, 1, 403, "Insufficient permissions: $requiredPermission required");
-    }
-    
-    // Convert external action to internal action if needed
-    $internalAction = $actionMap[$operation] ?? $operation;
-    $_POST['action'] = $internalAction;
-    $_GET['action'] = $internalAction;
-    
-    // Include server creation handler
-    require_once(__DIR__ . '/server/create_server.php');
 }
 
 /**
@@ -622,17 +626,110 @@ function handleACLOperations($operation, $user) {
                 send_json_response(0, 1, 400, "Permission is required");
             }
             
-            $hasPermissionResult = hasPermission($pdo, $permission, $targetUserId);
+            $hasPermission = hasPermission($pdo, $permission, $targetUserId);
             
             send_json_response(1, 1, 200, "Permission check completed", [
                 'user_id' => (int)$targetUserId,
                 'permission' => $permission,
-                'has_permission' => $hasPermissionResult
+                'has_permission' => $hasPermission
             ]);
             break;
             
         default:
             send_json_response(0, 1, 400, "Invalid ACL operation: $operation");
+    }
+}
+
+/**
+ * Handle roles operations
+ */
+function handleRolesOperations($operation, $user) {
+    global $pdo;
+    
+    if (!hasPermission($pdo, 'role.manage', $user['id'])) {
+        send_json_response(0, 1, 403, "Insufficient permissions for role operations");
+    }
+    
+    switch ($operation) {
+        case 'list':
+            $roles = getAllRoles($pdo);
+            send_json_response(1, 1, 200, "Roles retrieved successfully", ['roles' => $roles]);
+            break;
+            
+        case 'create':
+            $name = trim($_POST['name'] ?? '');
+            $description = trim($_POST['description'] ?? '');
+            
+            if (empty($name)) {
+                send_json_response(0, 1, 400, "Role name is required");
+            }
+            
+            $roleId = createRole($pdo, $name, $description);
+            
+            if ($roleId) {
+                send_json_response(1, 1, 201, "Role created successfully", ['role_id' => $roleId]);
+            } else {
+                send_json_response(0, 1, 400, "Failed to create role");
+            }
+            break;
+            
+        case 'update':
+            $roleId = $_POST['role_id'] ?? '';
+            $name = trim($_POST['name'] ?? '');
+            $description = trim($_POST['description'] ?? '');
+            
+            if (empty($roleId) || empty($name)) {
+                send_json_response(0, 1, 400, "Role ID and name are required");
+            }
+            
+            $success = updateRole($pdo, $roleId, $name, $description);
+            
+            if ($success) {
+                send_json_response(1, 1, 200, "Role updated successfully");
+            } else {
+                send_json_response(0, 1, 400, "Failed to update role");
+            }
+            break;
+            
+        case 'delete':
+            $roleId = $_POST['role_id'] ?? '';
+            
+            if (empty($roleId)) {
+                send_json_response(0, 1, 400, "Role ID is required");
+            }
+            
+            $success = deleteRole($pdo, $roleId);
+            
+            if ($success) {
+                send_json_response(1, 1, 200, "Role deleted successfully");
+            } else {
+                send_json_response(0, 1, 400, "Failed to delete role");
+            }
+            break;
+            
+        default:
+            send_json_response(0, 1, 400, "Invalid role operation: $operation");
+    }
+}
+
+/**
+ * Handle permissions operations
+ */
+function handlePermissionsOperations($operation, $user) {
+    global $pdo;
+    
+    if (!hasPermission($pdo, 'permission.manage', $user['id'])) {
+        send_json_response(0, 1, 403, "Insufficient permissions for permission operations");
+    }
+    
+    switch ($operation) {
+        case 'list':
+            $permissions = getAllPermissions($pdo);
+            send_json_response(1, 1, 200, "Permissions retrieved successfully", ['permissions' => $permissions]);
+            break;
+            
+        default:
+            send_json_response(0, 1, 400, "Invalid permission operation: $operation");
     }
 }
 
@@ -725,6 +822,77 @@ function handleUserOperations($operation, $user) {
             }
             break;
             
+        case 'update':
+            if (!hasPermission($pdo, 'user.edit', $user['id'])) {
+                send_json_response(0, 1, 403, "Insufficient permissions for user updates");
+            }
+            
+            $targetUserId = $_POST['user_id'] ?? '';
+            $updateData = [];
+            
+            if (isset($_POST['username'])) $updateData['username'] = trim($_POST['username']);
+            if (isset($_POST['email'])) $updateData['email'] = trim($_POST['email']);
+            if (isset($_POST['firstname'])) $updateData['firstname'] = trim($_POST['firstname']);
+            if (isset($_POST['lastname'])) $updateData['lastname'] = trim($_POST['lastname']);
+            if (isset($_POST['status'])) $updateData['status'] = $_POST['status'];
+            
+            if (empty($targetUserId) || empty($updateData)) {
+                send_json_response(0, 1, 400, "User ID and at least one field to update are required");
+            }
+            
+            $success = updateUser($pdo, $targetUserId, $updateData);
+            
+            if ($success) {
+                send_json_response(1, 1, 200, "User updated successfully");
+            } else {
+                send_json_response(0, 1, 400, "Failed to update user");
+            }
+            break;
+            
+        case 'delete':
+            if (!hasPermission($pdo, 'user.delete', $user['id'])) {
+                send_json_response(0, 1, 403, "Insufficient permissions for user deletion");
+            }
+            
+            $targetUserId = $_POST['user_id'] ?? '';
+            
+            if (empty($targetUserId)) {
+                send_json_response(0, 1, 400, "User ID is required");
+            }
+            
+            if ($targetUserId == $user['id']) {
+                send_json_response(0, 1, 400, "Cannot delete your own account");
+            }
+            
+            $success = deleteUser($pdo, $targetUserId);
+            
+            if ($success) {
+                send_json_response(1, 1, 200, "User deleted successfully");
+            } else {
+                send_json_response(0, 1, 400, "Failed to delete user");
+            }
+            break;
+            
+        case 'get':
+            if (!hasPermission($pdo, 'user.view', $user['id'])) {
+                send_json_response(0, 1, 403, "Insufficient permissions for user viewing");
+            }
+            
+            $targetUserId = $_GET['user_id'] ?? $_POST['user_id'] ?? '';
+            
+            if (empty($targetUserId)) {
+                send_json_response(0, 1, 400, "User ID is required");
+            }
+            
+            $userData = getUserById($pdo, $targetUserId);
+            
+            if ($userData) {
+                send_json_response(1, 1, 200, "User retrieved successfully", ['user' => $userData]);
+            } else {
+                send_json_response(0, 1, 404, "User not found");
+            }
+            break;
+            
         default:
             send_json_response(0, 1, 400, "Invalid user operation: $operation");
     }
@@ -810,339 +978,390 @@ function handleComponentOperations($module, $operation, $user) {
             }
             break;
             
+        case 'update':
+            $componentId = $_POST['id'] ?? '';
+            $updateData = [];
+            
+            foreach ($_POST as $key => $value) {
+                if (!in_array($key, ['action', 'id'])) {
+                    $updateData[$key] = $value;
+                }
+            }
+            
+            if (empty($componentId) || empty($updateData)) {
+                send_json_response(0, 1, 400, "Component ID and update data are required");
+            }
+            
+            try {
+                $success = updateComponent($pdo, $module, $componentId, $updateData, $user['id']);
+                
+                if ($success) {
+                    send_json_response(1, 1, 200, ucfirst($module) . " component updated successfully");
+                } else {
+                    send_json_response(0, 1, 400, "Failed to update " . $module . " component");
+                }
+            } catch (Exception $e) {
+                error_log("Error updating $module component: " . $e->getMessage());
+                send_json_response(0, 1, 500, "Failed to update component: " . $e->getMessage());
+            }
+            break;
+            
+        case 'delete':
+            $componentId = $_POST['id'] ?? '';
+            
+            if (empty($componentId)) {
+                send_json_response(0, 1, 400, "Component ID is required");
+            }
+            
+            try {
+                $success = deleteComponent($pdo, $module, $componentId, $user['id']);
+                
+                if ($success) {
+                    send_json_response(1, 1, 200, ucfirst($module) . " component deleted successfully");
+                } else {
+                    send_json_response(0, 1, 400, "Failed to delete " . $module . " component");
+                }
+            } catch (Exception $e) {
+                error_log("Error deleting $module component: " . $e->getMessage());
+                send_json_response(0, 1, 500, "Failed to delete component: " . $e->getMessage());
+            }
+            break;
+            
         default:
             send_json_response(0, 1, 400, "Invalid $module operation: $operation");
     }
 }
 
+// Helper functions (These would typically be in separate include files)
+
 /**
- * Handle roles operations
+ * Check if server system is initialized
  */
-function handleRolesOperations($operation, $user) {
-    global $pdo;
-    
-    if (!hasPermission($pdo, 'role.manage', $user['id'])) {
-        send_json_response(0, 1, 403, "Insufficient permissions for role operations");
-    }
-    
-    switch ($operation) {
-        case 'list':
-            $roles = getAllRoles($pdo);
-            send_json_response(1, 1, 200, "Roles retrieved successfully", ['roles' => $roles]);
-            break;
-            
-        case 'create':
-            $name = trim($_POST['name'] ?? '');
-            $description = trim($_POST['description'] ?? '');
-            
-            if (empty($name)) {
-                send_json_response(0, 1, 400, "Role name is required");
-            }
-            
-            $roleId = createRole($pdo, $name, $description);
-            
-            if ($roleId) {
-                send_json_response(1, 1, 201, "Role created successfully", ['role_id' => $roleId]);
-            } else {
-                send_json_response(0, 1, 400, "Failed to create role");
-            }
-            break;
-            
-        case 'update':
-            $roleId = $_POST['role_id'] ?? '';
-            $name = trim($_POST['name'] ?? '');
-            $description = trim($_POST['description'] ?? '');
-            
-            if (empty($roleId) || empty($name)) {
-                send_json_response(0, 1, 400, "Role ID and name are required");
-            }
-            
-            $success = updateRole($pdo, $roleId, $name, $description);
-            
-            if ($success) {
-                send_json_response(1, 1, 200, "Role updated successfully");
-            } else {
-                send_json_response(0, 1, 400, "Failed to update role");
-            }
-            break;
-            
-        case 'delete':
-            $roleId = $_POST['role_id'] ?? '';
-            
-            if (empty($roleId)) {
-                send_json_response(0, 1, 400, "Role ID is required");
-            }
-            
-            $success = deleteRole($pdo, $roleId);
-            
-            if ($success) {
-                send_json_response(1, 1, 200, "Role deleted successfully");
-            } else {
-                send_json_response(0, 1, 400, "Failed to delete role");
-            }
-            break;
-            
-        default:
-            send_json_response(0, 1, 400, "Invalid role operation: $operation");
+function serverSystemInitialized($pdo) {
+    try {
+        $stmt = $pdo->query("SHOW TABLES LIKE 'server_configurations'");
+        return $stmt->rowCount() > 0;
+    } catch (Exception $e) {
+        return false;
     }
 }
 
 /**
- * Handle permissions operations
+ * Get system setting
  */
-function handlePermissionsOperations($operation, $user) {
-    global $pdo;
-    
-    if (!hasPermission($pdo, 'permission.manage', $user['id'])) {
-        send_json_response(0, 1, 403, "Insufficient permissions for permission operations");
+function getSystemSetting($pdo, $setting, $default = null) {
+    try {
+        $stmt = $pdo->prepare("SELECT value FROM system_settings WHERE name = ?");
+        $stmt->execute([$setting]);
+        $result = $stmt->fetch(PDO::FETCH_ASSOC);
+        
+        return $result ? $result['value'] : $default;
+    } catch (Exception $e) {
+        return $default;
     }
+}
+
+/**
+ * Get dashboard data
+ */
+function getDashboardData($pdo, $user) {
+    $data = [];
     
-    switch ($operation) {
-        case 'list':
-            $permissions = getAllPermissions($pdo);
-            send_json_response(1, 1, 200, "Permissions retrieved successfully", ['permissions' => $permissions]);
-            break;
+    try {
+        // Get component counts
+        $componentTypes = ['cpu', 'ram', 'storage', 'motherboard', 'nic', 'caddy'];
+        $componentCounts = [];
+        
+        foreach ($componentTypes as $type) {
+            $stmt = $pdo->prepare("SELECT COUNT(*) as count FROM $type");
+            $stmt->execute();
+            $result = $stmt->fetch(PDO::FETCH_ASSOC);
+            $componentCounts[$type] = (int)$result['count'];
+        }
+        
+        $data['component_counts'] = $componentCounts;
+        $data['total_components'] = array_sum($componentCounts);
+        
+        // Get status breakdown
+        $statusCounts = [];
+        foreach ($componentTypes as $type) {
+            $stmt = $pdo->prepare("SELECT Status, COUNT(*) as count FROM $type GROUP BY Status");
+            $stmt->execute();
+            $results = $stmt->fetchAll(PDO::FETCH_ASSOC);
             
-        case 'create':
-            $name = trim($_POST['permission_name'] ?? '');
-            $description = trim($_POST['description'] ?? '');
-            $category = trim($_POST['category'] ?? '');
-            
-            if (empty($name)) {
-                send_json_response(0, 1, 400, "Permission name is required");
-            }
-            
-            try {
-                $stmt = $pdo->prepare("INSERT INTO acl_permissions (permission_name, description, category, created_at) VALUES (?, ?, ?, NOW())");
-                $result = $stmt->execute([$name, $description, $category]);
-                
-                if ($result) {
-                    $permissionId = $pdo->lastInsertId();
-                    send_json_response(1, 1, 201, "Permission created successfully", ['permission_id' => $permissionId]);
-                } else {
-                    send_json_response(0, 1, 400, "Failed to create permission");
+            foreach ($results as $result) {
+                $status = $result['Status'];
+                if (!isset($statusCounts[$status])) {
+                    $statusCounts[$status] = 0;
                 }
-            } catch (Exception $e) {
-                error_log("Error creating permission: " . $e->getMessage());
-                send_json_response(0, 1, 500, "Failed to create permission");
+                $statusCounts[$status] += (int)$result['count'];
             }
-            break;
-            
-        default:
-            send_json_response(0, 1, 400, "Invalid permission operation: $operation");
+        }
+        
+        $data['status_counts'] = $statusCounts;
+        
+        // Recent activity (if you have activity logs)
+        $data['recent_activity'] = [];
+        
+    } catch (Exception $e) {
+        error_log("Error getting dashboard data: " . $e->getMessage());
+        $data = ['error' => 'Unable to fetch dashboard data'];
     }
+    
+    return $data;
 }
 
 /**
- * Handle compatibility checking operations
+ * Perform global search
  */
-function handleCompatibilityModule($operation, $user) {
-    global $pdo;
+function performGlobalSearch($pdo, $query, $limit, $user) {
+    $results = [];
+    $componentTypes = ['cpu', 'ram', 'storage', 'motherboard', 'nic', 'caddy'];
     
-    // Map operations to their required permissions
-    $permissionMap = [
-        'check' => 'compatibility.check',
-        'check-pair' => 'compatibility.check',
-        'check-multiple' => 'compatibility.check',
-        'get-compatible-for' => 'compatibility.check',
-        'batch-check' => 'compatibility.check',
-        'analyze-configuration' => 'compatibility.check',
-        'get-rules' => 'compatibility.view_statistics',
-        'test-rule' => 'compatibility.manage_rules',
-        'get-statistics' => 'compatibility.view_statistics'
-    ];
-    
-    $requiredPermission = $permissionMap[$operation] ?? 'compatibility.check';
-    
-    if (!hasPermission($pdo, $requiredPermission, $user['id'])) {
-        send_json_response(0, 1, 403, "Insufficient permissions: $requiredPermission required");
-    }
-    
-    // Basic compatibility operations
-    switch ($operation) {
-        case 'check':
-            $component1Type = $_POST['component1_type'] ?? '';
-            $component1Uuid = $_POST['component1_uuid'] ?? '';
-            $component2Type = $_POST['component2_type'] ?? '';
-            $component2Uuid = $_POST['component2_uuid'] ?? '';
+    try {
+        foreach ($componentTypes as $type) {
+            $sql = "SELECT *, '$type' as component_type FROM $type WHERE 
+                    SerialNumber LIKE ? OR 
+                    Notes LIKE ? OR 
+                    Location LIKE ? 
+                    LIMIT ?";
             
-            if (empty($component1Type) || empty($component1Uuid) || empty($component2Type) || empty($component2Uuid)) {
-                send_json_response(0, 1, 400, "All component information is required");
-            }
+            $searchTerm = '%' . $query . '%';
+            $stmt = $pdo->prepare($sql);
+            $stmt->execute([$searchTerm, $searchTerm, $searchTerm, $limit]);
             
-            // Get component details
-            $component1 = getComponentDetails($pdo, $component1Type, $component1Uuid);
-            $component2 = getComponentDetails($pdo, $component2Type, $component2Uuid);
-            
-            if (!$component1 || !$component2) {
-                send_json_response(0, 1, 404, "One or more components not found");
-            }
-            
-            // Perform compatibility check
-            $compatibility = checkComponentPairCompatibility($component1Type, $component1, $component2Type, $component2);
-            
-            send_json_response(1, 1, 200, "Compatibility check completed", [
-                'component1' => ['type' => $component1Type, 'uuid' => $component1Uuid],
-                'component2' => ['type' => $component2Type, 'uuid' => $component2Uuid],
-                'compatibility' => $compatibility
-            ]);
-            break;
-            
-        default:
-            send_json_response(0, 1, 400, "Invalid compatibility operation: $operation");
-    }
-}
-
-/**
- * Helper function to check compatibility between two components
- */
-function checkComponentPairCompatibility($type1, $component1, $type2, $component2) {
-    $issues = [];
-    $compatible = true;
-    
-    // CPU-Motherboard compatibility
-    if (($type1 === 'cpu' && $type2 === 'motherboard') || ($type1 === 'motherboard' && $type2 === 'cpu')) {
-        $cpu = $type1 === 'cpu' ? $component1 : $component2;
-        $motherboard = $type1 === 'motherboard' ? $component1 : $component2;
-        
-        $cpuSocket = extractSocketFromNotes($cpu['Notes'] ?? '');
-        $mbSocket = extractSocketFromNotes($motherboard['Notes'] ?? '');
-        
-        if ($cpuSocket && $mbSocket && strtolower($cpuSocket) !== strtolower($mbSocket)) {
-            $compatible = false;
-            $issues[] = [
-                'type' => 'socket_mismatch',
-                'severity' => 'error',
-                'message' => "CPU socket ($cpuSocket) does not match motherboard socket ($mbSocket)"
-            ];
+            $typeResults = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            $results = array_merge($results, $typeResults);
         }
-    }
-    
-    // RAM-Motherboard compatibility
-    if (($type1 === 'ram' && $type2 === 'motherboard') || ($type1 === 'motherboard' && $type2 === 'ram')) {
-        $ram = $type1 === 'ram' ? $component1 : $component2;
-        $motherboard = $type1 === 'motherboard' ? $component1 : $component2;
         
-        $ramType = extractRAMTypeFromNotes($ram['Notes'] ?? '');
-        $mbRAMType = extractRAMTypeFromNotes($motherboard['Notes'] ?? '');
+        // Limit total results
+        $results = array_slice($results, 0, $limit);
         
-        if ($ramType && $mbRAMType && strtolower($ramType) !== strtolower($mbRAMType)) {
-            $compatible = false;
-            $issues[] = [
-                'type' => 'ram_type_mismatch',
-                'severity' => 'warning',
-                'message' => "RAM type ($ramType) may not be compatible with motherboard ($mbRAMType)"
-            ];
-        }
+    } catch (Exception $e) {
+        error_log("Error performing global search: " . $e->getMessage());
     }
     
     return [
-        'compatible' => $compatible,
-        'issues' => $issues,
-        'confidence' => count($issues) === 0 ? 'high' : 'medium'
+        'query' => $query,
+        'results' => $results,
+        'total_found' => count($results)
     ];
 }
 
 /**
- * Helper function to get component details
+ * Get components by type
  */
-function getComponentDetails($pdo, $type, $uuid) {
+function getComponentsByType($pdo, $type) {
     try {
-        $stmt = $pdo->prepare("SELECT * FROM $type WHERE UUID = ?");
-        $stmt->execute([$uuid]);
+        $stmt = $pdo->prepare("SELECT * FROM $type ORDER BY id DESC");
+        $stmt->execute();
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    } catch (Exception $e) {
+        error_log("Error getting $type components: " . $e->getMessage());
+        return [];
+    }
+}
+
+/**
+ * Get component by ID
+ */
+function getComponentById($pdo, $type, $id) {
+    try {
+        $stmt = $pdo->prepare("SELECT * FROM $type WHERE id = ?");
+        $stmt->execute([$id]);
         return $stmt->fetch(PDO::FETCH_ASSOC);
     } catch (Exception $e) {
-        error_log("Error getting $type component details: " . $e->getMessage());
+        error_log("Error getting $type component by ID: " . $e->getMessage());
         return null;
     }
 }
 
 /**
- * Extract socket information from notes
+ * Add component
  */
-function extractSocketFromNotes($notes) {
-    // Look for patterns like "Socket: LGA1151", "Socket LGA1151", "LGA1151 socket"
-    if (preg_match('/socket[:\s]*([A-Z0-9]+)/i', $notes, $matches)) {
-        return $matches[1];
-    }
-    
-    // Look for common socket patterns
-    if (preg_match('/(LGA\d+|AM\d+|FM\d+|TR4)/i', $notes, $matches)) {
-        return $matches[1];
-    }
-    
-    return null;
-}
-
-/**
- * Extract RAM type from notes
- */
-function extractRAMTypeFromNotes($notes) {
-    // Look for DDR patterns
-    if (preg_match('/(DDR\d+)/i', $notes, $matches)) {
-        return $matches[1];
-    }
-    
-    return null;
-}
-
-/**
- * Create new role
- */
-function createRole($pdo, $name, $description = '') {
+function addComponent($pdo, $type, $data, $userId) {
     try {
-        $stmt = $pdo->prepare("INSERT INTO acl_roles (role_name, description, created_at) VALUES (?, ?, NOW())");
-        $result = $stmt->execute([$name, $description]);
+        // Generate UUID if not provided
+        if (!isset($data['UUID']) || empty($data['UUID'])) {
+            $data['UUID'] = generateUUID();
+        }
+        
+        // Prepare column names and values
+        $columns = array_keys($data);
+        $placeholders = array_fill(0, count($columns), '?');
+        $values = array_values($data);
+        
+        $sql = "INSERT INTO $type (" . implode(', ', $columns) . ") VALUES (" . implode(', ', $placeholders) . ")";
+        
+        error_log("Inserting $type data: " . json_encode($data));
+        
+        $stmt = $pdo->prepare($sql);
+        $result = $stmt->execute($values);
         
         if ($result) {
             return $pdo->lastInsertId();
         }
+        
         return false;
+        
     } catch (Exception $e) {
-        error_log("Create role error: " . $e->getMessage());
-        return false;
+        error_log("Error adding $type component: " . $e->getMessage());
+        throw $e;
     }
 }
 
 /**
- * Update role
+ * Update component
  */
-function updateRole($pdo, $roleId, $name, $description = '') {
+function updateComponent($pdo, $type, $id, $data, $userId) {
     try {
-        $stmt = $pdo->prepare("UPDATE acl_roles SET role_name = ?, description = ? WHERE id = ?");
-        return $stmt->execute([$name, $description, $roleId]);
+        $columns = array_keys($data);
+        $setClause = implode(' = ?, ', $columns) . ' = ?';
+        $values = array_values($data);
+        $values[] = $id; // Add ID for WHERE clause
+        
+        $sql = "UPDATE $type SET $setClause WHERE id = ?";
+        
+        $stmt = $pdo->prepare($sql);
+        return $stmt->execute($values);
+        
     } catch (Exception $e) {
-        error_log("Update role error: " . $e->getMessage());
+        error_log("Error updating $type component: " . $e->getMessage());
+        throw $e;
+    }
+}
+
+/**
+ * Delete component
+ */
+function deleteComponent($pdo, $type, $id, $userId) {
+    try {
+        $stmt = $pdo->prepare("DELETE FROM $type WHERE id = ?");
+        return $stmt->execute([$id]);
+        
+    } catch (Exception $e) {
+        error_log("Error deleting $type component: " . $e->getMessage());
+        throw $e;
+    }
+}
+
+/**
+ * Get all users
+ */
+function getAllUsers($pdo) {
+    try {
+        $stmt = $pdo->prepare("SELECT id, username, email, firstname, lastname, status, created_at FROM users ORDER BY username");
+        $stmt->execute();
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    } catch (Exception $e) {
+        error_log("Error getting all users: " . $e->getMessage());
+        return [];
+    }
+}
+
+/**
+ * Create user
+ */
+function createUser($pdo, $username, $email, $password, $firstname, $lastname) {
+    try {
+        // Check if username/email already exists
+        $stmt = $pdo->prepare("SELECT id FROM users WHERE username = ? OR email = ?");
+        $stmt->execute([$username, $email]);
+        if ($stmt->fetch()) {
+            return false; // User already exists
+        }
+        
+        $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
+        
+        $stmt = $pdo->prepare("
+            INSERT INTO users (username, email, password, firstname, lastname, status, created_at) 
+            VALUES (?, ?, ?, ?, ?, 'active', NOW())
+        ");
+        $result = $stmt->execute([$username, $email, $hashedPassword, $firstname, $lastname]);
+        
+        if ($result) {
+            return $pdo->lastInsertId();
+        }
+        
+        return false;
+        
+    } catch (Exception $e) {
+        error_log("Error creating user: " . $e->getMessage());
         return false;
     }
 }
 
 /**
- * Delete role
+ * Update user
  */
-function deleteRole($pdo, $roleId) {
+function updateUser($pdo, $userId, $data) {
+    try {
+        // Remove password from direct updates for security
+        if (isset($data['password'])) {
+            $data['password'] = password_hash($data['password'], PASSWORD_DEFAULT);
+        }
+        
+        $columns = array_keys($data);
+        $setClause = implode(' = ?, ', $columns) . ' = ?';
+        $values = array_values($data);
+        $values[] = $userId;
+        
+        $sql = "UPDATE users SET $setClause WHERE id = ?";
+        
+        $stmt = $pdo->prepare($sql);
+        return $stmt->execute($values);
+        
+    } catch (Exception $e) {
+        error_log("Error updating user: " . $e->getMessage());
+        return false;
+    }
+}
+
+/**
+ * Delete user
+ */
+function deleteUser($pdo, $userId) {
     try {
         // Start transaction
         $pdo->beginTransaction();
         
-        // Remove role permissions
-        $stmt = $pdo->prepare("DELETE FROM role_permissions WHERE role_id = ?");
-        $stmt->execute([$roleId]);
+        // Delete user role assignments
+        $stmt = $pdo->prepare("DELETE FROM user_roles WHERE user_id = ?");
+        $stmt->execute([$userId]);
         
-        // Remove user roles
-        $stmt = $pdo->prepare("DELETE FROM user_roles WHERE role_id = ?");
-        $stmt->execute([$roleId]);
+        // Delete user permission assignments
+        $stmt = $pdo->prepare("DELETE FROM user_permissions WHERE user_id = ?");
+        $stmt->execute([$userId]);
         
-        // Delete role
-        $stmt = $pdo->prepare("DELETE FROM acl_roles WHERE id = ?");
-        $result = $stmt->execute([$roleId]);
+        // Delete user auth tokens
+        $stmt = $pdo->prepare("DELETE FROM auth_tokens WHERE user_id = ?");
+        $stmt->execute([$userId]);
+        
+        // Delete user
+        $stmt = $pdo->prepare("DELETE FROM users WHERE id = ?");
+        $result = $stmt->execute([$userId]);
         
         $pdo->commit();
         return $result;
+        
     } catch (Exception $e) {
         $pdo->rollBack();
-        error_log("Delete role error: " . $e->getMessage());
+        error_log("Error deleting user: " . $e->getMessage());
         return false;
+    }
+}
+
+/**
+ * Get user by ID
+ */
+function getUserById($pdo, $userId) {
+    try {
+        $stmt = $pdo->prepare("SELECT id, username, email, firstname, lastname, status, created_at FROM users WHERE id = ?");
+        $stmt->execute([$userId]);
+        return $stmt->fetch(PDO::FETCH_ASSOC);
+    } catch (Exception $e) {
+        error_log("Error getting user by ID: " . $e->getMessage());
+        return null;
     }
 }
 
