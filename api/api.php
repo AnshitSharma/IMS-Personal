@@ -160,25 +160,35 @@ function handleServerModule($operation, $user) {
         'reset_configuration' => 'server.edit'
     ];
     
-    // Map external operations to internal actions
-    $actionMap = [
-        'add-component' => 'step_add_component',
-        'remove-component' => 'step_remove_component'
-    ];
-    
     $requiredPermission = $permissionMap[$operation] ?? 'server.view';
     
     if (!hasPermission($pdo, $requiredPermission, $user['id'])) {
         send_json_response(0, 1, 403, "Insufficient permissions: $requiredPermission required");
     }
     
-    // Convert external action to internal action if needed
-    $internalAction = $actionMap[$operation] ?? $operation;
-    $_POST['action'] = $internalAction;
-    $_GET['action'] = $internalAction;
-    
-    // Include server creation handler
-    require_once(__DIR__ . '/server/create_server.php');
+    // Include appropriate server handler based on operation
+    if (in_array($operation, ['add-component', 'remove-component', 'get-compatible', 'validate-config', 'save-config', 'load-config', 'list-configs', 'delete-config', 'clone-config', 'get-statistics', 'update-config', 'get-components', 'export-config'])) {
+        // Use the newer server API implementation
+        global $operation;
+        require_once(__DIR__ . '/server/server_api.php');
+    } else {
+        // Use the step-by-step server creation implementation
+        $actionMap = [
+            'initialize' => 'initialize',
+            'save_draft' => 'save_draft',
+            'load_draft' => 'load_draft',
+            'get_server_progress' => 'get_server_progress',
+            'reset_configuration' => 'reset_configuration',
+            'list_drafts' => 'list_drafts',
+            'delete_draft' => 'delete_draft'
+        ];
+        
+        $internalAction = $actionMap[$operation] ?? $operation;
+        $_POST['action'] = $internalAction;
+        $_GET['action'] = $internalAction;
+        
+        require_once(__DIR__ . '/server/create_server.php');
+    }
 }
 
 /**
@@ -1073,7 +1083,8 @@ function getDashboardData($pdo, $user) {
         $componentCounts = [];
         
         foreach ($componentTypes as $type) {
-            $stmt = $pdo->prepare("SELECT COUNT(*) as count FROM $type");
+            $tableName = getComponentTableName($type);
+            $stmt = $pdo->prepare("SELECT COUNT(*) as count FROM $tableName");
             $stmt->execute();
             $result = $stmt->fetch(PDO::FETCH_ASSOC);
             $componentCounts[$type] = (int)$result['count'];
@@ -1085,7 +1096,8 @@ function getDashboardData($pdo, $user) {
         // Get status breakdown
         $statusCounts = [];
         foreach ($componentTypes as $type) {
-            $stmt = $pdo->prepare("SELECT Status, COUNT(*) as count FROM $type GROUP BY Status");
+            $tableName = getComponentTableName($type);
+            $stmt = $pdo->prepare("SELECT Status, COUNT(*) as count FROM $tableName GROUP BY Status");
             $stmt->execute();
             $results = $stmt->fetchAll(PDO::FETCH_ASSOC);
             
@@ -1120,7 +1132,8 @@ function performGlobalSearch($pdo, $query, $limit, $user) {
     
     try {
         foreach ($componentTypes as $type) {
-            $sql = "SELECT *, '$type' as component_type FROM $type WHERE 
+            $tableName = getComponentTableName($type);
+            $sql = "SELECT *, '$type' as component_type FROM $tableName WHERE 
                     SerialNumber LIKE ? OR 
                     Notes LIKE ? OR 
                     Location LIKE ? 
@@ -1149,15 +1162,34 @@ function performGlobalSearch($pdo, $query, $limit, $user) {
 }
 
 /**
+ * Map component type to actual table name
+ */
+function getComponentTableName($type) {
+    $tableMap = [
+        'cpu' => 'cpuinventory',
+        'ram' => 'raminventory', 
+        'storage' => 'storageinventory',
+        'motherboard' => 'motherboardinventory',
+        'nic' => 'nicinventory',
+        'caddy' => 'caddyinventory',
+        'pciecard' => 'pciecardinventory'
+    ];
+    
+    return $tableMap[$type] ?? $type;
+}
+
+/**
  * Get components by type
  */
 function getComponentsByType($pdo, $type) {
+    $tableName = getComponentTableName($type);
+    
     try {
-        $stmt = $pdo->prepare("SELECT * FROM $type ORDER BY id DESC");
+        $stmt = $pdo->prepare("SELECT * FROM $tableName ORDER BY id DESC");
         $stmt->execute();
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     } catch (Exception $e) {
-        error_log("Error getting $type components: " . $e->getMessage());
+        error_log("Error getting $type components from table $tableName: " . $e->getMessage());
         return [];
     }
 }
@@ -1166,12 +1198,14 @@ function getComponentsByType($pdo, $type) {
  * Get component by ID
  */
 function getComponentById($pdo, $type, $id) {
+    $tableName = getComponentTableName($type);
+    
     try {
-        $stmt = $pdo->prepare("SELECT * FROM $type WHERE id = ?");
+        $stmt = $pdo->prepare("SELECT * FROM $tableName WHERE id = ?");
         $stmt->execute([$id]);
         return $stmt->fetch(PDO::FETCH_ASSOC);
     } catch (Exception $e) {
-        error_log("Error getting $type component by ID: " . $e->getMessage());
+        error_log("Error getting $type component by ID from table $tableName: " . $e->getMessage());
         return null;
     }
 }
@@ -1235,12 +1269,14 @@ function updateComponent($pdo, $type, $id, $data, $userId) {
  * Delete component
  */
 function deleteComponent($pdo, $type, $id, $userId) {
+    $tableName = getComponentTableName($type);
+    
     try {
-        $stmt = $pdo->prepare("DELETE FROM $type WHERE id = ?");
+        $stmt = $pdo->prepare("DELETE FROM $tableName WHERE id = ?");
         return $stmt->execute([$id]);
         
     } catch (Exception $e) {
-        error_log("Error deleting $type component: " . $e->getMessage());
+        error_log("Error deleting $type component from table $tableName: " . $e->getMessage());
         throw $e;
     }
 }

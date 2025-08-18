@@ -1005,13 +1005,13 @@ class Dashboard {
                 await api.auth.logout();
                 
                 // Redirect to login page
-                window.location.href = '/ims_frontend/';
+                window.location.href = '/bdc_ims/ims_frontend/';
                 
             } catch (error) {
                 console.error('Logout error:', error);
                 // Even if logout fails, clear local data and redirect
                 api.clearAuth();
-                window.location.href = '/ims_frontend/';
+                window.location.href = '/bdc_ims/ims_frontend/';
             }
         }
     }

@@ -3208,3 +3208,266 @@ Stack trace:
 [31-Jul-2025 17:00:19 UTC] API called with action: auth-logout (Module: auth, Operation: logout)
 [31-Jul-2025 17:00:19 UTC] Auth operation: logout
 [31-Jul-2025 17:00:19 UTC] User logged out successfully
+[02-Aug-2025 15:10:04 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[02-Aug-2025 15:10:04 UTC] Auth operation: login
+[02-Aug-2025 15:10:04 UTC] Login attempt for username: superadmin
+[02-Aug-2025 15:10:04 UTC] Authentication attempt for: superadmin
+[02-Aug-2025 15:10:04 UTC] User found: superadmin (ID: 38)
+[02-Aug-2025 15:10:04 UTC] Authentication successful for user: superadmin
+[02-Aug-2025 15:10:04 UTC] Error logging activity: SQLSTATE[42S02]: Base table or view not found: 1146 Table 'shubhams_bdc_ims.activity_log' doesn't exist
+[02-Aug-2025 15:10:04 UTC] Login successful for user: superadmin (ID: 38)
+[02-Aug-2025 15:14:35 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[02-Aug-2025 15:14:35 UTC] JWT Authentication failed: Token has expired
+[02-Aug-2025 15:14:41 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[02-Aug-2025 15:14:41 UTC] Auth operation: login
+[02-Aug-2025 15:14:41 UTC] Login attempt for username: superadmin
+[02-Aug-2025 15:14:41 UTC] Authentication attempt for: superadmin
+[02-Aug-2025 15:14:41 UTC] User found: superadmin (ID: 38)
+[02-Aug-2025 15:14:41 UTC] Authentication successful for user: superadmin
+[02-Aug-2025 15:14:41 UTC] Error logging activity: SQLSTATE[42S02]: Base table or view not found: 1146 Table 'shubhams_bdc_ims.activity_log' doesn't exist
+[02-Aug-2025 15:14:41 UTC] Login successful for user: superadmin (ID: 38)
+[02-Aug-2025 15:14:59 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[02-Aug-2025 15:14:59 UTC] Authenticated user: superadmin (ID: 38)
+[02-Aug-2025 15:14:59 UTC] PHP Fatal error:  Cannot redeclare serverSystemInitialized() (previously declared in /home/shubhams/public_html/bdc_ims/api/api.php:877) in /home/shubhams/public_html/bdc_ims/api/components/components_api.php on line 195
+[02-Aug-2025 15:24:38 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[02-Aug-2025 15:24:38 UTC] Authenticated user: superadmin (ID: 38)
+[02-Aug-2025 15:24:38 UTC] PHP Fatal error:  Cannot redeclare getComponentCompatibilityInfo() (previously declared in /home/shubhams/public_html/bdc_ims/includes/BaseFunctions.php:1079) in /home/shubhams/public_html/bdc_ims/api/components/components_api.php on line 247
+[02-Aug-2025 15:26:57 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[02-Aug-2025 15:26:57 UTC] Authenticated user: superadmin (ID: 38)
+[02-Aug-2025 15:26:57 UTC] PHP Fatal error:  Cannot redeclare serverSystemInitialized() (previously declared in /home/shubhams/public_html/bdc_ims/api/api.php:877) in /home/shubhams/public_html/bdc_ims/api/components/components_api.php on line 195
+[02-Aug-2025 15:27:10 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[02-Aug-2025 15:27:10 UTC] Authenticated user: superadmin (ID: 38)
+[02-Aug-2025 15:27:10 UTC] PHP Fatal error:  Cannot redeclare getComponentCompatibilityInfo() (previously declared in /home/shubhams/public_html/bdc_ims/includes/BaseFunctions.php:1079) in /home/shubhams/public_html/bdc_ims/api/components/components_api.php on line 247
+[02-Aug-2025 15:27:16 UTC] API called with action: ram-list (Module: ram, Operation: list)
+[02-Aug-2025 15:27:30 UTC] API called with action: ram-list (Module: ram, Operation: list)
+[02-Aug-2025 15:27:33 UTC] API called with action: ram-list (Module: ram, Operation: list)
+[02-Aug-2025 15:27:40 UTC] API called with action: ram-list (Module: ram, Operation: list)
+[02-Aug-2025 15:27:40 UTC] Authenticated user: superadmin (ID: 38)
+[02-Aug-2025 15:27:40 UTC] PHP Fatal error:  Cannot redeclare getComponentCompatibilityInfo() (previously declared in /home/shubhams/public_html/bdc_ims/includes/BaseFunctions.php:1079) in /home/shubhams/public_html/bdc_ims/api/components/components_api.php on line 247
+[02-Aug-2025 15:33:24 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[02-Aug-2025 15:33:24 UTC] Authenticated user: superadmin (ID: 38)
+[02-Aug-2025 15:33:24 UTC] PHP Fatal error:  Cannot redeclare getStatusText() (previously declared in /home/shubhams/public_html/bdc_ims/includes/BaseFunctions.php:612) in /home/shubhams/public_html/bdc_ims/api/components/components_api.php on line 1036
+[02-Aug-2025 15:35:36 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[02-Aug-2025 15:35:36 UTC] Authenticated user: superadmin (ID: 38)
+[02-Aug-2025 15:35:36 UTC] PHP Fatal error:  Cannot redeclare checkUserPermission() (previously declared in /home/shubhams/public_html/bdc_ims/api/api.php:899) in /home/shubhams/public_html/bdc_ims/api/components/components_api.php on line 1048
+[02-Aug-2025 17:05:39 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[02-Aug-2025 17:05:39 UTC] Auth operation: login
+[02-Aug-2025 17:05:39 UTC] Login attempt for username: superadmin
+[02-Aug-2025 17:05:39 UTC] Authentication attempt for: superadmin
+[02-Aug-2025 17:05:39 UTC] User found: superadmin (ID: 38)
+[02-Aug-2025 17:05:39 UTC] Authentication successful for user: superadmin
+[02-Aug-2025 17:05:39 UTC] Error logging activity: SQLSTATE[42S02]: Base table or view not found: 1146 Table 'shubhams_bdc_ims.activity_log' doesn't exist
+[02-Aug-2025 17:05:39 UTC] Login successful for user: superadmin (ID: 38)
+[02-Aug-2025 17:05:53 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[02-Aug-2025 17:05:53 UTC] Authenticated user: superadmin (ID: 38)
+[02-Aug-2025 18:31:05 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[02-Aug-2025 18:31:05 UTC] Auth operation: login
+[02-Aug-2025 18:31:05 UTC] Login attempt for username: superadmin
+[02-Aug-2025 18:31:05 UTC] Authentication attempt for: superadmin
+[02-Aug-2025 18:31:05 UTC] User found: superadmin (ID: 38)
+[02-Aug-2025 18:31:05 UTC] Authentication successful for user: superadmin
+[02-Aug-2025 18:31:05 UTC] Error logging activity: SQLSTATE[42S02]: Base table or view not found: 1146 Table 'shubhams_bdc_ims.activity_log' doesn't exist
+[02-Aug-2025 18:31:05 UTC] Login successful for user: superadmin (ID: 38)
+[02-Aug-2025 18:31:12 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[02-Aug-2025 18:31:12 UTC] JWT Authentication failed: Token has expired
+[02-Aug-2025 18:31:25 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[02-Aug-2025 18:31:25 UTC] Authenticated user: superadmin (ID: 38)
+[02-Aug-2025 20:33:15 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[02-Aug-2025 20:33:15 UTC] JWT Authentication failed: Token has expired
+[02-Aug-2025 20:33:20 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[02-Aug-2025 20:33:20 UTC] Auth operation: login
+[02-Aug-2025 20:33:20 UTC] Login attempt for username: superadmin
+[02-Aug-2025 20:33:20 UTC] Authentication attempt for: superadmin
+[02-Aug-2025 20:33:20 UTC] User found: superadmin (ID: 38)
+[02-Aug-2025 20:33:20 UTC] Authentication successful for user: superadmin
+[02-Aug-2025 20:33:20 UTC] Error logging activity: SQLSTATE[42S02]: Base table or view not found: 1146 Table 'shubhams_bdc_ims.activity_log' doesn't exist
+[02-Aug-2025 20:33:20 UTC] Login successful for user: superadmin (ID: 38)
+[02-Aug-2025 20:33:42 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[02-Aug-2025 20:33:42 UTC] Authenticated user: superadmin (ID: 38)
+[02-Aug-2025 20:33:42 UTC] Database error in handleListComponents: SQLSTATE[42000]: Syntax error or access violation: 1064 You have an error in your SQL syntax; check the manual that corresponds to your MariaDB server version for the right syntax to use near 'ORDER BY CreatedAt DESC LIMIT ? OFFSET ?' at line 1
+[02-Aug-2025 20:33:48 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[02-Aug-2025 20:33:48 UTC] Authenticated user: superadmin (ID: 38)
+[02-Aug-2025 20:33:48 UTC] Database error in handleListComponents: SQLSTATE[42000]: Syntax error or access violation: 1064 You have an error in your SQL syntax; check the manual that corresponds to your MariaDB server version for the right syntax to use near 'ORDER BY CreatedAt DESC LIMIT ? OFFSET ?' at line 1
+[02-Aug-2025 20:37:07 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[02-Aug-2025 20:37:07 UTC] Authenticated user: superadmin (ID: 38)
+[02-Aug-2025 20:37:07 UTC] Database error in handleListComponents: SQLSTATE[42000]: Syntax error or access violation: 1064 You have an error in your SQL syntax; check the manual that corresponds to your MariaDB server version for the right syntax to use near 'ORDER BY ID DESC LIMIT ? OFFSET ?' at line 1
+[02-Aug-2025 20:37:07 UTC] Query: SELECT ID, SerialNumber, Status FROM  ORDER BY ID DESC LIMIT :limit OFFSET :offset
+[02-Aug-2025 20:37:07 UTC] Table: 
+[02-Aug-2025 20:37:07 UTC] Component Type: 
+[04-Aug-2025 02:15:00 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[04-Aug-2025 02:15:00 UTC] JWT Authentication failed: Token has expired
+[04-Aug-2025 02:15:07 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[04-Aug-2025 02:15:07 UTC] Auth operation: login
+[04-Aug-2025 02:15:07 UTC] Login attempt for username: superadmin
+[04-Aug-2025 02:15:07 UTC] Authentication attempt for: superadmin
+[04-Aug-2025 02:15:08 UTC] User found: superadmin (ID: 38)
+[04-Aug-2025 02:15:08 UTC] Authentication successful for user: superadmin
+[04-Aug-2025 02:15:09 UTC] Error logging activity: SQLSTATE[42S02]: Base table or view not found: 1146 Table 'shubhams_bdc_ims.activity_log' doesn't exist
+[04-Aug-2025 02:15:09 UTC] Login successful for user: superadmin (ID: 38)
+[04-Aug-2025 02:15:25 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[04-Aug-2025 02:15:25 UTC] Authenticated user: superadmin (ID: 38)
+[04-Aug-2025 02:15:25 UTC] Database error in handleListComponents: SQLSTATE[42000]: Syntax error or access violation: 1064 You have an error in your SQL syntax; check the manual that corresponds to your MariaDB server version for the right syntax to use near 'ORDER BY ID DESC LIMIT ? OFFSET ?' at line 1
+[04-Aug-2025 02:15:25 UTC] Query: SELECT ID, SerialNumber, Status FROM  ORDER BY ID DESC LIMIT :limit OFFSET :offset
+[04-Aug-2025 02:15:25 UTC] Table: 
+[04-Aug-2025 02:15:25 UTC] Component Type: 
+[04-Aug-2025 03:42:10 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[04-Aug-2025 03:42:10 UTC] JWT Authentication failed: Token has expired
+[04-Aug-2025 03:42:16 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[04-Aug-2025 03:42:16 UTC] Auth operation: login
+[04-Aug-2025 03:42:16 UTC] Login attempt for username: superadmin
+[04-Aug-2025 03:42:16 UTC] Authentication attempt for: superadmin
+[04-Aug-2025 03:42:16 UTC] User found: superadmin (ID: 38)
+[04-Aug-2025 03:42:16 UTC] Authentication successful for user: superadmin
+[04-Aug-2025 03:42:16 UTC] Error logging activity: SQLSTATE[42S02]: Base table or view not found: 1146 Table 'shubhams_bdc_ims.activity_log' doesn't exist
+[04-Aug-2025 03:42:16 UTC] Login successful for user: superadmin (ID: 38)
+[04-Aug-2025 03:42:26 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[04-Aug-2025 03:42:26 UTC] Authenticated user: superadmin (ID: 38)
+[04-Aug-2025 03:42:26 UTC] Table test failed: SQLSTATE[42000]: Syntax error or access violation: 1064 You have an error in your SQL syntax; check the manual that corresponds to your MariaDB server version for the right syntax to use near '' at line 1
+[04-Aug-2025 03:42:26 UTC] Database error in handleListComponents: SQLSTATE[42000]: Syntax error or access violation: 1064 You have an error in your SQL syntax; check the manual that corresponds to your MariaDB server version for the right syntax to use near 'ORDER BY ID DESC LIMIT ? OFFSET ?' at line 1
+[04-Aug-2025 03:42:26 UTC] Query: SELECT * FROM  ORDER BY ID DESC LIMIT :limit OFFSET :offset
+[04-Aug-2025 03:42:26 UTC] Table: 
+[04-Aug-2025 03:42:26 UTC] Component Type: 
+[04-Aug-2025 03:42:26 UTC] Fallback query also failed: SQLSTATE[42000]: Syntax error or access violation: 1064 You have an error in your SQL syntax; check the manual that corresponds to your MariaDB server version for the right syntax to use near 'LIMIT 50' at line 1
+[04-Aug-2025 03:44:49 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[04-Aug-2025 03:44:49 UTC] Authenticated user: superadmin (ID: 38)
+[04-Aug-2025 03:44:49 UTC] Table test failed: SQLSTATE[42000]: Syntax error or access violation: 1064 You have an error in your SQL syntax; check the manual that corresponds to your MariaDB server version for the right syntax to use near '' at line 1
+[04-Aug-2025 03:44:49 UTC] Database error in handleListComponents: SQLSTATE[42000]: Syntax error or access violation: 1064 You have an error in your SQL syntax; check the manual that corresponds to your MariaDB server version for the right syntax to use near 'ORDER BY ID DESC LIMIT ? OFFSET ?' at line 1
+[04-Aug-2025 03:44:49 UTC] Query: SELECT * FROM  ORDER BY ID DESC LIMIT :limit OFFSET :offset
+[04-Aug-2025 03:44:49 UTC] Table: 
+[04-Aug-2025 03:44:49 UTC] Component Type: 
+[04-Aug-2025 03:44:49 UTC] Error Code: 42000
+[04-Aug-2025 03:44:49 UTC] Fallback query also failed: SQLSTATE[42000]: Syntax error or access violation: 1064 You have an error in your SQL syntax; check the manual that corresponds to your MariaDB server version for the right syntax to use near 'ORDER BY ID DESC LIMIT 50' at line 1
+[04-Aug-2025 03:51:40 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[04-Aug-2025 03:51:40 UTC] Authenticated user: superadmin (ID: 38)
+[04-Aug-2025 03:51:40 UTC] Database error in handleListComponents: SQLSTATE[42000]: Syntax error or access violation: 1103 Incorrect table name ''
+[04-Aug-2025 03:51:40 UTC] Query: SELECT * FROM `` ORDER BY `ID` DESC LIMIT :limit OFFSET :offset
+[04-Aug-2025 03:51:40 UTC] Table: 
+[04-Aug-2025 03:51:40 UTC] Component Type: 
+[04-Aug-2025 03:51:40 UTC] Error Code: 42000
+[04-Aug-2025 03:51:40 UTC] Fallback query also failed: SQLSTATE[42000]: Syntax error or access violation: 1103 Incorrect table name ''
+[04-Aug-2025 03:51:54 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[04-Aug-2025 03:51:54 UTC] Authenticated user: superadmin (ID: 38)
+[04-Aug-2025 03:51:54 UTC] Database error in handleListComponents: SQLSTATE[42000]: Syntax error or access violation: 1064 You have an error in your SQL syntax; check the manual that corresponds to your MariaDB server version for the right syntax to use near 'ORDER BY ID DESC LIMIT ? OFFSET ?' at line 1
+[04-Aug-2025 03:51:54 UTC] Query: SELECT ID, SerialNumber, Status FROM  ORDER BY ID DESC LIMIT :limit OFFSET :offset
+[04-Aug-2025 03:51:54 UTC] Table: 
+[04-Aug-2025 03:51:54 UTC] Component Type: 
+[04-Aug-2025 03:57:49 UTC] API called with action: cpu-list (Module: cpu, Operation: list)
+[04-Aug-2025 03:57:49 UTC] Authenticated user: superadmin (ID: 38)
+[04-Aug-2025 03:57:49 UTC] PHP Fatal error:  Cannot redeclare getStatusText() (previously declared in /home/shubhams/public_html/bdc_ims/includes/BaseFunctions.php:612) in /home/shubhams/public_html/bdc_ims/api/components/components_api.php on line 1085
+[05-Aug-2025 06:40:49 UTC] API called with action: server-create-start (Module: server, Operation: create-start)
+[05-Aug-2025 06:40:49 UTC] JWT Authentication failed: Token has expired
+[05-Aug-2025 06:40:55 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[05-Aug-2025 06:40:55 UTC] Auth operation: login
+[05-Aug-2025 06:40:55 UTC] Login attempt for username: superadmin
+[05-Aug-2025 06:40:55 UTC] Authentication attempt for: superadmin
+[05-Aug-2025 06:40:55 UTC] User found: superadmin (ID: 38)
+[05-Aug-2025 06:40:55 UTC] Authentication successful for user: superadmin
+[05-Aug-2025 06:40:56 UTC] Error logging activity: SQLSTATE[42S02]: Base table or view not found: 1146 Table 'shubhams_bdc_ims.activity_log' doesn't exist
+[05-Aug-2025 06:40:56 UTC] Login successful for user: superadmin (ID: 38)
+[05-Aug-2025 06:41:09 UTC] API called with action: server-create-start (Module: server, Operation: create-start)
+[05-Aug-2025 06:41:09 UTC] Authenticated user: superadmin (ID: 38)
+[05-Aug-2025 10:02:34 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[05-Aug-2025 10:02:34 UTC] Auth operation: login
+[05-Aug-2025 10:02:34 UTC] Login attempt for username: superadmin
+[05-Aug-2025 10:02:34 UTC] Authentication attempt for: superadmin
+[05-Aug-2025 10:02:34 UTC] User found: superadmin (ID: 38)
+[05-Aug-2025 10:02:34 UTC] Authentication successful for user: superadmin
+[05-Aug-2025 10:02:35 UTC] Error logging activity: SQLSTATE[42S02]: Base table or view not found: 1146 Table 'shubhams_bdc_ims.activity_log' doesn't exist
+[05-Aug-2025 10:02:35 UTC] Login successful for user: superadmin (ID: 38)
+[05-Aug-2025 10:02:42 UTC] API called with action: server-create-start (Module: server, Operation: create-start)
+[05-Aug-2025 10:02:42 UTC] Authenticated user: superadmin (ID: 38)
+[05-Aug-2025 10:02:42 UTC] Server creation start - Name: My Production Server, Start with: cpu
+[05-Aug-2025 10:02:42 UTC] Error creating server configuration: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'server_name' in 'INSERT INTO'
+[05-Aug-2025 10:02:42 UTC] Error in server creation start: Failed to create server configuration
+[06-Aug-2025 05:30:04 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[06-Aug-2025 05:30:04 UTC] Auth operation: login
+[06-Aug-2025 05:30:04 UTC] Login attempt for username: superadmin
+[06-Aug-2025 05:30:04 UTC] Authentication attempt for: superadmin
+[06-Aug-2025 05:30:04 UTC] User found: superadmin (ID: 38)
+[06-Aug-2025 05:30:04 UTC] Authentication successful for user: superadmin
+[06-Aug-2025 05:30:04 UTC] Error logging activity: SQLSTATE[42S02]: Base table or view not found: 1146 Table 'shubhams_bdc_ims.activity_log' doesn't exist
+[06-Aug-2025 05:30:04 UTC] Login successful for user: superadmin (ID: 38)
+[06-Aug-2025 05:41:18 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[06-Aug-2025 05:41:18 UTC] Auth operation: login
+[06-Aug-2025 05:41:18 UTC] Login attempt for username: superadmin
+[06-Aug-2025 05:41:18 UTC] Authentication attempt for: superadmin
+[06-Aug-2025 05:41:18 UTC] User found: superadmin (ID: 38)
+[06-Aug-2025 05:41:18 UTC] Authentication successful for user: superadmin
+[06-Aug-2025 05:41:18 UTC] Error logging activity: SQLSTATE[42S02]: Base table or view not found: 1146 Table 'shubhams_bdc_ims.activity_log' doesn't exist
+[06-Aug-2025 05:41:18 UTC] Login successful for user: superadmin (ID: 38)
+[06-Aug-2025 05:41:26 UTC] API called with action: server-create-start (Module: server, Operation: create-start)
+[06-Aug-2025 05:41:26 UTC] Authenticated user: superadmin (ID: 38)
+[06-Aug-2025 05:41:26 UTC] Server creation start - Name: My Production Server, Start with: cpu
+[06-Aug-2025 06:23:55 UTC] API called with action: server-add-component (Module: server, Operation: add-component)
+[06-Aug-2025 06:23:55 UTC] Authenticated user: superadmin (ID: 38)
+[06-Aug-2025 06:23:55 UTC] Uncaught exception: Call to undefined method CompatibilityEngine::getRecommendedNextComponents()
+[08-Aug-2025 10:46:08 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[08-Aug-2025 10:46:08 UTC] Auth operation: login
+[08-Aug-2025 10:46:08 UTC] Login attempt - Username: 'superadmin'
+[08-Aug-2025 10:46:08 UTC] Authentication failed for: superadmin
+[08-Aug-2025 10:46:20 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[08-Aug-2025 10:46:20 UTC] Auth operation: login
+[08-Aug-2025 10:46:20 UTC] Login attempt - Username: 'superadmin'
+[08-Aug-2025 10:46:20 UTC] Authentication failed for: superadmin
+[08-Aug-2025 10:46:27 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[08-Aug-2025 10:46:27 UTC] Auth operation: login
+[08-Aug-2025 10:46:27 UTC] Login attempt for username: superadmin
+[08-Aug-2025 10:46:27 UTC] Authentication attempt for: superadmin
+[08-Aug-2025 10:46:27 UTC] User found: superadmin (ID: 38)
+[08-Aug-2025 10:46:27 UTC] Authentication successful for user: superadmin
+[08-Aug-2025 10:46:27 UTC] Error logging activity: SQLSTATE[42S02]: Base table or view not found: 1146 Table 'shubhams_bdc_ims.activity_log' doesn't exist
+[08-Aug-2025 10:46:27 UTC] Login successful for user: superadmin (ID: 38)
+[14-Aug-2025 11:41:20 UTC] ACL tables not found. Please run database migrations.
+[14-Aug-2025 11:41:20 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[14-Aug-2025 11:41:20 UTC] Auth operation: login
+[14-Aug-2025 11:41:20 UTC] Login attempt - Username: 'superadmin'
+[14-Aug-2025 11:41:20 UTC] Authentication attempt for: superadmin
+[14-Aug-2025 11:41:20 UTC] Authentication error: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'status' in 'WHERE'
+[14-Aug-2025 11:41:20 UTC] Authentication failed for: superadmin
+[14-Aug-2025 11:51:02 UTC] ACL tables not found. Please run database migrations.
+[14-Aug-2025 11:51:02 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[14-Aug-2025 11:51:02 UTC] Auth operation: login
+[14-Aug-2025 11:51:02 UTC] Login attempt - Username: 'superadmin'
+[14-Aug-2025 11:51:02 UTC] Authentication attempt for: superadmin
+[14-Aug-2025 11:51:02 UTC] Authentication error: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'status' in 'WHERE'
+[14-Aug-2025 11:51:02 UTC] Authentication failed for: superadmin
+[14-Aug-2025 12:32:27 UTC] Basic ACL tables and data created successfully
+[14-Aug-2025 12:32:27 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[14-Aug-2025 12:32:27 UTC] Auth operation: login
+[14-Aug-2025 12:32:27 UTC] Login attempt - Username: 'superadmin'
+[14-Aug-2025 12:32:27 UTC] Login error: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'status' in 'SELECT'
+[14-Aug-2025 12:35:22 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[14-Aug-2025 12:35:22 UTC] Auth operation: login
+[14-Aug-2025 12:35:22 UTC] Login attempt - Username: 'superadmin'
+[14-Aug-2025 12:35:22 UTC] Login error: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'status' in 'SELECT'
+[14-Aug-2025 13:12:56 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[14-Aug-2025 13:12:56 UTC] Auth operation: login
+[14-Aug-2025 13:12:56 UTC] Login attempt - Username: 'superadmin'
+[14-Aug-2025 13:12:56 UTC] User found: superadmin (ID: 38)
+[14-Aug-2025 13:12:56 UTC] Authentication successful for user: superadmin
+[14-Aug-2025 13:12:56 UTC] Uncaught exception: Call to undefined method ACL::getUserPermissions()
+[14-Aug-2025 13:19:47 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[14-Aug-2025 13:19:47 UTC] Auth operation: login
+[14-Aug-2025 13:19:47 UTC] Login attempt - Username: 'superadmin'
+[14-Aug-2025 13:19:47 UTC] User found: superadmin (ID: 38)
+[14-Aug-2025 13:19:47 UTC] Authentication successful for user: superadmin
+[14-Aug-2025 13:19:47 UTC] Uncaught exception: Class "JWTHelper" not found
+[14-Aug-2025 14:16:27 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[14-Aug-2025 14:16:27 UTC] Auth operation: login
+[14-Aug-2025 14:16:27 UTC] Login attempt - Username: 'superadmin'
+[14-Aug-2025 14:16:27 UTC] Authentication attempt for: superadmin
+[14-Aug-2025 14:16:27 UTC] User found: superadmin (ID: 38)
+[14-Aug-2025 14:16:27 UTC] Authentication successful for user: superadmin
+[14-Aug-2025 14:16:27 UTC] Login successful for user: superadmin (ID: 38)
+[14-Aug-2025 14:17:59 UTC] API called with action: server-add-component (Module: server, Operation: add-component)
+[14-Aug-2025 14:18:00 UTC] JWT Authentication failed: Token has expired
+[14-Aug-2025 14:18:04 UTC] API called with action: auth-login (Module: auth, Operation: login)
+[14-Aug-2025 14:18:04 UTC] Auth operation: login
+[14-Aug-2025 14:18:04 UTC] Login attempt - Username: 'superadmin'
+[14-Aug-2025 14:18:04 UTC] Authentication attempt for: superadmin
+[14-Aug-2025 14:18:04 UTC] User found: superadmin (ID: 38)
+[14-Aug-2025 14:18:04 UTC] Authentication successful for user: superadmin
+[14-Aug-2025 14:18:04 UTC] Login successful for user: superadmin (ID: 38)
+[14-Aug-2025 14:18:16 UTC] API called with action: server-add-component (Module: server, Operation: add-component)
+[14-Aug-2025 14:18:16 UTC] Authenticated user: superadmin (ID: 38)
+[14-Aug-2025 14:18:17 UTC] Error adding component in step process: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'name' in 'SELECT'
