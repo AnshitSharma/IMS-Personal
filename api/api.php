@@ -174,6 +174,7 @@ function handleServerModule($operation, $user) {
     } else {
         // Use the step-by-step server creation implementation
         $actionMap = [
+            'create-start' => 'initialize',
             'initialize' => 'initialize',
             'save_draft' => 'save_draft',
             'load_draft' => 'load_draft',
