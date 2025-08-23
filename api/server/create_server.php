@@ -71,6 +71,7 @@ try {
 /**
  * Initialize new server creation session
  */
+ 
 function handleInitializeServerCreation() {
     global $pdo, $user;
     

@@ -767,6 +767,124 @@ class CompatibilityEngine {
     }
     
     /**
+     * Get recommended next components for a configuration
+     */
+    public function getRecommendedNextComponents($configUuid) {
+        try {
+            // Get current configuration components
+            $stmt = $this->pdo->prepare("
+                SELECT component_type, component_uuid, quantity 
+                FROM server_configuration_components 
+                WHERE config_uuid = ?
+            ");
+            $stmt->execute([$configUuid]);
+            $currentComponents = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            
+            $recommendations = [];
+            $hasComponents = array_column($currentComponents, 'component_type');
+            
+            // Recommend missing essential components first
+            $essentialComponents = ['cpu', 'motherboard', 'ram', 'storage'];
+            foreach ($essentialComponents as $componentType) {
+                if (!in_array($componentType, $hasComponents)) {
+                    $recommendations[] = [
+                        'component_type' => $componentType,
+                        'priority' => 'high',
+                        'reason' => ucfirst($componentType) . ' is required for a functional server',
+                        'compatible_options' => $this->getComponentsByType($componentType, true)
+                    ];
+                }
+            }
+            
+            // Recommend optional components
+            $optionalComponents = ['nic', 'caddy'];
+            foreach ($optionalComponents as $componentType) {
+                if (!in_array($componentType, $hasComponents)) {
+                    $recommendations[] = [
+                        'component_type' => $componentType,
+                        'priority' => 'medium',
+                        'reason' => ucfirst($componentType) . ' would enhance server functionality',
+                        'compatible_options' => $this->getComponentsByType($componentType, true)
+                    ];
+                }
+            }
+            
+            return $recommendations;
+            
+        } catch (Exception $e) {
+            error_log("Error getting recommended next components: " . $e->getMessage());
+            return [];
+        }
+    }
+    
+    /**
+     * Get compatible components for a specific configuration and component type
+     */
+    public function getCompatibleComponentsForConfiguration($configUuid, $componentType, $availableOnly = true) {
+        try {
+            // Get current configuration components
+            $stmt = $this->pdo->prepare("
+                SELECT component_type, component_uuid 
+                FROM server_configuration_components 
+                WHERE config_uuid = ?
+            ");
+            $stmt->execute([$configUuid]);
+            $currentComponents = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            
+            // Get all available components of the requested type
+            $availableComponents = $this->getComponentsByType($componentType, $availableOnly);
+            $compatibleComponents = [];
+            
+            if (empty($currentComponents)) {
+                // If no components in configuration yet, all components are compatible
+                return $availableComponents;
+            }
+            
+            // Check compatibility with existing components
+            foreach ($availableComponents as $component) {
+                $isCompatible = true;
+                $compatibilityIssues = [];
+                
+                $targetComponent = ['type' => $componentType, 'uuid' => $component['UUID']];
+                
+                // Check against each existing component
+                foreach ($currentComponents as $existing) {
+                    $existingComponent = ['type' => $existing['component_type'], 'uuid' => $existing['component_uuid']];
+                    $compatibility = $this->checkCompatibility($existingComponent, $targetComponent);
+                    
+                    if (!$compatibility['compatible']) {
+                        $isCompatible = false;
+                        $compatibilityIssues = array_merge($compatibilityIssues, $compatibility['failures']);
+                    }
+                }
+                
+                if ($isCompatible) {
+                    $component['compatibility_score'] = 1.0;
+                    $component['compatibility_issues'] = [];
+                    $compatibleComponents[] = $component;
+                } else {
+                    // Include incompatible components with issues for informational purposes
+                    $component['compatibility_score'] = 0.0;
+                    $component['compatibility_issues'] = $compatibilityIssues;
+                    // Uncomment next line if you want to include incompatible components
+                    // $compatibleComponents[] = $component;
+                }
+            }
+            
+            // Sort by compatibility score (descending)
+            usort($compatibleComponents, function($a, $b) {
+                return ($b['compatibility_score'] ?? 0) <=> ($a['compatibility_score'] ?? 0);
+            });
+            
+            return $compatibleComponents;
+            
+        } catch (Exception $e) {
+            error_log("Error getting compatible components for configuration: " . $e->getMessage());
+            return [];
+        }
+    }
+
+    /**
      * Get compatibility statistics
      */
     public function getCompatibilityStatistics($timeframe = '24 HOUR') {

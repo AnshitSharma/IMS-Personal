@@ -80,9 +80,11 @@ define('DEFAULT_COMPONENT_STATUS', (int)(getenv('DEFAULT_COMPONENT_STATUS') ?: 1
 define('AUTO_GENERATE_UUIDS', filter_var(getenv('AUTO_GENERATE_UUIDS') ?: 'true', FILTER_VALIDATE_BOOLEAN));
 
 // Additional helpful functions
-function getEnv($key, $default = null) {
-    $value = getenv($key);
-    return $value !== false ? $value : $default;
+if (!function_exists('getEnv')) {
+    function getEnv($key, $default = null) {
+        $value = getenv($key);
+        return $value !== false ? $value : $default;
+    }
 }
 
 function isProduction() {

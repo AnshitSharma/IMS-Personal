@@ -1,153 +1,109 @@
 <?php
-/**
- * Infrastructure Management System - Server API Handler
- * File: api/server/server_api.php
- * 
- * Handles all server creation, component selection, and compatibility operations
- */
+require_once __DIR__ . '/../../includes/config.php';
+require_once __DIR__ . '/../../includes/BaseFunctions.php';
+require_once __DIR__ . '/../../includes/models/ServerBuilder.php';
+require_once __DIR__ . '/../../includes/models/ServerConfiguration.php';
 
-// Include required files
-require_once(__DIR__ . '/../../includes/models/ServerBuilder.php');
-require_once(__DIR__ . '/../../includes/models/CompatibilityEngine.php');
-require_once(__DIR__ . '/../../includes/models/ServerConfiguration.php');
+header('Content-Type: application/json');
 
-// Get globals set by main API
-global $pdo, $user, $operation;
+// Initialize authentication
+$user = authenticateWithJWT($pdo);
 
+if (!$user) {
+    send_json_response(0, 0, 401, "Authentication required");
+}
+
+// Initialize ServerBuilder
 try {
-    // Initialize server builder
     $serverBuilder = new ServerBuilder($pdo);
-    
-    switch ($operation) {
-        case 'create-start':
-            handleServerCreateStart($serverBuilder, $user);
-            break;
-            
-        case 'add-component':
-            handleAddComponent($serverBuilder, $user);
-            break;
-            
-        case 'remove-component':
-            handleRemoveComponent($serverBuilder, $user);
-            break;
-            
-        case 'get-compatible':
-            handleGetCompatibleComponents($serverBuilder, $user);
-            break;
-            
-        case 'validate-config':
-            handleValidateConfiguration($serverBuilder, $user);
-            break;
-            
-        case 'save-config':
-            handleSaveConfiguration($serverBuilder, $user);
-            break;
-            
-        case 'load-config':
-            handleLoadConfiguration($serverBuilder, $user);
-            break;
-            
-        case 'list-configs':
-            handleListConfigurations($serverBuilder, $user);
-            break;
-            
-        case 'delete-config':
-            handleDeleteConfiguration($serverBuilder, $user);
-            break;
-            
-        case 'clone-config':
-            handleCloneConfiguration($serverBuilder, $user);
-            break;
-            
-        case 'get-statistics':
-            handleGetStatistics($serverBuilder, $user);
-            break;
-            
-        case 'update-config':
-            handleUpdateConfiguration($serverBuilder, $user);
-            break;
-            
-        case 'get-components':
-            handleGetComponents($serverBuilder, $user);
-            break;
-            
-        case 'export-config':
-            handleExportConfiguration($serverBuilder, $user);
-            break;
-            
-        default:
-            send_json_response(0, 1, 400, "Unknown server operation: $operation");
-    }
-    
 } catch (Exception $e) {
-    error_log("Server API error: " . $e->getMessage());
-    send_json_response(0, 1, 500, "Server operation failed: " . $e->getMessage());
+    error_log("Failed to initialize ServerBuilder: " . $e->getMessage());
+    send_json_response(0, 1, 500, "Server system unavailable");
+}
+
+// Get action from global operation or POST data
+global $operation;
+$action = $operation ?? $_POST['action'] ?? '';
+
+switch ($action) {
+    case 'create-start':
+    case 'server-create-start':
+        handleCreateStart($serverBuilder, $user);
+        break;
+    
+    case 'add-component':
+    case 'server-add-component':
+        handleAddComponent($serverBuilder, $user);
+        break;
+    
+    case 'remove-component':
+    case 'server-remove-component':
+        handleRemoveComponent($serverBuilder, $user);
+        break;
+    
+    case 'get-config':
+    case 'server-get-config':
+        handleGetConfiguration($serverBuilder, $user);
+        break;
+    
+    case 'list-configs':
+    case 'server-list-configs':
+        handleListConfigurations($serverBuilder, $user);
+        break;
+    
+    case 'finalize-config':
+    case 'server-finalize-config':
+        handleFinalizeConfiguration($serverBuilder, $user);
+        break;
+    
+    case 'delete-config':
+    case 'server-delete-config':
+        handleDeleteConfiguration($serverBuilder, $user);
+        break;
+    
+    case 'get-available-components':
+    case 'server-get-available-components':
+        handleGetAvailableComponents($user);
+        break;
+    
+    case 'validate-config':
+    case 'server-validate-config':
+        handleValidateConfiguration($serverBuilder, $user);
+        break;
+    
+    case 'get-compatible':
+    case 'server-get-compatible':
+        handleGetCompatible($serverBuilder, $user);
+        break;
+    
+    default:
+        send_json_response(0, 1, 400, "Invalid action specified");
 }
 
 /**
- * Start new server creation process
+ * Start server creation process
  */
-function handleServerCreateStart($serverBuilder, $user) {
-    global $pdo;
-    
+function handleCreateStart($serverBuilder, $user) {
     $serverName = trim($_POST['server_name'] ?? '');
     $description = trim($_POST['description'] ?? '');
-    $startWith = $_POST['start_with'] ?? 'cpu';
-    
-    error_log("Server creation start - Name: $serverName, Start with: $startWith");
+    $category = trim($_POST['category'] ?? 'custom');
     
     if (empty($serverName)) {
         send_json_response(0, 1, 400, "Server name is required");
     }
     
     try {
-        // Create new server configuration
-        $configData = [
+        $configUuid = $serverBuilder->createConfiguration($serverName, $user['id'], [
+            'description' => $description,
+            'category' => $category
+        ]);
+        
+        send_json_response(1, 1, 200, "Server configuration created successfully", [
+            'config_uuid' => $configUuid,
             'server_name' => $serverName,
             'description' => $description,
-            'created_by' => $user['id'],
-            'configuration_status' => 0, // Draft status
-            'created_at' => date('Y-m-d H:i:s')
-        ];
-        
-        $config = ServerConfiguration::create($pdo, $configData);
-        
-        if (!$config) {
-            throw new Exception("Failed to create server configuration");
-        }
-        
-        // Get initial component options based on starting preference
-        $initialOptions = [];
-        $availableComponents = [];
-        
-        // Get components for the starting component type
-        if ($startWith === 'cpu') {
-            $availableComponents['cpu'] = getAvailableComponents($pdo, 'cpu');
-        } elseif ($startWith === 'motherboard') {
-            $availableComponents['motherboard'] = getAvailableComponents($pdo, 'motherboard');
-        } else {
-            // Default to showing both CPU and motherboard options
-            $availableComponents['cpu'] = getAvailableComponents($pdo, 'cpu');
-            $availableComponents['motherboard'] = getAvailableComponents($pdo, 'motherboard');
-        }
-        
-        // Also get counts for other component types for UI display
-        $componentCounts = [];
-        $componentTypes = ['cpu', 'motherboard', 'ram', 'storage', 'nic', 'caddy'];
-        
-        foreach ($componentTypes as $type) {
-            $componentCounts[$type] = getComponentCount($pdo, $type);
-        }
-        
-        send_json_response(1, 1, 200, "Server creation initialized successfully", [
-            'config_uuid' => $config->get('config_uuid'),
-            'server_name' => $serverName,
-            'description' => $description,
-            'starting_with' => $startWith,
-            'available_components' => $availableComponents,
-            'component_counts' => $componentCounts,
-            'workflow_step' => 1,
-            'next_recommended' => $startWith === 'cpu' ? 'motherboard' : 'cpu',
+            'category' => $category,
+            'next_step' => 'motherboard',
             'progress' => [
                 'total_steps' => 6,
                 'completed_steps' => 0,
@@ -175,6 +131,7 @@ function handleAddComponent($serverBuilder, $user) {
     $quantity = (int)($_POST['quantity'] ?? 1);
     $slotPosition = $_POST['slot_position'] ?? null;
     $notes = $_POST['notes'] ?? '';
+    $override = filter_var($_POST['override'] ?? false, FILTER_VALIDATE_BOOLEAN);
     
     if (empty($configUuid) || empty($componentType) || empty($componentUuid)) {
         send_json_response(0, 1, 400, "Configuration UUID, component type, and component UUID are required");
@@ -192,11 +149,61 @@ function handleAddComponent($serverBuilder, $user) {
             send_json_response(0, 1, 403, "Insufficient permissions to modify this configuration");
         }
         
+        // Get component details and validate availability
+        $componentDetails = getComponentDetails($pdo, $componentType, $componentUuid);
+        if (!$componentDetails) {
+            send_json_response(0, 1, 404, "Component not found", [
+                'component_type' => $componentType,
+                'component_uuid' => $componentUuid
+            ]);
+        }
+        
+        // Enhanced availability check with better error messages
+        $componentStatus = (int)$componentDetails['Status'];
+        $isAvailable = false;
+        $statusMessage = '';
+        
+        switch ($componentStatus) {
+            case 0:
+                $statusMessage = "Component is marked as Failed/Defective";
+                break;
+            case 1:
+                $isAvailable = true;
+                $statusMessage = "Component is Available";
+                break;
+            case 2:
+                // Allow "In Use" components if override is enabled or for development
+                if ($override) {
+                    $isAvailable = true;
+                    $statusMessage = "Component is In Use (override enabled)";
+                } else {
+                    $statusMessage = "Component is currently In Use";
+                }
+                break;
+            default:
+                $statusMessage = "Component has unknown status: $componentStatus";
+        }
+        
+        if (!$isAvailable && !$override) {
+            send_json_response(0, 1, 400, "Component is not available", [
+                'component_status' => $componentStatus,
+                'status_message' => $statusMessage,
+                'component_details' => [
+                    'uuid' => $componentDetails['UUID'],
+                    'serial_number' => $componentDetails['SerialNumber'],
+                    'current_status' => getStatusText($componentStatus)
+                ],
+                'can_override' => true,
+                'suggested_alternatives' => getSuggestedAlternatives($pdo, $componentType, $componentUuid)
+            ]);
+        }
+        
         // Add the component
         $result = $serverBuilder->addComponent($configUuid, $componentType, $componentUuid, [
             'quantity' => $quantity,
             'slot_position' => $slotPosition,
-            'notes' => $notes
+            'notes' => $notes,
+            'override_used' => $override
         ]);
         
         if ($result['success']) {
@@ -214,23 +221,24 @@ function handleAddComponent($serverBuilder, $user) {
                 'component_added' => [
                     'type' => $componentType,
                     'uuid' => $componentUuid,
-                    'quantity' => $quantity
+                    'quantity' => $quantity,
+                    'status_override_used' => $override,
+                    'original_status' => $statusMessage
                 ],
                 'configuration_summary' => $summary,
                 'next_recommendations' => $nextRecommendations,
                 'compatibility_issues' => $result['compatibility_issues'] ?? []
             ]);
         } else {
-            $statusCode = isset($result['compatibility_issues']) ? 409 : 400;
-            send_json_response(0, 1, $statusCode, $result['message'], [
+            send_json_response(0, 1, 400, $result['message'] ?? "Failed to add component", [
                 'compatibility_issues' => $result['compatibility_issues'] ?? [],
-                'suggested_alternatives' => $result['suggested_alternatives'] ?? []
+                'suggested_alternatives' => getSuggestedAlternatives($pdo, $componentType, $componentUuid)
             ]);
         }
         
     } catch (Exception $e) {
         error_log("Error adding component: " . $e->getMessage());
-        send_json_response(0, 1, 500, "Failed to add component");
+        send_json_response(0, 1, 500, "Failed to add component: " . $e->getMessage());
     }
 }
 
@@ -242,10 +250,10 @@ function handleRemoveComponent($serverBuilder, $user) {
     
     $configUuid = $_POST['config_uuid'] ?? '';
     $componentType = $_POST['component_type'] ?? '';
-    $componentUuid = $_POST['component_uuid'] ?? null;
+    $componentUuid = $_POST['component_uuid'] ?? '';
     
-    if (empty($configUuid) || empty($componentType)) {
-        send_json_response(0, 1, 400, "Configuration UUID and component type are required");
+    if (empty($configUuid) || empty($componentType) || empty($componentUuid)) {
+        send_json_response(0, 1, 400, "Configuration UUID, component type, and component UUID are required");
     }
     
     try {
@@ -273,31 +281,28 @@ function handleRemoveComponent($serverBuilder, $user) {
                 'configuration_summary' => $summary
             ]);
         } else {
-            send_json_response(0, 1, 400, $result['message']);
+            send_json_response(0, 1, 400, $result['message'] ?? "Failed to remove component");
         }
         
     } catch (Exception $e) {
         error_log("Error removing component: " . $e->getMessage());
-        send_json_response(0, 1, 500, "Failed to remove component");
+        send_json_response(0, 1, 500, "Failed to remove component: " . $e->getMessage());
     }
 }
 
 /**
- * Get compatible components for current configuration
+ * Get server configuration details
  */
-function handleGetCompatibleComponents($serverBuilder, $user) {
+function handleGetConfiguration($serverBuilder, $user) {
     global $pdo;
     
     $configUuid = $_GET['config_uuid'] ?? $_POST['config_uuid'] ?? '';
-    $componentType = $_GET['component_type'] ?? $_POST['component_type'] ?? '';
-    $availableOnly = filter_var($_GET['available_only'] ?? $_POST['available_only'] ?? true, FILTER_VALIDATE_BOOLEAN);
     
     if (empty($configUuid)) {
         send_json_response(0, 1, 400, "Configuration UUID is required");
     }
     
     try {
-        // Load the configuration
         $config = ServerConfiguration::loadByUuid($pdo, $configUuid);
         if (!$config) {
             send_json_response(0, 1, 404, "Server configuration not found");
@@ -308,195 +313,18 @@ function handleGetCompatibleComponents($serverBuilder, $user) {
             send_json_response(0, 1, 403, "Insufficient permissions to view this configuration");
         }
         
-        $compatibleComponents = [];
-        
-        if (class_exists('CompatibilityEngine')) {
-            $compatibilityEngine = new CompatibilityEngine($pdo);
-            
-            if ($componentType) {
-                $compatibleComponents[$componentType] = $compatibilityEngine->getCompatibleComponentsForConfiguration(
-                    $configUuid, 
-                    $componentType, 
-                    $availableOnly
-                );
-            } else {
-                // Get compatible components for all types
-                $componentTypes = ['cpu', 'motherboard', 'ram', 'storage', 'nic', 'caddy'];
-                foreach ($componentTypes as $type) {
-                    $compatibleComponents[$type] = $compatibilityEngine->getCompatibleComponentsForConfiguration(
-                        $configUuid, 
-                        $type, 
-                        $availableOnly
-                    );
-                }
-            }
-        } else {
-            // Fallback: return all available components if compatibility engine not available
-            if ($componentType) {
-                $compatibleComponents[$componentType] = getAvailableComponents($pdo, $componentType, $availableOnly);
-            } else {
-                $componentTypes = ['cpu', 'motherboard', 'ram', 'storage', 'nic', 'caddy'];
-                foreach ($componentTypes as $type) {
-                    $compatibleComponents[$type] = getAvailableComponents($pdo, $type, $availableOnly);
-                }
-            }
-        }
-        
-        send_json_response(1, 1, 200, "Compatible components retrieved", [
-            'config_uuid' => $configUuid,
-            'component_type' => $componentType ?: 'all',
-            'compatible_components' => $compatibleComponents,
-            'compatibility_engine_used' => class_exists('CompatibilityEngine'),
-            'available_only' => $availableOnly
-        ]);
-        
-    } catch (Exception $e) {
-        error_log("Error getting compatible components: " . $e->getMessage());
-        send_json_response(0, 1, 500, "Failed to get compatible components");
-    }
-}
-
-/**
- * Validate server configuration
- */
-function handleValidateConfiguration($serverBuilder, $user) {
-    global $pdo;
-    
-    $configUuid = $_POST['config_uuid'] ?? $_GET['config_uuid'] ?? '';
-    
-    if (empty($configUuid)) {
-        send_json_response(0, 1, 400, "Configuration UUID is required");
-    }
-    
-    try {
-        // Load configuration
-        $config = ServerConfiguration::loadByUuid($pdo, $configUuid);
-        if (!$config) {
-            send_json_response(0, 1, 404, "Server configuration not found");
-        }
-        
-        // Check permissions
-        if ($config->get('created_by') != $user['id'] && !hasPermission($pdo, 'server.view_all', $user['id'])) {
-            send_json_response(0, 1, 403, "Insufficient permissions to validate this configuration");
-        }
-        
-        $validationResult = $serverBuilder->validateConfiguration($configUuid);
-        
-        send_json_response(1, 1, 200, "Configuration validation completed", [
-            'config_uuid' => $configUuid,
-            'validation_result' => $validationResult,
-            'is_valid' => $validationResult['is_valid'],
-            'compatibility_score' => $validationResult['compatibility_score'] ?? 0,
-            'issues' => $validationResult['issues'] ?? [],
-            'warnings' => $validationResult['warnings'] ?? [],
-            'recommendations' => $validationResult['recommendations'] ?? []
-        ]);
-        
-    } catch (Exception $e) {
-        error_log("Error validating configuration: " . $e->getMessage());
-        send_json_response(0, 1, 500, "Failed to validate configuration");
-    }
-}
-
-/**
- * Save server configuration
- */
-function handleSaveConfiguration($serverBuilder, $user) {
-    global $pdo;
-    
-    $configUuid = $_POST['config_uuid'] ?? '';
-    $serverName = trim($_POST['server_name'] ?? '');
-    $description = trim($_POST['description'] ?? '');
-    $status = (int)($_POST['status'] ?? 0);
-    
-    if (empty($configUuid)) {
-        send_json_response(0, 1, 400, "Configuration UUID is required");
-    }
-    
-    try {
-        // Load configuration
-        $config = ServerConfiguration::loadByUuid($pdo, $configUuid);
-        if (!$config) {
-            send_json_response(0, 1, 404, "Server configuration not found");
-        }
-        
-        // Check permissions
-        if ($config->get('created_by') != $user['id'] && !hasPermission($pdo, 'server.edit_all', $user['id'])) {
-            send_json_response(0, 1, 403, "Insufficient permissions to save this configuration");
-        }
-        
-        // Update configuration
-        $updateData = [];
-        if (!empty($serverName)) {
-            $updateData['server_name'] = $serverName;
-        }
-        if (!empty($description)) {
-            $updateData['description'] = $description;
-        }
-        if ($status >= 0) {
-            $updateData['configuration_status'] = $status;
-        }
-        $updateData['updated_at'] = date('Y-m-d H:i:s');
-        
-        $result = $config->update($updateData);
-        
-        if ($result) {
-            // Log activity
-            logActivity($pdo, $user['id'], "Configuration saved", 'server_management', $configUuid, "Saved server configuration: $serverName");
-            
-            send_json_response(1, 1, 200, "Configuration saved successfully", [
-                'config_uuid' => $configUuid,
-                'server_name' => $serverName,
-                'status' => $status,
-                'updated_at' => $updateData['updated_at']
-            ]);
-        } else {
-            send_json_response(0, 1, 500, "Failed to save configuration");
-        }
-        
-    } catch (Exception $e) {
-        error_log("Error saving configuration: " . $e->getMessage());
-        send_json_response(0, 1, 500, "Failed to save configuration");
-    }
-}
-
-/**
- * Load server configuration
- */
-function handleLoadConfiguration($serverBuilder, $user) {
-    global $pdo;
-    
-    $configUuid = $_GET['config_uuid'] ?? $_POST['config_uuid'] ?? '';
-    
-    if (empty($configUuid)) {
-        send_json_response(0, 1, 400, "Configuration UUID is required");
-    }
-    
-    try {
-        // Load configuration
-        $config = ServerConfiguration::loadByUuid($pdo, $configUuid);
-        if (!$config) {
-            send_json_response(0, 1, 404, "Server configuration not found");
-        }
-        
-        // Check permissions
-        if ($config->get('created_by') != $user['id'] && !hasPermission($pdo, 'server.view_all', $user['id'])) {
-            send_json_response(0, 1, 403, "Insufficient permissions to view this configuration");
-        }
-        
-        // Get full configuration details
-        $configData = $config->getData();
         $summary = $serverBuilder->getConfigurationSummary($configUuid);
+        $validation = $serverBuilder->validateConfiguration($configUuid);
         
-        send_json_response(1, 1, 200, "Configuration loaded successfully", [
-            'configuration' => $configData,
+        send_json_response(1, 1, 200, "Configuration retrieved successfully", [
+            'configuration' => $config->toArray(),
             'summary' => $summary,
-            'can_edit' => ($config->get('created_by') == $user['id'] || hasPermission($pdo, 'server.edit_all', $user['id']))
+            'validation' => $validation
         ]);
         
     } catch (Exception $e) {
-        error_log("Error loading configuration: " . $e->getMessage());
-        send_json_response(0, 1, 500, "Failed to load configuration");
+        error_log("Error getting configuration: " . $e->getMessage());
+        send_json_response(0, 1, 500, "Failed to retrieve configuration: " . $e->getMessage());
     }
 }
 
@@ -506,71 +334,107 @@ function handleLoadConfiguration($serverBuilder, $user) {
 function handleListConfigurations($serverBuilder, $user) {
     global $pdo;
     
-    $page = (int)($_GET['page'] ?? 1);
     $limit = (int)($_GET['limit'] ?? 20);
+    $offset = (int)($_GET['offset'] ?? 0);
     $status = $_GET['status'] ?? null;
-    $search = $_GET['search'] ?? '';
-    $userOnly = filter_var($_GET['user_only'] ?? false, FILTER_VALIDATE_BOOLEAN);
     
     try {
-        $conditions = [];
+        $whereClause = "WHERE 1=1";
         $params = [];
         
-        // User filtering
-        if ($userOnly || !hasPermission($pdo, 'server.view_all', $user['id'])) {
-            $conditions[] = "created_by = ?";
+        // Filter by user if no admin permissions
+        if (!hasPermission($pdo, 'server.view_all', $user['id'])) {
+            $whereClause .= " AND created_by = ?";
             $params[] = $user['id'];
         }
         
-        // Status filtering
+        // Filter by status if provided
         if ($status !== null) {
-            $conditions[] = "configuration_status = ?";
+            $whereClause .= " AND configuration_status = ?";
             $params[] = $status;
         }
         
-        // Search filtering
-        if (!empty($search)) {
-            $conditions[] = "(server_name LIKE ? OR description LIKE ?)";
-            $params[] = "%$search%";
-            $params[] = "%$search%";
-        }
+        $stmt = $pdo->prepare("
+            SELECT sc.*, u.username as created_by_username 
+            FROM server_configurations sc 
+            LEFT JOIN users u ON sc.created_by = u.id 
+            $whereClause 
+            ORDER BY sc.created_at DESC 
+            LIMIT ? OFFSET ?
+        ");
         
-        $whereClause = !empty($conditions) ? "WHERE " . implode(" AND ", $conditions) : "";
-        
-        // Get total count
-        $countSql = "SELECT COUNT(*) FROM server_configurations $whereClause";
-        $countStmt = $pdo->prepare($countSql);
-        $countStmt->execute($params);
-        $totalCount = $countStmt->fetchColumn();
-        
-        // Get configurations
-        $offset = ($page - 1) * $limit;
-        $sql = "SELECT * FROM server_configurations $whereClause ORDER BY created_at DESC LIMIT ? OFFSET ?";
         $params[] = $limit;
         $params[] = $offset;
-        
-        $stmt = $pdo->prepare($sql);
         $stmt->execute($params);
         $configurations = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        
+        // Get total count
+        $countStmt = $pdo->prepare("SELECT COUNT(*) as total FROM server_configurations sc $whereClause");
+        $countStmt->execute(array_slice($params, 0, -2)); // Remove limit and offset
+        $totalCount = $countStmt->fetch(PDO::FETCH_ASSOC)['total'];
         
         send_json_response(1, 1, 200, "Configurations retrieved successfully", [
             'configurations' => $configurations,
             'pagination' => [
-                'current_page' => $page,
-                'total_pages' => ceil($totalCount / $limit),
-                'total_count' => $totalCount,
-                'per_page' => $limit
-            ],
-            'filters' => [
-                'status' => $status,
-                'search' => $search,
-                'user_only' => $userOnly
+                'total' => $totalCount,
+                'limit' => $limit,
+                'offset' => $offset,
+                'has_more' => ($offset + $limit) < $totalCount
             ]
         ]);
         
     } catch (Exception $e) {
         error_log("Error listing configurations: " . $e->getMessage());
-        send_json_response(0, 1, 500, "Failed to list configurations");
+        send_json_response(0, 1, 500, "Failed to list configurations: " . $e->getMessage());
+    }
+}
+
+/**
+ * Finalize server configuration
+ */
+function handleFinalizeConfiguration($serverBuilder, $user) {
+    global $pdo;
+    
+    $configUuid = $_POST['config_uuid'] ?? '';
+    $finalNotes = trim($_POST['notes'] ?? '');
+    
+    if (empty($configUuid)) {
+        send_json_response(0, 1, 400, "Configuration UUID is required");
+    }
+    
+    try {
+        $config = ServerConfiguration::loadByUuid($pdo, $configUuid);
+        if (!$config) {
+            send_json_response(0, 1, 404, "Server configuration not found");
+        }
+        
+        // Check permissions
+        if ($config->get('created_by') != $user['id'] && !hasPermission($pdo, 'server.finalize', $user['id'])) {
+            send_json_response(0, 1, 403, "Insufficient permissions to finalize this configuration");
+        }
+        
+        // Validate configuration before finalizing
+        $validation = $serverBuilder->validateConfiguration($configUuid);
+        if (!$validation['is_valid']) {
+            send_json_response(0, 1, 400, "Configuration is not valid for finalization", [
+                'validation_errors' => $validation['issues']
+            ]);
+        }
+        
+        $result = $serverBuilder->finalizeConfiguration($configUuid, $finalNotes);
+        
+        if ($result['success']) {
+            send_json_response(1, 1, 200, "Configuration finalized successfully", [
+                'config_uuid' => $configUuid,
+                'finalization_details' => $result
+            ]);
+        } else {
+            send_json_response(0, 1, 400, $result['message'] ?? "Failed to finalize configuration");
+        }
+        
+    } catch (Exception $e) {
+        error_log("Error finalizing configuration: " . $e->getMessage());
+        send_json_response(0, 1, 500, "Failed to finalize configuration: " . $e->getMessage());
     }
 }
 
@@ -587,159 +451,80 @@ function handleDeleteConfiguration($serverBuilder, $user) {
     }
     
     try {
-        // Load configuration
         $config = ServerConfiguration::loadByUuid($pdo, $configUuid);
         if (!$config) {
             send_json_response(0, 1, 404, "Server configuration not found");
         }
         
         // Check permissions
-        if ($config->get('created_by') != $user['id'] && !hasPermission($pdo, 'server.delete_all', $user['id'])) {
+        if ($config->get('created_by') != $user['id'] && !hasPermission($pdo, 'server.delete', $user['id'])) {
             send_json_response(0, 1, 403, "Insufficient permissions to delete this configuration");
         }
         
-        $serverName = $config->get('server_name');
+        // Prevent deletion of finalized configurations unless admin
+        if ($config->get('configuration_status') == 3 && !hasPermission($pdo, 'server.delete_finalized', $user['id'])) {
+            send_json_response(0, 1, 403, "Cannot delete finalized configurations");
+        }
         
-        if ($config->delete()) {
-            logActivity($pdo, $user['id'], "Configuration deleted", 'server_management', $configUuid, "Deleted server configuration: $serverName");
+        $result = $serverBuilder->deleteConfiguration($configUuid);
+        
+        if ($result['success']) {
             send_json_response(1, 1, 200, "Configuration deleted successfully");
         } else {
-            send_json_response(0, 1, 500, "Failed to delete configuration");
+            send_json_response(0, 1, 400, $result['message'] ?? "Failed to delete configuration");
         }
         
     } catch (Exception $e) {
         error_log("Error deleting configuration: " . $e->getMessage());
-        send_json_response(0, 1, 500, "Failed to delete configuration");
+        send_json_response(0, 1, 500, "Failed to delete configuration: " . $e->getMessage());
     }
 }
 
 /**
- * Clone server configuration
+ * Get available components for selection
  */
-function handleCloneConfiguration($serverBuilder, $user) {
-    global $pdo;
-    
-    $configUuid = $_POST['config_uuid'] ?? '';
-    $newServerName = trim($_POST['new_server_name'] ?? '');
-    $newDescription = trim($_POST['new_description'] ?? '');
-    
-    if (empty($configUuid)) {
-        send_json_response(0, 1, 400, "Configuration UUID is required");
-    }
-    
-    if (empty($newServerName)) {
-        send_json_response(0, 1, 400, "New server name is required");
-    }
-    
-    try {
-        // Load original configuration
-        $originalConfig = ServerConfiguration::loadByUuid($pdo, $configUuid);
-        if (!$originalConfig) {
-            send_json_response(0, 1, 404, "Original configuration not found");
-        }
-        
-        // Check permissions
-        if ($originalConfig->get('created_by') != $user['id'] && !hasPermission($pdo, 'server.view_all', $user['id'])) {
-            send_json_response(0, 1, 403, "Insufficient permissions to clone this configuration");
-        }
-        
-        $clonedConfig = $serverBuilder->cloneConfiguration($configUuid, $newServerName, $newDescription, $user['id']);
-        
-        if ($clonedConfig) {
-            logActivity($pdo, $user['id'], "Configuration cloned", 'server_management', $clonedConfig->get('config_uuid'), "Cloned configuration to: $newServerName");
-            
-            send_json_response(1, 1, 200, "Configuration cloned successfully", [
-                'original_config_uuid' => $configUuid,
-                'new_config_uuid' => $clonedConfig->get('config_uuid'),
-                'new_server_name' => $newServerName
-            ]);
-        } else {
-            send_json_response(0, 1, 500, "Failed to clone configuration");
-        }
-        
-    } catch (Exception $e) {
-        error_log("Error cloning configuration: " . $e->getMessage());
-        send_json_response(0, 1, 500, "Failed to clone configuration");
-    }
-}
-
-/**
- * Get server statistics
- */
-function handleGetStatistics($serverBuilder, $user) {
-    global $pdo;
-    
-    try {
-        $stats = getServerConfigurationStats($pdo);
-        
-        send_json_response(1, 1, 200, "Server statistics retrieved", $stats);
-        
-    } catch (Exception $e) {
-        error_log("Error getting server statistics: " . $e->getMessage());
-        send_json_response(0, 1, 500, "Failed to get server statistics");
-    }
-}
-
-/**
- * Update server configuration
- */
-function handleUpdateConfiguration($serverBuilder, $user) {
-    // This is similar to save but for partial updates
-    handleSaveConfiguration($serverBuilder, $user);
-}
-
-/**
- * Get available components
- */
-function handleGetComponents($serverBuilder, $user) {
+function handleGetAvailableComponents($user) {
     global $pdo;
     
     $componentType = $_GET['component_type'] ?? $_POST['component_type'] ?? '';
-    $availableOnly = filter_var($_GET['available_only'] ?? $_POST['available_only'] ?? true, FILTER_VALIDATE_BOOLEAN);
+    $includeInUse = filter_var($_GET['include_in_use'] ?? $_POST['include_in_use'] ?? false, FILTER_VALIDATE_BOOLEAN);
+    $limit = (int)($_GET['limit'] ?? 50);
+    
+    if (empty($componentType)) {
+        send_json_response(0, 1, 400, "Component type is required");
+    }
     
     try {
-        if ($componentType) {
-            $components = getAvailableComponents($pdo, $componentType, $availableOnly);
-            send_json_response(1, 1, 200, "Components retrieved", [
-                'component_type' => $componentType,
-                'components' => $components,
-                'count' => count($components)
-            ]);
-        } else {
-            $allComponents = [];
-            $componentTypes = ['cpu', 'motherboard', 'ram', 'storage', 'nic', 'caddy'];
-            
-            foreach ($componentTypes as $type) {
-                $allComponents[$type] = getAvailableComponents($pdo, $type, $availableOnly);
-            }
-            
-            send_json_response(1, 1, 200, "All components retrieved", [
-                'components' => $allComponents,
-                'available_only' => $availableOnly
-            ]);
-        }
+        $components = getAvailableComponents($pdo, $componentType, !$includeInUse, $limit);
+        $count = getComponentCount($pdo, $componentType);
+        
+        send_json_response(1, 1, 200, "Available components retrieved successfully", [
+            'component_type' => $componentType,
+            'components' => $components,
+            'counts' => $count,
+            'include_in_use' => $includeInUse,
+            'total_returned' => count($components)
+        ]);
         
     } catch (Exception $e) {
-        error_log("Error getting components: " . $e->getMessage());
-        send_json_response(0, 1, 500, "Failed to get components");
+        error_log("Error getting available components: " . $e->getMessage());
+        send_json_response(0, 1, 500, "Failed to get available components: " . $e->getMessage());
     }
 }
 
 /**
- * Export server configuration
+ * Validate server configuration
  */
-function handleExportConfiguration($serverBuilder, $user) {
+function handleValidateConfiguration($serverBuilder, $user) {
     global $pdo;
     
-    $configUuid = $_GET['config_uuid'] ?? $_POST['config_uuid'] ?? '';
-    $format = $_GET['format'] ?? $_POST['format'] ?? 'json';
+    $configUuid = $_POST['config_uuid'] ?? '';
     
     if (empty($configUuid)) {
         send_json_response(0, 1, 400, "Configuration UUID is required");
     }
     
     try {
-        // Load configuration
         $config = ServerConfiguration::loadByUuid($pdo, $configUuid);
         if (!$config) {
             send_json_response(0, 1, 404, "Server configuration not found");
@@ -747,28 +532,178 @@ function handleExportConfiguration($serverBuilder, $user) {
         
         // Check permissions
         if ($config->get('created_by') != $user['id'] && !hasPermission($pdo, 'server.view_all', $user['id'])) {
-            send_json_response(0, 1, 403, "Insufficient permissions to export this configuration");
+            send_json_response(0, 1, 403, "Insufficient permissions to validate this configuration");
         }
         
-        $exportData = $serverBuilder->exportConfiguration($configUuid, $format);
+        $validation = $serverBuilder->validateConfiguration($configUuid);
         
-        send_json_response(1, 1, 200, "Configuration exported successfully", [
+        send_json_response(1, 1, 200, "Configuration validation completed", [
             'config_uuid' => $configUuid,
-            'format' => $format,
-            'export_data' => $exportData,
-            'exported_at' => date('Y-m-d H:i:s')
+            'validation' => $validation
         ]);
         
     } catch (Exception $e) {
-        error_log("Error exporting configuration: " . $e->getMessage());
-        send_json_response(0, 1, 500, "Failed to export configuration");
+        error_log("Error validating configuration: " . $e->getMessage());
+        send_json_response(0, 1, 500, "Failed to validate configuration: " . $e->getMessage());
+    }
+}
+
+/**
+ * Get compatible components for a server configuration or component
+ */
+function handleGetCompatible($serverBuilder, $user) {
+    global $pdo;
+    
+    $configUuid = $_GET['config_uuid'] ?? $_POST['config_uuid'] ?? '';
+    $componentType = $_GET['component_type'] ?? $_POST['component_type'] ?? '';
+    $componentUuid = $_GET['component_uuid'] ?? $_POST['component_uuid'] ?? '';
+    $includeInUse = filter_var($_GET['include_in_use'] ?? $_POST['include_in_use'] ?? false, FILTER_VALIDATE_BOOLEAN);
+    
+    try {
+        $result = [];
+        
+        // If we have a config UUID, get compatible components for the entire configuration
+        if (!empty($configUuid)) {
+            $config = ServerConfiguration::loadByUuid($pdo, $configUuid);
+            if (!$config) {
+                send_json_response(0, 1, 404, "Server configuration not found");
+            }
+            
+            // Check permissions
+            if ($config->get('created_by') != $user['id'] && !hasPermission($pdo, 'server.view_all', $user['id'])) {
+                send_json_response(0, 1, 403, "Insufficient permissions to view this configuration");
+            }
+            
+            // Use CompatibilityEngine if available
+            if (class_exists('CompatibilityEngine')) {
+                $compatibilityEngine = new CompatibilityEngine($pdo);
+                $result = $compatibilityEngine->getCompatibleComponents($configUuid, $componentType);
+            } else {
+                // Fallback to basic component listing
+                $result['components'] = getAvailableComponents($pdo, $componentType, !$includeInUse);
+                $result['compatibility_engine_available'] = false;
+            }
+        }
+        // If we have component type and UUID, find compatible components for that specific component
+        elseif (!empty($componentType) && !empty($componentUuid)) {
+            $componentDetails = getComponentDetails($pdo, $componentType, $componentUuid);
+            if (!$componentDetails) {
+                send_json_response(0, 1, 404, "Component not found");
+            }
+            
+            if (class_exists('CompatibilityEngine')) {
+                $compatibilityEngine = new CompatibilityEngine($pdo);
+                $result = $compatibilityEngine->getCompatibleComponentsFor($componentType, $componentUuid);
+            } else {
+                // Basic fallback - return similar components
+                $result['components'] = getAvailableComponents($pdo, $componentType, !$includeInUse);
+                $result['compatibility_engine_available'] = false;
+            }
+        }
+        // If only component type is provided, return all available components of that type
+        elseif (!empty($componentType)) {
+            $result['components'] = getAvailableComponents($pdo, $componentType, !$includeInUse);
+            $result['compatibility_engine_available'] = class_exists('CompatibilityEngine');
+        } else {
+            send_json_response(0, 1, 400, "Either config_uuid or component_type (with optional component_uuid) is required");
+        }
+        
+        $result['request_parameters'] = [
+            'config_uuid' => $configUuid,
+            'component_type' => $componentType,
+            'component_uuid' => $componentUuid,
+            'include_in_use' => $includeInUse
+        ];
+        
+        send_json_response(1, 1, 200, "Compatible components retrieved successfully", $result);
+        
+    } catch (Exception $e) {
+        error_log("Error getting compatible components: " . $e->getMessage());
+        send_json_response(0, 1, 500, "Failed to get compatible components: " . $e->getMessage());
+    }
+}
+
+/**
+ * Helper function to get component details
+ */
+function getComponentDetails($pdo, $componentType, $componentUuid) {
+    $tableMap = [
+        'cpu' => 'cpuinventory',
+        'ram' => 'raminventory', 
+        'storage' => 'storageinventory',
+        'motherboard' => 'motherboardinventory',
+        'nic' => 'nicinventory',
+        'caddy' => 'caddyinventory'
+    ];
+    
+    if (!isset($tableMap[$componentType])) {
+        return null;
+    }
+    
+    $table = $tableMap[$componentType];
+    
+    try {
+        $stmt = $pdo->prepare("SELECT * FROM $table WHERE UUID = ?");
+        $stmt->execute([$componentUuid]);
+        return $stmt->fetch(PDO::FETCH_ASSOC);
+    } catch (Exception $e) {
+        error_log("Error getting component details: " . $e->getMessage());
+        return null;
+    }
+}
+
+/**
+ * Helper function to get status text
+ */
+function getStatusText($statusCode) {
+    $statusMap = [
+        0 => 'Failed/Defective',
+        1 => 'Available',
+        2 => 'In Use'
+    ];
+    
+    return $statusMap[$statusCode] ?? 'Unknown';
+}
+
+/**
+ * Helper function to get suggested alternatives
+ */
+function getSuggestedAlternatives($pdo, $componentType, $excludeUuid, $limit = 5) {
+    $tableMap = [
+        'cpu' => 'cpuinventory',
+        'ram' => 'raminventory',
+        'storage' => 'storageinventory', 
+        'motherboard' => 'motherboardinventory',
+        'nic' => 'nicinventory',
+        'caddy' => 'caddyinventory'
+    ];
+    
+    if (!isset($tableMap[$componentType])) {
+        return [];
+    }
+    
+    $table = $tableMap[$componentType];
+    
+    try {
+        $stmt = $pdo->prepare("
+            SELECT UUID, SerialNumber, Status 
+            FROM $table 
+            WHERE UUID != ? AND Status = 1 
+            ORDER BY SerialNumber 
+            LIMIT ?
+        ");
+        $stmt->execute([$excludeUuid, $limit]);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    } catch (Exception $e) {
+        error_log("Error getting suggested alternatives: " . $e->getMessage());
+        return [];
     }
 }
 
 /**
  * Helper function to get available components
  */
-function getAvailableComponents($pdo, $componentType, $availableOnly = true) {
+function getAvailableComponents($pdo, $componentType, $availableOnly = true, $limit = 50) {
     $tableMap = [
         'cpu' => 'cpuinventory',
         'ram' => 'raminventory',
@@ -783,11 +718,16 @@ function getAvailableComponents($pdo, $componentType, $availableOnly = true) {
     }
     
     $table = $tableMap[$componentType];
-    $whereClause = $availableOnly ? "WHERE Status = 1" : "";
+    $whereClause = $availableOnly ? "WHERE Status IN (1, 2)" : "WHERE Status != 0";
     
     try {
-        $stmt = $pdo->prepare("SELECT * FROM $table $whereClause ORDER BY SerialNumber");
-        $stmt->execute();
+        $stmt = $pdo->prepare("
+            SELECT * FROM $table 
+            $whereClause 
+            ORDER BY Status ASC, SerialNumber ASC 
+            LIMIT ?
+        ");
+        $stmt->execute([$limit]);
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     } catch (Exception $e) {
         error_log("Error getting available components for $componentType: " . $e->getMessage());
@@ -809,18 +749,26 @@ function getComponentCount($pdo, $componentType) {
     ];
     
     if (!isset($tableMap[$componentType])) {
-        return 0;
+        return ['total' => 0, 'available' => 0, 'in_use' => 0, 'failed' => 0];
     }
     
     $table = $tableMap[$componentType];
     
     try {
-        $stmt = $pdo->prepare("SELECT COUNT(*) as total, SUM(CASE WHEN Status = 1 THEN 1 ELSE 0 END) as available FROM $table");
+        $stmt = $pdo->prepare("
+            SELECT 
+                COUNT(*) as total,
+                SUM(CASE WHEN Status = 1 THEN 1 ELSE 0 END) as available,
+                SUM(CASE WHEN Status = 2 THEN 1 ELSE 0 END) as in_use,
+                SUM(CASE WHEN Status = 0 THEN 1 ELSE 0 END) as failed
+            FROM $table
+        ");
         $stmt->execute();
         return $stmt->fetch(PDO::FETCH_ASSOC);
     } catch (Exception $e) {
         error_log("Error getting component count for $componentType: " . $e->getMessage());
-        return ['total' => 0, 'available' => 0];
+        return ['total' => 0, 'available' => 0, 'in_use' => 0, 'failed' => 0];
     }
 }
+
 ?>

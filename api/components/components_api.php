@@ -1,213 +1,70 @@
 <?php
-/**
- * Complete Enhanced Components API with JSON Integration, UUID Support, and Compatibility Features
- * File: api/components/components_api.php
- */
+require_once __DIR__ . '/../../includes/config.php';
+require_once __DIR__ . '/../../includes/functions.php';
 
-// Include required files
-require_once(__DIR__ . '/../../includes/db_config.php');
-require_once(__DIR__ . '/../../includes/BaseFunctions.php');
-
-// Set JSON response header
 header('Content-Type: application/json');
 
-// Component type validation and table mapping
-$validComponents = ['cpu', 'ram', 'storage', 'motherboard', 'nic', 'caddy'];
+// Initialize authentication
+$user = null;
+$authResult = check_auth();
+
+if (!$authResult['authenticated']) {
+    send_json_response(0, 0, 401, "Authentication required");
+}
+
+$user = $authResult['user'];
+
+// Get action and component type from POST data
+$action = $_POST['action'] ?? '';
+$componentType = '';
+$table = '';
+
+// Extract component type from action
+if (preg_match('/^([a-z]+)-(get|add|update|delete|list)$/', $action, $matches)) {
+    $componentType = $matches[1];
+    $actionType = $matches[2];
+} else {
+    send_json_response(0, 1, 400, "Invalid action format");
+}
+
+// Map component types to database tables
 $tableMap = [
     'cpu' => 'cpuinventory',
-    'ram' => 'raminventory', 
+    'ram' => 'raminventory',
     'storage' => 'storageinventory',
     'motherboard' => 'motherboardinventory',
     'nic' => 'nicinventory',
     'caddy' => 'caddyinventory'
 ];
 
-// Get component type and operation from action
-$action = $_POST['action'] ?? $_GET['action'] ?? '';
-$parts = explode('-', $action);
-$componentType = $parts[0] ?? '';
-$operation = $parts[1] ?? '';
-
-// Validate component type
-if (!in_array($componentType, $validComponents)) {
-    send_json_response(0, 0, 400, "Invalid component type: $componentType");
+if (!isset($tableMap[$componentType])) {
+    send_json_response(0, 1, 400, "Invalid component type: $componentType");
 }
 
 $table = $tableMap[$componentType];
 
-// Load JSON data for UUID validation and details
-function loadComponentJSONData($type) {
-    $jsonPaths = [
-        'cpu' => [
-            'level1' => __DIR__ . '/../../All JSON/cpu jsons/Cpu base level 1.json',
-            'level2' => __DIR__ . '/../../All JSON/cpu jsons/Cpu family level 2.json',
-            'level3' => __DIR__ . '/../../All JSON/cpu jsons/Cpu details level 3.json'
-        ],
-        'motherboard' => [
-            'level1' => __DIR__ . '/../../All JSON/motherboad jsons/motherboard level 1.json',
-            'level3' => __DIR__ . '/../../All JSON/motherboad jsons/motherboard level 3.json'
-        ],
-        'ram' => [
-            'level3' => __DIR__ . '/../../All JSON/Ram JSON/ram_detail.json'
-        ],
-        'storage' => [
-            'level3' => __DIR__ . '/../../All JSON/storage jsons/storagedetail.json'
-        ],
-        'caddy' => [
-            'level3' => __DIR__ . '/../../All JSON/caddy json/caddy_details.json'
-        ],
-        'nic' => [
-            'level3' => __DIR__ . '/../../All JSON/nic json/nic_details.json'
-        ]
-    ];
-    
-    $data = [];
-    if (isset($jsonPaths[$type])) {
-        foreach ($jsonPaths[$type] as $level => $path) {
-            if (file_exists($path)) {
-                $content = file_get_contents($path);
-                $data[$level] = json_decode($content, true);
-            }
-        }
+// Check permissions
+$requiredPermissions = [
+    'get' => "$componentType.view",
+    'list' => "$componentType.view",
+    'add' => "$componentType.create",
+    'update' => "$componentType.edit",
+    'delete' => "$componentType.delete"
+];
+
+if (isset($requiredPermissions[$actionType])) {
+    if (!hasPermission($pdo, $requiredPermissions[$actionType], $user['id'])) {
+        send_json_response(0, 1, 403, "Insufficient permissions for this action");
     }
-    
-    return $data;
 }
 
-// Validate UUID exists in JSON data
-function validateComponentUUID($uuid, $componentType) {
-    if (empty($uuid)) {
-        return false;
-    }
-    
-    $jsonData = loadComponentJSONData($componentType);
-    
-    if (empty($jsonData['level3'])) {
-        return true; // If no JSON data, allow any UUID (for NIC, etc.)
-    }
-    
-    foreach ($jsonData['level3'] as $brandData) {
-        if (isset($brandData['models'])) {
-            foreach ($brandData['models'] as $model) {
-                $modelUUID = $model['UUID'] ?? $model['uuid'] ?? $model['inventory']['UUID'] ?? '';
-                if ($modelUUID === $uuid) {
-                    return true;
-                }
-            }
-        }
-    }
-    
-    return false;
-}
-
-// Get component details from JSON
-function getComponentDetailsFromJSON($uuid, $componentType) {
-    if (empty($uuid)) {
-        return null;
-    }
-    
-    $jsonData = loadComponentJSONData($componentType);
-    
-    if (empty($jsonData['level3'])) {
-        return null;
-    }
-    
-    foreach ($jsonData['level3'] as $brandData) {
-        if (isset($brandData['models'])) {
-            foreach ($brandData['models'] as $model) {
-                $modelUUID = $model['UUID'] ?? $model['uuid'] ?? $model['inventory']['UUID'] ?? '';
-                if ($modelUUID === $uuid) {
-                    return [
-                        'brand' => $brandData['brand'] ?? $brandData['manufacturer'] ?? '',
-                        'series' => $brandData['series'] ?? $model['series'] ?? '',
-                        'model' => $model,
-                        'specifications' => extractSpecifications($model, $componentType)
-                    ];
-                }
-            }
-        }
-    }
-    
-    return null;
-}
-
-// Extract specifications from model data
-function extractSpecifications($model, $componentType) {
-    $specs = [];
-    
-    switch($componentType) {
-        case 'cpu':
-            if (isset($model['cores'])) $specs['cores'] = $model['cores'];
-            if (isset($model['threads'])) $specs['threads'] = $model['threads'];
-            if (isset($model['base_frequency'])) $specs['base_frequency'] = $model['base_frequency'];
-            if (isset($model['boost_frequency'])) $specs['boost_frequency'] = $model['boost_frequency'];
-            if (isset($model['tdp'])) $specs['tdp'] = $model['tdp'];
-            if (isset($model['cache']['l3'])) $specs['l3_cache'] = $model['cache']['l3'];
-            if (isset($model['socket'])) $specs['socket'] = $model['socket'];
-            break;
-            
-        case 'motherboard':
-            if (isset($model['socket'])) $specs['socket'] = is_array($model['socket']) ? $model['socket']['type'] : $model['socket'];
-            if (isset($model['chipset'])) $specs['chipset'] = $model['chipset'];
-            if (isset($model['form_factor'])) $specs['form_factor'] = $model['form_factor'];
-            if (isset($model['memory']['max_capacity'])) $specs['max_memory'] = $model['memory']['max_capacity'];
-            if (isset($model['memory']['type'])) $specs['memory_type'] = $model['memory']['type'];
-            break;
-            
-        case 'ram':
-            if (isset($model['capacity'])) $specs['capacity'] = $model['capacity'];
-            if (isset($model['type'])) $specs['type'] = $model['type'];
-            if (isset($model['frequency'])) $specs['frequency'] = $model['frequency'];
-            if (isset($model['form_factor'])) $specs['form_factor'] = $model['form_factor'];
-            if (isset($model['voltage'])) $specs['voltage'] = $model['voltage'];
-            break;
-            
-        case 'storage':
-            if (isset($model['capacity'])) $specs['capacity'] = $model['capacity'];
-            if (isset($model['type'])) $specs['type'] = $model['type'];
-            if (isset($model['interface'])) $specs['interface'] = $model['interface'];
-            if (isset($model['form_factor'])) $specs['form_factor'] = $model['form_factor'];
-            if (isset($model['read_speed'])) $specs['read_speed'] = $model['read_speed'];
-            if (isset($model['write_speed'])) $specs['write_speed'] = $model['write_speed'];
-            break;
-            
-        case 'nic':
-            if (isset($model['ports'])) $specs['ports'] = $model['ports'];
-            if (isset($model['speed'])) $specs['speed'] = $model['speed'];
-            if (isset($model['interface'])) $specs['interface'] = $model['interface'];
-            break;
-            
-        case 'caddy':
-            if (isset($model['compatible_drives'])) $specs['compatible_drives'] = $model['compatible_drives'];
-            if (isset($model['form_factor'])) $specs['form_factor'] = $model['form_factor'];
-            break;
-    }
-    
-    return $specs;
-}
-
-// Note: getComponentCompatibilityInfo() function is defined in BaseFunctions.php
-
-// Extract memory support from CPU model data
-function extractMemorySupport($cpuModel) {
-    $memorySupport = [];
-    
-    if (isset($cpuModel['memory_support'])) {
-        $memorySupport = $cpuModel['memory_support'];
-    } elseif (isset($cpuModel['specifications']['memory'])) {
-        $memorySupport = $cpuModel['specifications']['memory'];
-    }
-    
-    return $memorySupport;
-}
-
-// Handle different operations
-switch($operation) {
-    case 'list':
-        handleListComponents();
-        break;
+// Route to appropriate handler
+switch ($actionType) {
     case 'get':
         handleGetComponent();
+        break;
+    case 'list':
+        handleListComponents();
         break;
     case 'add':
         handleAddComponent();
@@ -218,278 +75,33 @@ switch($operation) {
     case 'delete':
         handleDeleteComponent();
         break;
-    case 'bulk_update':
-        handleBulkUpdateComponents();
-        break;
-    case 'get_json_data':
-        handleGetJSONData();
-        break;
-    case 'get_compatible':
-        handleGetCompatibleComponents();
-        break;
-    case 'check_compatibility':
-        handleCheckCompatibility();
-        break;
     default:
-        send_json_response(0, 0, 400, "Invalid operation: $operation");
+        send_json_response(0, 1, 400, "Invalid action type: $actionType");
 }
 
-// List components with filtering and pagination
-function handleListComponents() {
-    global $pdo, $table, $componentType;
-    
-    // Skip permission check for super admin or if permission function doesn't exist
-    try {
-        $limit = min((int)($_GET['limit'] ?? $_POST['limit'] ?? 50), 1000);
-        $offset = max(0, (int)($_GET['offset'] ?? $_POST['offset'] ?? 0));
-        $page = floor($offset / $limit) + 1;
-        $status = $_GET['status'] ?? $_POST['status'] ?? 'all';
-        $search = $_GET['search'] ?? $_POST['search'] ?? '';
-        $sortBy = $_GET['sort_by'] ?? $_POST['sort_by'] ?? 'CreatedAt';
-        $sortOrder = strtoupper($_GET['sort_order'] ?? $_POST['sort_order'] ?? 'DESC');
-        $includeCompatibility = filter_var($_GET['include_compatibility'] ?? $_POST['include_compatibility'] ?? false, FILTER_VALIDATE_BOOLEAN);
-        
-        // Validate sort order
-        if (!in_array($sortOrder, ['ASC', 'DESC'])) {
-            $sortOrder = 'DESC';
-        }
-        
-        // Build query conditions
-        $conditions = [];
-        $params = [];
-        
-        if ($status !== 'all' && in_array($status, ['0', '1', '2'])) {
-            $conditions[] = "Status = :status";
-            $params[':status'] = (int)$status;
-        }
-        
-        if (!empty($search)) {
-            $conditions[] = "(SerialNumber LIKE :search OR Notes LIKE :search OR Location LIKE :search OR UUID LIKE :search)";
-            $params[':search'] = "%$search%";
-        }
-        
-        // Build main query - handle case where table might not have all expected columns
-        $baseColumns = ['ID', 'SerialNumber', 'Status'];
-        $optionalColumns = ['UUID', 'ServerUUID', 'Location', 'RackPosition', 'PurchaseDate', 'InstallationDate', 'WarrantyEndDate', 'Flag', 'Notes', 'CreatedBy', 'UpdatedBy', 'CreatedAt', 'UpdatedAt'];
-        
-        // Check which columns exist in the table
-        $existingColumns = [];
-        try {
-            $columnCheck = $pdo->query("DESCRIBE $table");
-            $tableColumns = $columnCheck->fetchAll(PDO::FETCH_COLUMN);
-            $existingColumns = array_merge($baseColumns, array_intersect($optionalColumns, $tableColumns));
-        } catch (Exception $e) {
-            // Fallback to basic columns if DESCRIBE fails
-            $existingColumns = $baseColumns;
-        }
-        
-        $selectColumns = implode(', ', $existingColumns);
-        $query = "SELECT $selectColumns FROM $table";
-        if (!empty($conditions)) {
-            $query .= " WHERE " . implode(' AND ', $conditions);
-        }
-        
-        // Only add ORDER BY if the column exists
-        if (in_array($sortBy, $existingColumns)) {
-            $query .= " ORDER BY $sortBy $sortOrder";
-        } else {
-            $query .= " ORDER BY ID DESC"; // Fallback to ID if specified column doesn't exist
-        }
-        $query .= " LIMIT :limit OFFSET :offset";
-        
-        $stmt = $pdo->prepare($query);
-        foreach ($params as $key => $value) {
-            $stmt->bindValue($key, $value);
-        }
-        $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
-        $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
-        $stmt->execute();
-        
-        $components = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        
-        // Ensure all components have required fields with defaults
-        foreach ($components as &$component) {
-            // Set defaults for missing fields
-            if (!isset($component['UUID'])) $component['UUID'] = '';
-            if (!isset($component['ServerUUID'])) $component['ServerUUID'] = '';
-            if (!isset($component['Location'])) $component['Location'] = '';
-            if (!isset($component['Notes'])) $component['Notes'] = '';
-            if (!isset($component['Status'])) $component['Status'] = 1; // Default to Available
-            
-            if (!empty($component['UUID'])) {
-                $jsonDetails = getComponentDetailsFromJSON($component['UUID'], $componentType);
-                if ($jsonDetails) {
-                    $component['json_details'] = $jsonDetails;
-                }
-                
-                // Add compatibility metadata if requested and system is available
-                if ($includeCompatibility && function_exists('serverSystemInitialized') && serverSystemInitialized($pdo)) {
-                    if (function_exists('getComponentCompatibilityInfo')) {
-                        $component['compatibility_info'] = getComponentCompatibilityInfo($pdo, $componentType, $component['UUID']);
-                    }
-                }
-            }
-            
-            // Add status text
-            $component['StatusText'] = function_exists('getStatusText') ? getStatusText($component['Status']) : 'Unknown';
-        }
-        
-        // Get total count for pagination
-        $countQuery = "SELECT COUNT(*) as total FROM $table";
-        if (!empty($conditions)) {
-            $countQuery .= " WHERE " . implode(' AND ', $conditions);
-        }
-        
-        $countStmt = $pdo->prepare($countQuery);
-        foreach ($params as $key => $value) {
-            if ($key !== ':limit' && $key !== ':offset') {
-                $countStmt->bindValue($key, $value);
-            }
-        }
-        $countStmt->execute();
-        $total = $countStmt->fetch()['total'];
-        
-        // Get status summary
-        $statusQuery = "SELECT Status, COUNT(*) as count FROM $table";
-        if (!empty($conditions)) {
-            // Remove status condition for summary if it exists
-            $summaryConditions = array_filter($conditions, function($condition) {
-                return !str_contains($condition, 'Status =');
-            });
-            if (!empty($summaryConditions)) {
-                $statusQuery .= " WHERE " . implode(' AND ', $summaryConditions);
-            }
-        }
-        $statusQuery .= " GROUP BY Status";
-        
-        $statusStmt = $pdo->prepare($statusQuery);
-        foreach ($params as $key => $value) {
-            if ($key !== ':status' && $key !== ':limit' && $key !== ':offset') {
-                $statusStmt->bindValue($key, $value);
-            }
-        }
-        $statusStmt->execute();
-        $statusCounts = $statusStmt->fetchAll(PDO::FETCH_KEY_PAIR);
-        
-        // Check system features availability
-        $serverSystemAvailable = function_exists('serverSystemInitialized') && serverSystemInitialized($pdo);
-        
-        send_json_response(1, 1, 200, "$componentType components retrieved successfully", [
-            'components' => $components,
-            'pagination' => [
-                'total' => (int)$total,
-                'limit' => $limit,
-                'offset' => $offset,
-                'page' => $page,
-                'has_more' => ($offset + $limit) < $total
-            ],
-            'status_summary' => [
-                'total' => (int)$total,
-                'available' => (int)($statusCounts[1] ?? 0),
-                'in_use' => (int)($statusCounts[2] ?? 0),
-                'failed' => (int)($statusCounts[0] ?? 0)
-            ],
-            'permissions' => [
-                'can_create' => true,
-                'can_edit' => true,
-                'can_delete' => true,
-                'can_check_compatibility' => true
-            ],
-            'features' => [
-                'compatibility_system_available' => $serverSystemAvailable,
-                'json_specifications_available' => !empty(loadComponentJSONData($componentType))
-            ]
-        ]);
-        
-    } catch (PDOException $e) {
-        error_log("Database error in handleListComponents: " . $e->getMessage());
-        error_log("Query: " . ($query ?? 'Query not set'));
-        error_log("Table: " . $table);
-        error_log("Component Type: " . $componentType);
-        
-        // Return empty result instead of error for better user experience
-        send_json_response(1, 1, 200, "$componentType components retrieved successfully", [
-            'components' => [],
-            'pagination' => [
-                'total' => 0,
-                'limit' => $limit ?? 50,
-                'offset' => $offset ?? 0,
-                'page' => 1,
-                'has_more' => false
-            ],
-            'status_summary' => [
-                'total' => 0,
-                'available' => 0,
-                'in_use' => 0,
-                'failed' => 0
-            ],
-            'permissions' => [
-                'can_create' => true,
-                'can_edit' => true,
-                'can_delete' => true,
-                'can_check_compatibility' => true
-            ],
-            'features' => [
-                'compatibility_system_available' => false,
-                'json_specifications_available' => true
-            ],
-            'error' => 'Database connection issue - please try again'
-        ]);
-    } catch (Exception $e) {
-        error_log("General error in handleListComponents: " . $e->getMessage());
-        send_json_response(0, 1, 500, "An unexpected error occurred");
-    }
-}
-
-// Get single component with enhanced details
+/**
+ * Get single component by ID
+ */
 function handleGetComponent() {
-    global $pdo, $table, $componentType;
+    global $pdo, $table, $componentType, $user;
     
-    $id = $_POST['id'] ?? $_GET['id'] ?? '';
-    $includeCompatibility = filter_var($_GET['include_compatibility'] ?? $_POST['include_compatibility'] ?? true, FILTER_VALIDATE_BOOLEAN);
+    $id = (int)($_POST['id'] ?? 0);
     
-    if (empty($id) || !is_numeric($id)) {
-        send_json_response(0, 1, 400, "Valid component ID required");
+    if ($id <= 0) {
+        send_json_response(0, 1, 400, "Valid component ID is required");
     }
     
     try {
-        // Check if table exists first
-        $tableCheck = $pdo->query("SHOW TABLES LIKE '$table'");
-        if ($tableCheck->rowCount() == 0) {
-            send_json_response(0, 1, 404, "Component table not found: $table");
-        }
-        
-        $stmt = $pdo->prepare("SELECT * FROM $table WHERE ID = :id");
-        $stmt->bindParam(':id', $id, PDO::PARAM_INT);
-        $stmt->execute();
-        
+        $stmt = $pdo->prepare("SELECT * FROM $table WHERE ID = ?");
+        $stmt->execute([$id]);
         $component = $stmt->fetch(PDO::FETCH_ASSOC);
         
         if (!$component) {
             send_json_response(0, 1, 404, "Component not found");
         }
         
-        // Ensure component has all required fields
-        if (!isset($component['UUID'])) $component['UUID'] = '';
-        if (!isset($component['Status'])) $component['Status'] = 1;
-        
-        // Enhance with JSON data
-        if (!empty($component['UUID'])) {
-            $jsonDetails = getComponentDetailsFromJSON($component['UUID'], $componentType);
-            if ($jsonDetails) {
-                $component['json_details'] = $jsonDetails;
-            }
-            
-            // Add compatibility information if requested and system is available
-            if ($includeCompatibility && function_exists('serverSystemInitialized') && serverSystemInitialized($pdo)) {
-                if (function_exists('getComponentCompatibilityInfo')) {
-                    $component['compatibility_info'] = getComponentCompatibilityInfo($pdo, $componentType, $component['UUID']);
-                }
-            }
-        }
-        
-        // Add status text
-        $component['StatusText'] = function_exists('getStatusText') ? getStatusText($component['Status']) : 'Unknown';
+        // Add additional information
+        $component['StatusText'] = getStatusText($component['Status']) ?? 'Unknown';
         
         // Get component history (if history table exists)
         try {
@@ -507,6 +119,17 @@ function handleGetComponent() {
             $component['server_usage'] = getComponentServerUsage($pdo, $componentType, $component['UUID']);
         }
         
+        // Parse JSON specifications if available
+        $jsonFields = ['Specifications', 'JsonData', 'TechnicalSpecs'];
+        foreach ($jsonFields as $field) {
+            if (isset($component[$field]) && !empty($component[$field])) {
+                $decoded = json_decode($component[$field], true);
+                if (json_last_error() === JSON_ERROR_NONE) {
+                    $component[$field . '_parsed'] = $decoded;
+                }
+            }
+        }
+        
         // Check system features availability
         $serverSystemAvailable = function_exists('serverSystemInitialized') && serverSystemInitialized($pdo);
         
@@ -515,7 +138,7 @@ function handleGetComponent() {
             'available_features' => [
                 'compatibility_checking' => $serverSystemAvailable,
                 'server_configurations' => $serverSystemAvailable,
-                'json_specifications' => !empty($jsonDetails)
+                'json_specifications' => !empty($component['Specifications'] ?? '')
             ]
         ]);
         
@@ -528,9 +151,138 @@ function handleGetComponent() {
     }
 }
 
-// Add component with enhanced validation
+/**
+ * List components with filtering and pagination
+ */
+function handleListComponents() {
+    global $pdo, $table, $componentType, $user;
+    
+    $limit = min((int)($_POST['limit'] ?? 50), 100); // Max 100 items
+    $offset = (int)($_POST['offset'] ?? 0);
+    $search = trim($_POST['search'] ?? '');
+    $status = $_POST['status'] ?? '';
+    $sortBy = $_POST['sort_by'] ?? 'ID';
+    $sortOrder = strtoupper($_POST['sort_order'] ?? 'DESC');
+    
+    // Validate sort order
+    if (!in_array($sortOrder, ['ASC', 'DESC'])) {
+        $sortOrder = 'DESC';
+    }
+    
+    // Validate sort field (prevent SQL injection)
+    $allowedSortFields = ['ID', 'SerialNumber', 'Status', 'CreatedAt', 'UpdatedAt', 'Location', 'RackPosition'];
+    if (!in_array($sortBy, $allowedSortFields)) {
+        $sortBy = 'ID';
+    }
+    
+    try {
+        $whereConditions = [];
+        $params = [];
+        
+        // Add search filter
+        if (!empty($search)) {
+            $searchFields = ['SerialNumber', 'Location', 'RackPosition', 'Notes'];
+            $searchConditions = [];
+            foreach ($searchFields as $field) {
+                $searchConditions[] = "$field LIKE ?";
+                $params[] = "%$search%";
+            }
+            $whereConditions[] = "(" . implode(" OR ", $searchConditions) . ")";
+        }
+        
+        // Add status filter
+        if ($status !== '') {
+            $whereConditions[] = "Status = ?";
+            $params[] = $status;
+        }
+        
+        $whereClause = empty($whereConditions) ? "" : "WHERE " . implode(" AND ", $whereConditions);
+        
+        // Get total count
+        $countStmt = $pdo->prepare("SELECT COUNT(*) as total FROM $table $whereClause");
+        $countStmt->execute($params);
+        $totalCount = $countStmt->fetch(PDO::FETCH_ASSOC)['total'];
+        
+        // Get components
+        $stmt = $pdo->prepare("
+            SELECT * FROM $table 
+            $whereClause 
+            ORDER BY $sortBy $sortOrder 
+            LIMIT ? OFFSET ?
+        ");
+        
+        $params[] = $limit;
+        $params[] = $offset;
+        $stmt->execute($params);
+        $components = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        
+        // Add status text to each component
+        foreach ($components as &$component) {
+            $component['StatusText'] = getStatusText($component['Status']);
+            
+            // Parse JSON specifications if available
+            if (isset($component['Specifications']) && !empty($component['Specifications'])) {
+                $decoded = json_decode($component['Specifications'], true);
+                if (json_last_error() === JSON_ERROR_NONE) {
+                    $component['Specifications_parsed'] = $decoded;
+                }
+            }
+        }
+        
+        // Get status counts
+        $statusStmt = $pdo->prepare("
+            SELECT 
+                Status,
+                COUNT(*) as count 
+            FROM $table 
+            GROUP BY Status
+        ");
+        $statusStmt->execute();
+        $statusCounts = [];
+        $totalComponents = 0;
+        while ($row = $statusStmt->fetch(PDO::FETCH_ASSOC)) {
+            $statusCounts[$row['Status']] = $row['count'];
+            $totalComponents += $row['count'];
+        }
+        
+        send_json_response(1, 1, 200, "Components retrieved successfully", [
+            'components' => $components,
+            'pagination' => [
+                'total' => $totalCount,
+                'limit' => $limit,
+                'offset' => $offset,
+                'has_more' => ($offset + $limit) < $totalCount
+            ],
+            'filters' => [
+                'search' => $search,
+                'status' => $status,
+                'sort_by' => $sortBy,
+                'sort_order' => $sortOrder
+            ],
+            'statistics' => [
+                'total_components' => $totalComponents,
+                'status_counts' => [
+                    'available' => $statusCounts['1'] ?? 0,
+                    'in_use' => $statusCounts['2'] ?? 0,
+                    'failed' => $statusCounts['0'] ?? 0
+                ]
+            ]
+        ]);
+        
+    } catch (PDOException $e) {
+        error_log("Database error in handleListComponents: " . $e->getMessage());
+        send_json_response(0, 1, 500, "Database error occurred");
+    } catch (Exception $e) {
+        error_log("General error in handleListComponents: " . $e->getMessage());
+        send_json_response(0, 1, 500, "An unexpected error occurred");
+    }
+}
+
+/**
+ * Add new component with enhanced validation
+ */
 function handleAddComponent() {
-    global $pdo, $table, $componentType;
+    global $pdo, $table, $componentType, $user;
     
     // Required fields
     $requiredFields = ['SerialNumber', 'Status'];
@@ -548,129 +300,109 @@ function handleAddComponent() {
     
     // Validate status
     if (!in_array($status, [0, 1, 2])) {
-        send_json_response(0, 1, 400, "Invalid status value");
+        send_json_response(0, 1, 400, "Invalid status. Must be 0 (Failed), 1 (Available), or 2 (In Use)");
     }
     
-    // Validate server UUID requirement for in-use status
-    if ($status === 2 && empty($serverUUID)) {
+    // If status is "In Use", ServerUUID should be provided
+    if ($status == 2 && empty($serverUUID)) {
         send_json_response(0, 1, 400, "ServerUUID is required when status is 'In Use'");
     }
     
-    // Validate UUID against JSON data if provided
-    if (!empty($uuid) && !validateComponentUUID($uuid, $componentType)) {
-        send_json_response(0, 1, 400, "Invalid UUID: Component not found in specification database");
-    }
-    
-    // Compatibility validation if requested and system is available
-    $compatibilityWarnings = [];
-    if ($validateCompatibility && !empty($serverUUID) && function_exists('serverSystemInitialized') && serverSystemInitialized($pdo)) {
-        $compatibilityWarnings = validateComponentInServerConfiguration($pdo, $componentType, $uuid, $serverUUID);
+    // Generate UUID if not provided
+    if (empty($uuid)) {
+        $uuid = generateUUID();
     }
     
     try {
-        // Check if table exists first
-        $tableCheck = $pdo->query("SHOW TABLES LIKE '$table'");
-        if ($tableCheck->rowCount() == 0) {
-            send_json_response(0, 1, 404, "Component table not found: $table");
-        }
-        
         // Check for duplicate serial number
-        $checkStmt = $pdo->prepare("SELECT ID FROM $table WHERE SerialNumber = :serial");
-        $checkStmt->bindParam(':serial', $serialNumber);
-        $checkStmt->execute();
-        
+        $checkStmt = $pdo->prepare("SELECT ID FROM $table WHERE SerialNumber = ?");
+        $checkStmt->execute([$serialNumber]);
         if ($checkStmt->fetch()) {
-            send_json_response(0, 1, 409, "Component with serial number $serialNumber already exists");
+            send_json_response(0, 1, 409, "Component with this serial number already exists");
         }
         
-        // Get current user info
-        $currentUser = function_exists('getCurrentUser') ? getCurrentUser() : null;
-        $username = $currentUser['username'] ?? 'system';
+        // Check for duplicate UUID
+        $checkStmt = $pdo->prepare("SELECT ID FROM $table WHERE UUID = ?");
+        $checkStmt->execute([$uuid]);
+        if ($checkStmt->fetch()) {
+            send_json_response(0, 1, 409, "Component with this UUID already exists");
+        }
         
-        // Prepare insert data with only essential fields first
-        $insertData = [
+        // Prepare fields for insertion
+        $fields = [
+            'UUID' => $uuid,
             'SerialNumber' => $serialNumber,
-            'Status' => $status
+            'Status' => $status,
+            'CreatedAt' => date('Y-m-d H:i:s'),
+            'UpdatedAt' => date('Y-m-d H:i:s'),
+            'CreatedBy' => $user['username'],
+            'UpdatedBy' => $user['username']
         ];
         
-        // Add optional fields only if they exist in the table
-        $columnCheck = $pdo->query("DESCRIBE $table");
-        $tableColumns = $columnCheck->fetchAll(PDO::FETCH_COLUMN);
-        
+        // Optional fields
         $optionalFields = [
-            'UUID', 'ServerUUID', 'Location', 'RackPosition', 
-            'PurchaseDate', 'InstallationDate', 'WarrantyEndDate', 'Flag', 'Notes',
-            'CreatedBy', 'UpdatedBy', 'CreatedAt', 'UpdatedAt'
+            'ServerUUID', 'Location', 'RackPosition', 'PurchaseDate', 
+            'InstallationDate', 'WarrantyEndDate', 'Flag', 'Notes', 'Specifications'
         ];
         
         foreach ($optionalFields as $field) {
-            if (in_array($field, $tableColumns)) {
-                if (in_array($field, ['CreatedBy', 'UpdatedBy'])) {
-                    $insertData[$field] = $username;
-                } elseif (in_array($field, ['CreatedAt', 'UpdatedAt'])) {
-                    $insertData[$field] = date('Y-m-d H:i:s');
-                } elseif (isset($_POST[$field]) && $_POST[$field] !== '') {
-                    $insertData[$field] = trim($_POST[$field]);
+            if (isset($_POST[$field]) && $_POST[$field] !== '') {
+                $fields[$field] = trim($_POST[$field]);
+            }
+        }
+        
+        // Validate JSON specifications if provided
+        if (isset($fields['Specifications']) && !empty($fields['Specifications'])) {
+            $decoded = json_decode($fields['Specifications'], true);
+            if (json_last_error() !== JSON_ERROR_NONE) {
+                send_json_response(0, 1, 400, "Invalid JSON in Specifications field: " . json_last_error_msg());
+            }
+            
+            // Validate specifications format if compatibility checking is enabled
+            if ($validateCompatibility && class_exists('ComponentCompatibility')) {
+                $compatibilityEngine = new ComponentCompatibility($pdo);
+                $specValidation = $compatibilityEngine->validateSpecifications($componentType, $decoded);
+                if (!$specValidation['valid']) {
+                    send_json_response(0, 1, 400, "Invalid specifications format", [
+                        'specification_errors' => $specValidation['errors']
+                    ]);
                 }
             }
         }
         
-        // Component-specific fields
-        if ($componentType === 'nic') {
-            $nicFields = ['MacAddress', 'IPAddress', 'NetworkName'];
-            foreach ($nicFields as $field) {
-                if (in_array($field, $tableColumns) && isset($_POST[$field]) && $_POST[$field] !== '') {
-                    $insertData[$field] = trim($_POST[$field]);
-                }
-            }
-        }
+        // Build INSERT query
+        $fieldNames = array_keys($fields);
+        $placeholders = array_fill(0, count($fields), '?');
+        $values = array_values($fields);
         
-        // Generate UUID if not provided and field exists
-        if (in_array('UUID', $tableColumns) && empty($insertData['UUID'])) {
-            $insertData['UUID'] = generateComponentUUID();
-        }
+        $query = "INSERT INTO $table (" . implode(', ', $fieldNames) . ") VALUES (" . implode(', ', $placeholders) . ")";
+        $stmt = $pdo->prepare($query);
+        $stmt->execute($values);
         
-        // Build insert query
-        $columns = array_keys($insertData);
-        $placeholders = array_map(function($col) { return ":$col"; }, $columns);
+        $insertId = $pdo->lastInsertId();
         
-        $insertQuery = "INSERT INTO $table (" . implode(', ', $columns) . ") VALUES (" . implode(', ', $placeholders) . ")";
+        // Log the addition
+        logComponentAction($pdo, $componentType, $insertId, 'create', 'Component created', $fields, $user['id']);
         
-        $stmt = $pdo->prepare($insertQuery);
+        // Get the inserted component
+        $getStmt = $pdo->prepare("SELECT * FROM $table WHERE ID = ?");
+        $getStmt->execute([$insertId]);
+        $newComponent = $getStmt->fetch(PDO::FETCH_ASSOC);
+        $newComponent['StatusText'] = getStatusText($newComponent['Status']);
         
-        foreach ($insertData as $key => $value) {
-            $stmt->bindValue(":$key", $value);
-        }
-        
-        $stmt->execute();
-        $newId = $pdo->lastInsertId();
-        
-        // Log the creation if logging function exists
-        if (function_exists('logActivity')) {
-            logActivity($pdo, $currentUser['id'] ?? 0, "Component created", $componentType, $newId, "Created new $componentType component", null, $insertData);
-        }
-        
-        $response = [
-            'id' => (int)$newId,
-            'uuid' => $insertData['UUID'] ?? '',
-            'component_type' => $componentType
-        ];
-        
-        if (!empty($compatibilityWarnings)) {
-            $response['compatibility_warnings'] = $compatibilityWarnings;
-        }
-        
-        send_json_response(1, 1, 201, "Component added successfully", $response);
+        send_json_response(1, 1, 201, "Component added successfully", [
+            'component' => $newComponent,
+            'component_id' => $insertId,
+            'uuid' => $uuid,
+            'serial_number' => $serialNumber
+        ]);
         
     } catch (PDOException $e) {
-        error_log("Database error in handleAddComponent: " . $e->getMessage());
-        error_log("Table: " . $table);
-        error_log("Insert data: " . json_encode($insertData ?? []));
-        
         if ($e->getCode() == 23000) { // Integrity constraint violation
-            send_json_response(0, 1, 409, "Component with this serial number already exists");
+            send_json_response(0, 1, 409, "Duplicate entry detected");
         } else {
-            send_json_response(0, 1, 500, "Database error: " . $e->getMessage());
+            error_log("Database error in handleAddComponent: " . $e->getMessage());
+            send_json_response(0, 1, 500, "Database error occurred");
         }
     } catch (Exception $e) {
         error_log("General error in handleAddComponent: " . $e->getMessage());
@@ -678,410 +410,253 @@ function handleAddComponent() {
     }
 }
 
-// Update component with enhanced validation
+/**
+ * Update existing component
+ */
 function handleUpdateComponent() {
-    global $pdo, $table, $componentType;
+    global $pdo, $table, $componentType, $user;
     
-    $id = $_POST['id'] ?? '';
-    $validateCompatibility = filter_var($_POST['validate_compatibility'] ?? false, FILTER_VALIDATE_BOOLEAN);
+    $id = (int)($_POST['id'] ?? 0);
     
-    if (empty($id) || !is_numeric($id)) {
-        send_json_response(0, 1, 400, "Valid component ID required");
+    if ($id <= 0) {
+        send_json_response(0, 1, 400, "Valid component ID is required");
     }
     
     try {
-        // Get current component data
-        $stmt = $pdo->prepare("SELECT * FROM $table WHERE ID = :id");
-        $stmt->bindParam(':id', $id, PDO::PARAM_INT);
-        $stmt->execute();
+        // Check if component exists
+        $checkStmt = $pdo->prepare("SELECT * FROM $table WHERE ID = ?");
+        $checkStmt->execute([$id]);
+        $existingComponent = $checkStmt->fetch(PDO::FETCH_ASSOC);
         
-        $currentComponent = $stmt->fetch();
-        
-        if (!$currentComponent) {
+        if (!$existingComponent) {
             send_json_response(0, 1, 404, "Component not found");
         }
         
-        // Prepare update data
-        $updateData = [];
-        $updatedFields = [];
-        
-        // Updatable fields (excluding SerialNumber and UUID which are immutable)
-        $allowedFields = [
-            'Status', 'ServerUUID', 'Location', 'RackPosition', 
-            'PurchaseDate', 'InstallationDate', 'WarrantyEndDate', 'Flag', 'Notes'
-        ];
-        
-        // Component-specific fields
-        if ($componentType === 'nic') {
-            $allowedFields = array_merge($allowedFields, ['MacAddress', 'IPAddress', 'NetworkName']);
-        }
-        
-        foreach ($allowedFields as $field) {
-            if (isset($_POST[$field])) {
-                $newValue = trim($_POST[$field]);
-                if ($newValue !== $currentComponent[$field]) {
-                    $updateData[$field] = $newValue;
-                    $updatedFields[] = $field;
+        // Check if component is in use and prevent certain updates
+        if ($existingComponent['Status'] == 2) {
+            $restrictedFields = ['UUID', 'SerialNumber'];
+            foreach ($restrictedFields as $field) {
+                if (isset($_POST[$field]) && $_POST[$field] !== $existingComponent[$field]) {
+                    send_json_response(0, 1, 400, "Cannot modify $field while component is in use");
                 }
             }
         }
         
-        // Special validation for status change
-        $compatibilityWarnings = [];
-        if (isset($updateData['Status'])) {
-            $newStatus = (int)$updateData['Status'];
-            if (!in_array($newStatus, [0, 1, 2])) {
-                send_json_response(0, 1, 400, "Invalid status value");
-            }
-            
-            // Validate server UUID requirement for in-use status
-            $serverUUID = $updateData['ServerUUID'] ?? $currentComponent['ServerUUID'];
-            if ($newStatus === 2 && empty($serverUUID)) {
-                send_json_response(0, 1, 400, "ServerUUID is required when status is 'In Use'");
-            }
-            
-            // Compatibility validation if moving to "In Use" status
-            if ($newStatus === 2 && $validateCompatibility && !empty($serverUUID) && function_exists('serverSystemInitialized') && serverSystemInitialized($pdo)) {
-                $compatibilityWarnings = validateComponentInServerConfiguration($pdo, $componentType, $currentComponent['UUID'], $serverUUID);
-            }
-        }
+        $updateFields = [];
+        $updateValues = [];
+        $changes = [];
         
-        if (empty($updateData)) {
-            send_json_response(1, 1, 200, "No changes detected", [
-                'updated_fields' => []
-            ]);
-        }
-        
-        // Add metadata
-        $currentUser = function_exists('getCurrentUser') ? getCurrentUser() : null;
-        $updateData['UpdatedBy'] = $currentUser['username'] ?? 'system';
-        $updateData['UpdatedAt'] = date('Y-m-d H:i:s');
-        
-        // Build update query
-        $setParts = array_map(function($field) { return "$field = :$field"; }, array_keys($updateData));
-        $updateQuery = "UPDATE $table SET " . implode(', ', $setParts) . " WHERE ID = :id";
-        
-        $stmt = $pdo->prepare($updateQuery);
-        $stmt->bindParam(':id', $id, PDO::PARAM_INT);
-        
-        foreach ($updateData as $key => $value) {
-            $stmt->bindValue(":$key", $value);
-        }
-        
-        $stmt->execute();
-        
-        // Log the update if logging function exists
-        if (function_exists('logActivity')) {
-            logActivity($pdo, $currentUser['id'] ?? 0, "Component updated", $componentType, $id, "Updated $componentType component", $currentComponent, $updateData);
-        }
-        
-        $response = [
-            'updated_fields' => $updatedFields
+        // Updatable fields
+        $allowedFields = [
+            'SerialNumber', 'Status', 'ServerUUID', 'Location', 'RackPosition',
+            'PurchaseDate', 'InstallationDate', 'WarrantyEndDate', 'Flag', 'Notes', 'Specifications'
         ];
         
-        if (!empty($compatibilityWarnings)) {
-            $response['compatibility_warnings'] = $compatibilityWarnings;
+        foreach ($allowedFields as $field) {
+            if (isset($_POST[$field])) {
+                $newValue = trim($_POST[$field]);
+                $oldValue = $existingComponent[$field] ?? '';
+                
+                if ($newValue !== $oldValue) {
+                    $updateFields[] = "$field = ?";
+                    $updateValues[] = $newValue;
+                    $changes[$field] = [
+                        'old' => $oldValue,
+                        'new' => $newValue
+                    ];
+                }
+            }
         }
         
-        send_json_response(1, 1, 200, "Component updated successfully", $response);
+        if (empty($updateFields)) {
+            send_json_response(0, 1, 400, "No changes detected");
+        }
+        
+        // Validate status change if status is being updated
+        if (isset($changes['Status'])) {
+            $oldStatus = (int)$changes['Status']['old'];
+            $newStatus = (int)$changes['Status']['new'];
+            
+            $validTransitions = [
+                0 => [1], // Failed -> Available (after repair)
+                1 => [0, 2], // Available -> Failed or In Use
+                2 => [0, 1] // In Use -> Failed or Available
+            ];
+            
+            if (!isset($validTransitions[$oldStatus]) || !in_array($newStatus, $validTransitions[$oldStatus])) {
+                send_json_response(0, 1, 400, "Invalid status transition from " . getStatusText($oldStatus) . " to " . getStatusText($newStatus));
+            }
+            
+            // If changing to "In Use", ServerUUID should be provided
+            if ($newStatus == 2 && empty($_POST['ServerUUID'])) {
+                send_json_response(0, 1, 400, "ServerUUID is required when setting status to 'In Use'");
+            }
+            
+            // If changing from "In Use", clear ServerUUID if not provided
+            if ($oldStatus == 2 && $newStatus != 2 && !isset($_POST['ServerUUID'])) {
+                $updateFields[] = "ServerUUID = ?";
+                $updateValues[] = '';
+                $changes['ServerUUID'] = [
+                    'old' => $existingComponent['ServerUUID'] ?? '',
+                    'new' => ''
+                ];
+            }
+        }
+        
+        // Validate JSON specifications if provided
+        if (isset($changes['Specifications'])) {
+            $decoded = json_decode($changes['Specifications']['new'], true);
+            if (json_last_error() !== JSON_ERROR_NONE) {
+                send_json_response(0, 1, 400, "Invalid JSON in Specifications field: " . json_last_error_msg());
+            }
+        }
+        
+        // Add update timestamp and user
+        $updateFields[] = "UpdatedAt = ?";
+        $updateFields[] = "UpdatedBy = ?";
+        $updateValues[] = date('Y-m-d H:i:s');
+        $updateValues[] = $user['username'];
+        $updateValues[] = $id;
+        
+        // Perform update
+        $query = "UPDATE $table SET " . implode(', ', $updateFields) . " WHERE ID = ?";
+        $stmt = $pdo->prepare($query);
+        $stmt->execute($updateValues);
+        
+        // Log the update
+        logComponentAction($pdo, $componentType, $id, 'update', 'Component updated', $changes, $user['id']);
+        
+        // Get updated component
+        $getStmt = $pdo->prepare("SELECT * FROM $table WHERE ID = ?");
+        $getStmt->execute([$id]);
+        $updatedComponent = $getStmt->fetch(PDO::FETCH_ASSOC);
+        $updatedComponent['StatusText'] = getStatusText($updatedComponent['Status']);
+        
+        send_json_response(1, 1, 200, "Component updated successfully", [
+            'component' => $updatedComponent,
+            'changes' => $changes,
+            'fields_updated' => count($changes)
+        ]);
         
     } catch (PDOException $e) {
         error_log("Database error in handleUpdateComponent: " . $e->getMessage());
         send_json_response(0, 1, 500, "Database error occurred");
+    } catch (Exception $e) {
+        error_log("General error in handleUpdateComponent: " . $e->getMessage());
+        send_json_response(0, 1, 500, "An unexpected error occurred");
     }
 }
 
-// Delete component with dependency checking
+/**
+ * Delete component (soft delete by setting status to failed)
+ */
 function handleDeleteComponent() {
-    global $pdo, $table, $componentType;
+    global $pdo, $table, $componentType, $user;
     
-    $id = $_POST['id'] ?? '';
-    $force = filter_var($_POST['force'] ?? false, FILTER_VALIDATE_BOOLEAN);
+    $id = (int)($_POST['id'] ?? 0);
+    $hardDelete = filter_var($_POST['hard_delete'] ?? false, FILTER_VALIDATE_BOOLEAN);
     
-    if (empty($id) || !is_numeric($id)) {
-        send_json_response(0, 1, 400, "Valid component ID required");
+    if ($id <= 0) {
+        send_json_response(0, 1, 400, "Valid component ID is required");
     }
     
     try {
-        // Get component data before deletion
-        $stmt = $pdo->prepare("SELECT * FROM $table WHERE ID = :id");
-        $stmt->bindParam(':id', $id, PDO::PARAM_INT);
-        $stmt->execute();
-        
-        $component = $stmt->fetch();
+        // Check if component exists
+        $checkStmt = $pdo->prepare("SELECT * FROM $table WHERE ID = ?");
+        $checkStmt->execute([$id]);
+        $component = $checkStmt->fetch(PDO::FETCH_ASSOC);
         
         if (!$component) {
             send_json_response(0, 1, 404, "Component not found");
         }
         
         // Check if component is in use
-        if ($component['Status'] == 2 && !$force) {
-            send_json_response(0, 1, 403, "Cannot delete component that is currently in use. Use force=true to override.");
+        if ($component['Status'] == 2 && !$hardDelete) {
+            send_json_response(0, 1, 400, "Cannot delete component that is currently in use", [
+                'component_status' => 'In Use',
+                'server_uuid' => $component['ServerUUID'] ?? null,
+                'can_force_delete' => hasPermission($pdo, "$componentType.force_delete", $user['id'])
+            ]);
         }
         
-        // Check for server configuration dependencies if system is available
-        $dependencies = [];
-        if (function_exists('serverSystemInitialized') && serverSystemInitialized($pdo) && !empty($component['UUID'])) {
-            $dependencies = getComponentDependencies($pdo, $componentType, $component['UUID']);
-            
-            if (!empty($dependencies) && !$force) {
-                send_json_response(0, 1, 409, "Component is used in server configurations", [
-                    'dependencies' => $dependencies,
-                    'message' => 'Use force=true to delete anyway (this will remove component from configurations)'
-                ]);
+        // Check for server configurations using this component
+        $usageInfo = getComponentServerUsage($pdo, $componentType, $component['UUID']);
+        if (!empty($usageInfo['configurations']) && !$hardDelete) {
+            send_json_response(0, 1, 400, "Component is used in server configurations", [
+                'server_configurations' => $usageInfo['configurations'],
+                'usage_count' => count($usageInfo['configurations']),
+                'can_force_delete' => hasPermission($pdo, "$componentType.force_delete", $user['id'])
+            ]);
+        }
+        
+        if ($hardDelete) {
+            // Hard delete requires special permission
+            if (!hasPermission($pdo, "$componentType.force_delete", $user['id'])) {
+                send_json_response(0, 1, 403, "Insufficient permissions for hard delete");
             }
+            
+            // Remove from server configurations first
+            if (function_exists('removeComponentFromAllConfigurations')) {
+                removeComponentFromAllConfigurations($pdo, $componentType, $component['UUID']);
+            }
+            
+            // Delete component record
+            $stmt = $pdo->prepare("DELETE FROM $table WHERE ID = ?");
+            $stmt->execute([$id]);
+            
+            $message = "Component permanently deleted";
+            $logAction = 'hard_delete';
+        } else {
+            // Soft delete - mark as failed/decommissioned
+            $stmt = $pdo->prepare("UPDATE $table SET Status = 0, ServerUUID = '', UpdatedAt = ?, UpdatedBy = ? WHERE ID = ?");
+            $stmt->execute([date('Y-m-d H:i:s'), $user['username'], $id]);
+            
+            $message = "Component marked as failed/decommissioned";
+            $logAction = 'soft_delete';
         }
         
-        $pdo->beginTransaction();
+        // Log the deletion
+        logComponentAction($pdo, $componentType, $id, $logAction, $message, [
+            'component_data' => $component,
+            'hard_delete' => $hardDelete
+        ], $user['id']);
         
-        // Remove from server configurations if forcing deletion
-        if ($force && !empty($dependencies)) {
-            removeComponentFromConfigurations($pdo, $componentType, $component['UUID']);
-        }
-        
-        // Delete the component
-        $deleteStmt = $pdo->prepare("DELETE FROM $table WHERE ID = :id");
-        $deleteStmt->bindParam(':id', $id, PDO::PARAM_INT);
-        $deleteStmt->execute();
-        
-        $pdo->commit();
-        
-        // Log the deletion if logging function exists
-        if (function_exists('logActivity')) {
-            $currentUser = function_exists('getCurrentUser') ? getCurrentUser() : null;
-            logActivity($pdo, $currentUser['id'] ?? 0, "Component deleted", $componentType, $id, "Deleted $componentType component" . ($force ? " (forced)" : ""), $component, null);
-        }
-        
-        $response = ['deleted_id' => (int)$id];
-        if ($force && !empty($dependencies)) {
-            $response['removed_from_configurations'] = count($dependencies);
-        }
-        
-        send_json_response(1, 1, 200, "Component deleted successfully", $response);
+        send_json_response(1, 1, 200, $message, [
+            'component_id' => $id,
+            'serial_number' => $component['SerialNumber'],
+            'uuid' => $component['UUID'],
+            'deletion_type' => $hardDelete ? 'permanent' : 'soft',
+            'timestamp' => date('Y-m-d H:i:s')
+        ]);
         
     } catch (PDOException $e) {
-        $pdo->rollBack();
         error_log("Database error in handleDeleteComponent: " . $e->getMessage());
         send_json_response(0, 1, 500, "Database error occurred");
-    }
-}
-
-// Enhanced bulk update components
-function handleBulkUpdateComponents() {
-    global $pdo, $table, $componentType;
-    
-    $ids = $_POST['ids'] ?? [];
-    
-    if (empty($ids) || !is_array($ids)) {
-        send_json_response(0, 1, 400, "Component IDs array required");
-    }
-    
-    // Limit bulk operations
-    if (count($ids) > 100) {
-        send_json_response(0, 1, 400, "Maximum 100 components can be updated at once");
-    }
-    
-    try {
-        $pdo->beginTransaction();
-        
-        $updated = 0;
-        $failed = 0;
-        $warnings = [];
-        
-        foreach ($ids as $id) {
-            if (!is_numeric($id)) {
-                $failed++;
-                continue;
-            }
-            
-            // Prepare update data for this component
-            $updateData = [];
-            
-            $allowedFields = [
-                'Status', 'Location', 'RackPosition', 'Flag'
-            ];
-            
-            foreach ($allowedFields as $field) {
-                if (isset($_POST[$field]) && $_POST[$field] !== '') {
-                    $updateData[$field] = trim($_POST[$field]);
-                }
-            }
-            
-            if (empty($updateData)) {
-                continue;
-            }
-            
-            $currentUser = function_exists('getCurrentUser') ? getCurrentUser() : null;
-            $updateData['UpdatedBy'] = $currentUser['username'] ?? 'system';
-            $updateData['UpdatedAt'] = date('Y-m-d H:i:s');
-            
-            $setParts = array_map(function($field) { return "$field = :$field"; }, array_keys($updateData));
-            $updateQuery = "UPDATE $table SET " . implode(', ', $setParts) . " WHERE ID = :id";
-            
-            $stmt = $pdo->prepare($updateQuery);
-            $stmt->bindParam(':id', $id, PDO::PARAM_INT);
-            
-            foreach ($updateData as $key => $value) {
-                $stmt->bindValue(":$key", $value);
-            }
-            
-            if ($stmt->execute()) {
-                $updated++;
-            } else {
-                $failed++;
-            }
-        }
-        
-        $pdo->commit();
-        
-        send_json_response(1, 1, 200, "$updated components updated successfully", [
-            'updated' => $updated,
-            'failed' => $failed,
-            'warnings' => $warnings
-        ]);
-        
-    } catch (PDOException $e) {
-        $pdo->rollBack();
-        error_log("Database error in handleBulkUpdateComponents: " . $e->getMessage());
-        send_json_response(0, 1, 500, "Database error occurred");
-    }
-}
-
-// Get compatible components for a specific component
-function handleGetCompatibleComponents() {
-    global $pdo, $componentType;
-    
-    if (!function_exists('serverSystemInitialized') || !serverSystemInitialized($pdo)) {
-        send_json_response(0, 1, 503, "Compatibility system not available");
-    }
-    
-    $componentUuid = $_GET['component_uuid'] ?? $_POST['component_uuid'] ?? '';
-    $targetType = $_GET['target_type'] ?? $_POST['target_type'] ?? '';
-    $availableOnly = filter_var($_GET['available_only'] ?? $_POST['available_only'] ?? true, FILTER_VALIDATE_BOOLEAN);
-    $limit = (int)($_GET['limit'] ?? $_POST['limit'] ?? 50);
-    
-    if (empty($componentUuid)) {
-        send_json_response(0, 1, 400, "Component UUID is required");
-    }
-    
-    try {
-        require_once(__DIR__ . '/../../includes/models/CompatibilityEngine.php');
-        $compatibilityEngine = new CompatibilityEngine($pdo);
-        
-        $baseComponent = ['type' => $componentType, 'uuid' => $componentUuid];
-        
-        if ($targetType) {
-            // Get compatible components for specific target type
-            $compatibleComponents = $compatibilityEngine->getCompatibleComponents($baseComponent, $targetType, $availableOnly);
-            
-            if ($limit > 0) {
-                $compatibleComponents = array_slice($compatibleComponents, 0, $limit);
-            }
-            
-            send_json_response(1, 1, 200, "Compatible components retrieved", [
-                'base_component' => $baseComponent,
-                'target_type' => $targetType,
-                'compatible_components' => $compatibleComponents,
-                'total_count' => count($compatibleComponents),
-                'filters' => [
-                    'available_only' => $availableOnly,
-                    'limit' => $limit
-                ]
-            ]);
-        } else {
-            // Get compatible components for all types
-            $allCompatible = [];
-            $componentTypes = ['cpu', 'motherboard', 'ram', 'storage', 'nic', 'caddy'];
-            
-            foreach ($componentTypes as $type) {
-                if ($type !== $componentType) {
-                    $typeComponents = $compatibilityEngine->getCompatibleComponents($baseComponent, $type, $availableOnly);
-                    if ($limit > 0) {
-                        $typeComponents = array_slice($typeComponents, 0, $limit);
-                    }
-                    $allCompatible[$type] = $typeComponents;
-                }
-            }
-            
-            send_json_response(1, 1, 200, "All compatible components retrieved", [
-                'base_component' => $baseComponent,
-                'compatible_components' => $allCompatible,
-                'summary' => array_map(function($components) {
-                    return ['count' => count($components)];
-                }, $allCompatible)
-            ]);
-        }
-        
     } catch (Exception $e) {
-        error_log("Error getting compatible components: " . $e->getMessage());
-        send_json_response(0, 1, 500, "Error retrieving compatible components");
+        error_log("General error in handleDeleteComponent: " . $e->getMessage());
+        send_json_response(0, 1, 500, "An unexpected error occurred");
     }
 }
 
-// Check compatibility between this component and another
-function handleCheckCompatibility() {
-    global $pdo, $componentType;
+// Helper Functions
+
+/**
+ * Get status text from status code
+ */
+function getStatusText($statusCode) {
+    $statusMap = [
+        0 => 'Failed/Defective',
+        1 => 'Available',
+        2 => 'In Use'
+    ];
     
-    if (!function_exists('serverSystemInitialized') || !serverSystemInitialized($pdo)) {
-        send_json_response(0, 1, 503, "Compatibility system not available");
-    }
-    
-    $component1Uuid = $_POST['component1_uuid'] ?? '';
-    $component2Type = $_POST['component2_type'] ?? '';
-    $component2Uuid = $_POST['component2_uuid'] ?? '';
-    
-    if (empty($component1Uuid) || empty($component2Type) || empty($component2Uuid)) {
-        send_json_response(0, 1, 400, "All component parameters are required");
-    }
-    
-    try {
-        require_once(__DIR__ . '/../../includes/models/CompatibilityEngine.php');
-        $compatibilityEngine = new CompatibilityEngine($pdo);
-        
-        $component1 = ['type' => $componentType, 'uuid' => $component1Uuid];
-        $component2 = ['type' => $component2Type, 'uuid' => $component2Uuid];
-        
-        $result = $compatibilityEngine->checkCompatibility($component1, $component2);
-        
-        send_json_response(1, 1, 200, "Compatibility check completed", [
-            'component_1' => $component1,
-            'component_2' => $component2,
-            'compatibility_result' => $result,
-            'summary' => [
-                'compatible' => $result['compatible'],
-                'score' => $result['compatibility_score'],
-                'issues_count' => count($result['failures']),
-                'warnings_count' => count($result['warnings'])
-            ]
-        ]);
-        
-    } catch (Exception $e) {
-        error_log("Error checking compatibility: " . $e->getMessage());
-        send_json_response(0, 1, 500, "Error checking compatibility");
-    }
+    return $statusMap[$statusCode] ?? 'Unknown';
 }
 
-// Get JSON data for component type
-function handleGetJSONData() {
-    global $componentType;
-    
-    $jsonData = loadComponentJSONData($componentType);
-    
-    send_json_response(1, 1, 200, "JSON data retrieved successfully", [
-        'component_type' => $componentType,
-        'data' => $jsonData,
-        'available_levels' => array_keys($jsonData)
-    ]);
-}
-
-// Helper functions - Note: These functions are defined in BaseFunctions.php or api.php
-// getStatusText() - defined in BaseFunctions.php
-// checkUserPermission() - defined in api.php
-// getCurrentUser() - defined in api.php
-// getComponentCompatibilityInfo() - defined in BaseFunctions.php
-
-// Generate UUID function (local to this file)
-function generateComponentUUID() {
+/**
+ * Generate UUID v4
+ */
+function generateUUID() {
     return sprintf('%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
         mt_rand(0, 0xffff), mt_rand(0, 0xffff),
         mt_rand(0, 0xffff),
@@ -1091,205 +666,664 @@ function generateComponentUUID() {
     );
 }
 
+/**
+ * Log component actions
+ */
+function logComponentAction($pdo, $componentType, $componentId, $action, $description, $details = [], $userId = null) {
+    try {
+        $stmt = $pdo->prepare("
+            INSERT INTO component_action_log 
+            (component_type, component_id, action, description, action_details, user_id, created_at) 
+            VALUES (?, ?, ?, ?, ?, ?, NOW())
+        ");
+        $stmt->execute([
+            $componentType,
+            $componentId,
+            $action,
+            $description,
+            json_encode($details),
+            $userId
+        ]);
+    } catch (Exception $e) {
+        error_log("Failed to log component action: " . $e->getMessage());
+        // Don't fail the main operation if logging fails
+    }
+}
+
+/**
+ * Get component server usage information
+ */
 function getComponentServerUsage($pdo, $componentType, $componentUuid) {
     try {
-        // Check if component is used in any server configurations
-        $usageQueries = [
-            'cpu' => "SELECT config_uuid, config_name FROM server_configurations WHERE cpu_uuid = ?",
-            'motherboard' => "SELECT config_uuid, config_name FROM server_configurations WHERE motherboard_uuid = ?",
-            'ram' => "SELECT config_uuid, config_name FROM server_configurations WHERE JSON_SEARCH(ram_configuration, 'one', ?) IS NOT NULL",
-            'storage' => "SELECT config_uuid, config_name FROM server_configurations WHERE JSON_SEARCH(storage_configuration, 'one', ?) IS NOT NULL",
-            'nic' => "SELECT config_uuid, config_name FROM server_configurations WHERE JSON_SEARCH(nic_configuration, 'one', ?) IS NOT NULL",
-            'caddy' => "SELECT config_uuid, config_name FROM server_configurations WHERE JSON_SEARCH(caddy_configuration, 'one', ?) IS NOT NULL"
-        ];
-        
-        if (isset($usageQueries[$componentType])) {
-            $stmt = $pdo->prepare($usageQueries[$componentType]);
-            $stmt->execute([$componentUuid]);
-            return $stmt->fetchAll(PDO::FETCH_ASSOC);
+        if (!function_exists('serverSystemInitialized') || !serverSystemInitialized($pdo)) {
+            return ['configurations' => [], 'usage_count' => 0];
         }
         
-        return [];
+        $stmt = $pdo->prepare("
+            SELECT sc.config_uuid, sc.server_name, sc.configuration_status, scc.added_at, scc.quantity
+            FROM server_configuration_components scc
+            JOIN server_configurations sc ON scc.config_uuid = sc.config_uuid
+            WHERE scc.component_type = ? AND scc.component_uuid = ?
+            ORDER BY scc.added_at DESC
+        ");
+        $stmt->execute([$componentType, $componentUuid]);
+        $configurations = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        
+        return [
+            'configurations' => $configurations,
+            'usage_count' => count($configurations)
+        ];
+        
     } catch (Exception $e) {
         error_log("Error getting component server usage: " . $e->getMessage());
-        return [];
+        return ['configurations' => [], 'usage_count' => 0];
     }
 }
 
-function validateComponentInServerConfiguration($pdo, $componentType, $componentUuid, $serverUuid) {
+/**
+ * Remove component from all server configurations
+ */
+function removeComponentFromAllConfigurations($pdo, $componentType, $componentUuid) {
     try {
-        // Load the server configuration
-        $stmt = $pdo->prepare("SELECT * FROM server_configurations WHERE config_uuid = ?");
-        $stmt->execute([$serverUuid]);
-        $config = $stmt->fetch(PDO::FETCH_ASSOC);
+        $stmt = $pdo->prepare("
+            DELETE FROM server_configuration_components 
+            WHERE component_type = ? AND component_uuid = ?
+        ");
+        $stmt->execute([$componentType, $componentUuid]);
         
-        if (!$config) {
-            return ['Server configuration not found'];
-        }
+        return $stmt->rowCount();
         
-        // Check compatibility with other components in the configuration
-        require_once(__DIR__ . '/../../includes/models/CompatibilityEngine.php');
-        $compatibilityEngine = new CompatibilityEngine($pdo);
-        
-        $newComponent = ['type' => $componentType, 'uuid' => $componentUuid];
-        $warnings = [];
-        
-        // Check against CPU
-        if ($config['cpu_uuid'] && $componentType !== 'cpu') {
-            $cpuComponent = ['type' => 'cpu', 'uuid' => $config['cpu_uuid']];
-            $result = $compatibilityEngine->checkCompatibility($newComponent, $cpuComponent);
-            if (!$result['compatible']) {
-                $warnings[] = "Incompatible with CPU: " . implode(', ', $result['failures']);
-            }
-        }
-        
-        // Check against Motherboard
-        if ($config['motherboard_uuid'] && $componentType !== 'motherboard') {
-            $mbComponent = ['type' => 'motherboard', 'uuid' => $config['motherboard_uuid']];
-            $result = $compatibilityEngine->checkCompatibility($newComponent, $mbComponent);
-            if (!$result['compatible']) {
-                $warnings[] = "Incompatible with Motherboard: " . implode(', ', $result['failures']);
-            }
-        }
-        
-        return $warnings;
-    } catch (Exception $e) {
-        error_log("Error validating component in server configuration: " . $e->getMessage());
-        return ['Compatibility validation failed'];
-    }
-}
-
-function getComponentDependencies($pdo, $componentType, $componentUuid) {
-    try {
-        $dependencies = [];
-        
-        // Check server configurations
-        $usageQueries = [
-            'cpu' => "SELECT id, config_uuid, config_name FROM server_configurations WHERE cpu_uuid = ?",
-            'motherboard' => "SELECT id, config_uuid, config_name FROM server_configurations WHERE motherboard_uuid = ?",
-            'ram' => "SELECT id, config_uuid, config_name FROM server_configurations WHERE JSON_SEARCH(ram_configuration, 'one', ?) IS NOT NULL",
-            'storage' => "SELECT id, config_uuid, config_name FROM server_configurations WHERE JSON_SEARCH(storage_configuration, 'one', ?) IS NOT NULL",
-            'nic' => "SELECT id, config_uuid, config_name FROM server_configurations WHERE JSON_SEARCH(nic_configuration, 'one', ?) IS NOT NULL",
-            'caddy' => "SELECT id, config_uuid, config_name FROM server_configurations WHERE JSON_SEARCH(caddy_configuration, 'one', ?) IS NOT NULL"
-        ];
-        
-        if (isset($usageQueries[$componentType])) {
-            $stmt = $pdo->prepare($usageQueries[$componentType]);
-            $stmt->execute([$componentUuid]);
-            $configs = $stmt->fetchAll(PDO::FETCH_ASSOC);
-            
-            foreach ($configs as $config) {
-                $dependencies[] = [
-                    'type' => 'server_configuration',
-                    'id' => $config['id'],
-                    'uuid' => $config['config_uuid'],
-                    'name' => $config['config_name']
-                ];
-            }
-        }
-        
-        return $dependencies;
-    } catch (Exception $e) {
-        error_log("Error getting component dependencies: " . $e->getMessage());
-        return [];
-    }
-}
-
-function removeComponentFromConfigurations($pdo, $componentType, $componentUuid) {
-    try {
-        // Remove component from server configurations
-        switch ($componentType) {
-            case 'cpu':
-                $stmt = $pdo->prepare("UPDATE server_configurations SET cpu_uuid = NULL, cpu_id = NULL WHERE cpu_uuid = ?");
-                $stmt->execute([$componentUuid]);
-                break;
-                
-            case 'motherboard':
-                $stmt = $pdo->prepare("UPDATE server_configurations SET motherboard_uuid = NULL, motherboard_id = NULL WHERE motherboard_uuid = ?");
-                $stmt->execute([$componentUuid]);
-                break;
-                
-            case 'ram':
-                // Remove from JSON arrays
-                $stmt = $pdo->prepare("
-                    UPDATE server_configurations 
-                    SET ram_configuration = JSON_REMOVE(
-                        ram_configuration, 
-                        JSON_UNQUOTE(JSON_SEARCH(ram_configuration, 'one', ?))
-                    ) 
-                    WHERE JSON_SEARCH(ram_configuration, 'one', ?) IS NOT NULL
-                ");
-                $stmt->execute([$componentUuid, $componentUuid]);
-                break;
-                
-            case 'storage':
-                $stmt = $pdo->prepare("
-                    UPDATE server_configurations 
-                    SET storage_configuration = JSON_REMOVE(
-                        storage_configuration, 
-                        JSON_UNQUOTE(JSON_SEARCH(storage_configuration, 'one', ?))
-                    ) 
-                    WHERE JSON_SEARCH(storage_configuration, 'one', ?) IS NOT NULL
-                ");
-                $stmt->execute([$componentUuid, $componentUuid]);
-                break;
-                
-            case 'nic':
-                $stmt = $pdo->prepare("
-                    UPDATE server_configurations 
-                    SET nic_configuration = JSON_REMOVE(
-                        nic_configuration, 
-                        JSON_UNQUOTE(JSON_SEARCH(nic_configuration, 'one', ?))
-                    ) 
-                    WHERE JSON_SEARCH(nic_configuration, 'one', ?) IS NOT NULL
-                ");
-                $stmt->execute([$componentUuid, $componentUuid]);
-                break;
-                
-            case 'caddy':
-                $stmt = $pdo->prepare("
-                    UPDATE server_configurations 
-                    SET caddy_configuration = JSON_REMOVE(
-                        caddy_configuration, 
-                        JSON_UNQUOTE(JSON_SEARCH(caddy_configuration, 'one', ?))
-                    ) 
-                    WHERE JSON_SEARCH(caddy_configuration, 'one', ?) IS NOT NULL
-                ");
-                $stmt->execute([$componentUuid, $componentUuid]);
-                break;
-        }
-        
-        return true;
     } catch (Exception $e) {
         error_log("Error removing component from configurations: " . $e->getMessage());
+        return 0;
+    }
+}
+
+/**
+ * Check if server system is initialized
+ */
+function serverSystemInitialized($pdo) {
+    try {
+        $stmt = $pdo->prepare("SHOW TABLES LIKE 'server_configurations'");
+        $stmt->execute();
+        return $stmt->rowCount() > 0;
+    } catch (Exception $e) {
         return false;
     }
 }
 
-function logComponentAction($componentId, $action, $newData, $oldData, $username) {
-    global $pdo, $table;
+/**
+ * Enhanced component availability checking with detailed status information
+ */
+function checkComponentAvailabilityDetailed($pdo, $componentType, $componentUuid) {
+    $tableMap = [
+        'cpu' => 'cpuinventory',
+        'ram' => 'raminventory',
+        'storage' => 'storageinventory',
+        'motherboard' => 'motherboardinventory',
+        'nic' => 'nicinventory',
+        'caddy' => 'caddyinventory'
+    ];
+    
+    if (!isset($tableMap[$componentType])) {
+        return [
+            'available' => false,
+            'status' => -1,
+            'message' => 'Invalid component type',
+            'can_override' => false,
+            'component_exists' => false
+        ];
+    }
     
     try {
-        $auditTable = $table . '_audit';
-        $logData = [
-            'component_id' => $componentId,
-            'action' => $action,
-            'old_data' => json_encode($oldData),
-            'new_data' => json_encode($newData),
-            'user' => $username,
-            'timestamp' => date('Y-m-d H:i:s')
-        ];
+        $table = $tableMap[$componentType];
+        $stmt = $pdo->prepare("SELECT * FROM $table WHERE UUID = ?");
+        $stmt->execute([$componentUuid]);
+        $component = $stmt->fetch(PDO::FETCH_ASSOC);
         
-        $stmt = $pdo->prepare("INSERT INTO $auditTable (component_id, action, old_data, new_data, user, timestamp) VALUES (:component_id, :action, :old_data, :new_data, :user, :timestamp)");
-        
-        foreach ($logData as $key => $value) {
-            $stmt->bindValue(":$key", $value);
+        if (!$component) {
+            return [
+                'available' => false,
+                'status' => -1,
+                'message' => 'Component not found',
+                'can_override' => false,
+                'component_exists' => false
+            ];
         }
         
-        $stmt->execute();
-    } catch (PDOException $e) {
-        // Audit table might not exist, that's okay
-        error_log("Audit logging failed: " . $e->getMessage());
+        $status = (int)$component['Status'];
+        $result = [
+            'component_exists' => true,
+            'component_details' => $component,
+            'status' => $status,
+            'available' => false,
+            'can_override' => false,
+            'message' => ''
+        ];
+        
+        switch ($status) {
+            case 0:
+                $result['message'] = 'Component is marked as Failed/Defective and cannot be used';
+                $result['can_override'] = false;
+                break;
+            case 1:
+                $result['available'] = true;
+                $result['message'] = 'Component is Available for use';
+                $result['can_override'] = false; // No need to override
+                break;
+            case 2:
+                $result['message'] = 'Component is currently In Use in another configuration';
+                $result['can_override'] = true; // Allow override for development/testing
+                break;
+            default:
+                $result['message'] = "Component has unknown status: $status";
+                $result['can_override'] = false;
+        }
+        
+        return $result;
+        
+    } catch (Exception $e) {
+        error_log("Error checking component availability: " . $e->getMessage());
+        return [
+            'available' => false,
+            'status' => -1,
+            'message' => 'Database error occurred while checking component availability',
+            'can_override' => false,
+            'component_exists' => false,
+            'error' => $e->getMessage()
+        ];
     }
 }
+
+/**
+ * Get alternative components when the requested one is not available
+ */
+function getAlternativeComponents($pdo, $componentType, $excludeUuid = null, $limit = 5) {
+    $tableMap = [
+        'cpu' => 'cpuinventory',
+        'ram' => 'raminventory',
+        'storage' => 'storageinventory',
+        'motherboard' => 'motherboardinventory',
+        'nic' => 'nicinventory',
+        'caddy' => 'caddyinventory'
+    ];
+    
+    if (!isset($tableMap[$componentType])) {
+        return [];
+    }
+    
+    try {
+        $table = $tableMap[$componentType];
+        $whereClause = "WHERE Status = 1"; // Only available components
+        $params = [];
+        
+        if ($excludeUuid) {
+            $whereClause .= " AND UUID != ?";
+            $params[] = $excludeUuid;
+        }
+        
+        $params[] = $limit;
+        
+        $stmt = $pdo->prepare("
+            SELECT UUID, SerialNumber, Status, Notes 
+            FROM $table 
+            $whereClause 
+            ORDER BY SerialNumber 
+            LIMIT ?
+        ");
+        $stmt->execute($params);
+        
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+        
+    } catch (Exception $e) {
+        error_log("Error getting alternative components: " . $e->getMessage());
+        return [];
+    }
+}
+
+/**
+ * Enhanced component status update with validation
+ */
+function updateComponentStatusWithValidation($pdo, $componentType, $componentUuid, $newStatus, $reason = '', $userId = null) {
+    $tableMap = [
+        'cpu' => 'cpuinventory',
+        'ram' => 'raminventory',
+        'storage' => 'storageinventory',
+        'motherboard' => 'motherboardinventory',
+        'nic' => 'nicinventory',
+        'caddy' => 'caddyinventory'
+    ];
+    
+    if (!isset($tableMap[$componentType])) {
+        return [
+            'success' => false,
+            'message' => 'Invalid component type'
+        ];
+    }
+    
+    try {
+        $table = $tableMap[$componentType];
+        
+        // Get current component details
+        $stmt = $pdo->prepare("SELECT * FROM $table WHERE UUID = ?");
+        $stmt->execute([$componentUuid]);
+        $component = $stmt->fetch(PDO::FETCH_ASSOC);
+        
+        if (!$component) {
+            return [
+                'success' => false,
+                'message' => 'Component not found'
+            ];
+        }
+        
+        $oldStatus = $component['Status'];
+        
+        // Validate status transition
+        $validTransitions = [
+            0 => [1], // Failed -> Available (after repair)
+            1 => [0, 2], // Available -> Failed or In Use
+            2 => [0, 1] // In Use -> Failed or Available
+        ];
+        
+        if (!isset($validTransitions[$oldStatus]) || !in_array($newStatus, $validTransitions[$oldStatus])) {
+            return [
+                'success' => false,
+                'message' => "Invalid status transition from $oldStatus to $newStatus"
+            ];
+        }
+        
+        // Update component status
+        $stmt = $pdo->prepare("
+            UPDATE $table 
+            SET Status = ?, UpdatedAt = NOW() 
+            WHERE UUID = ?
+        ");
+        $stmt->execute([$newStatus, $componentUuid]);
+        
+        // Log the status change
+        try {
+            $stmt = $pdo->prepare("
+                INSERT INTO component_status_history 
+                (component_type, component_uuid, old_status, new_status, reason, changed_by, created_at) 
+                VALUES (?, ?, ?, ?, ?, ?, NOW())
+            ");
+            $stmt->execute([$componentType, $componentUuid, $oldStatus, $newStatus, $reason, $userId]);
+        } catch (Exception $e) {
+            // History table might not exist, that's okay
+            error_log("Could not log status change: " . $e->getMessage());
+        }
+        
+        return [
+            'success' => true,
+            'message' => 'Component status updated successfully',
+            'old_status' => $oldStatus,
+            'new_status' => $newStatus
+        ];
+        
+    } catch (Exception $e) {
+        error_log("Error updating component status: " . $e->getMessage());
+        return [
+            'success' => false,
+            'message' => 'Database error occurred while updating component status'
+        ];
+    }
+}
+
+/**
+ * Get component usage information
+ */
+function getComponentUsageInfo($pdo, $componentType, $componentUuid) {
+    try {
+        // Check if component is used in any server configurations
+        $stmt = $pdo->prepare("
+            SELECT sc.config_uuid, sc.server_name, sc.configuration_status, scc.added_at
+            FROM server_configuration_components scc
+            JOIN server_configurations sc ON scc.config_uuid = sc.config_uuid
+            WHERE scc.component_type = ? AND scc.component_uuid = ?
+            ORDER BY scc.added_at DESC
+        ");
+        $stmt->execute([$componentType, $componentUuid]);
+        $configurations = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        
+        return [
+            'is_in_use' => !empty($configurations),
+            'configurations' => $configurations,
+            'usage_count' => count($configurations)
+        ];
+        
+    } catch (Exception $e) {
+        error_log("Error getting component usage info: " . $e->getMessage());
+        return [
+            'is_in_use' => false,
+            'configurations' => [],
+            'usage_count' => 0,
+            'error' => 'Could not retrieve usage information'
+        ];
+    }
+}
+
+/**
+ * Validate component before adding to configuration
+ */
+function validateComponentForConfiguration($pdo, $componentType, $componentUuid, $configUuid = null) {
+    $result = [
+        'valid' => false,
+        'issues' => [],
+        'warnings' => [],
+        'component_info' => null
+    ];
+    
+    // Check component availability
+    $availability = checkComponentAvailabilityDetailed($pdo, $componentType, $componentUuid);
+    
+    if (!$availability['component_exists']) {
+        $result['issues'][] = 'Component does not exist';
+        return $result;
+    }
+    
+    $result['component_info'] = $availability['component_details'];
+    
+    if (!$availability['available']) {
+        if ($availability['can_override']) {
+            $result['warnings'][] = $availability['message'] . ' (can be overridden)';
+        } else {
+            $result['issues'][] = $availability['message'];
+            return $result;
+        }
+    }
+    
+    // Check component usage
+    $usage = getComponentUsageInfo($pdo, $componentType, $componentUuid);
+    if ($usage['is_in_use'] && $configUuid) {
+        // Check if it's used in the same configuration (which is okay)
+        $usedInSameConfig = false;
+        foreach ($usage['configurations'] as $config) {
+            if ($config['config_uuid'] === $configUuid) {
+                $usedInSameConfig = true;
+                break;
+            }
+        }
+        
+        if (!$usedInSameConfig) {
+            $result['warnings'][] = 'Component is currently used in other configurations';
+        }
+    }
+    
+    // Check component condition/specifications if available
+    $component = $availability['component_details'];
+    if (isset($component['Notes']) && !empty($component['Notes'])) {
+        if (stripos($component['Notes'], 'defect') !== false || 
+            stripos($component['Notes'], 'issue') !== false) {
+            $result['warnings'][] = 'Component has notes indicating potential issues: ' . $component['Notes'];
+        }
+    }
+    
+    // If we get here with no critical issues, the component is valid
+    if (empty($result['issues'])) {
+        $result['valid'] = true;
+    }
+    
+    return $result;
+}
+
+/**
+ * Bulk update component status
+ */
+function bulkUpdateComponentStatus($pdo, $componentType, $componentUuids, $newStatus, $reason = '', $userId = null) {
+    $tableMap = [
+        'cpu' => 'cpuinventory',
+        'ram' => 'raminventory',
+        'storage' => 'storageinventory',
+        'motherboard' => 'motherboardinventory',
+        'nic' => 'nicinventory',
+        'caddy' => 'caddyinventory'
+    ];
+    
+    if (!isset($tableMap[$componentType])) {
+        return [
+            'success' => false,
+            'message' => 'Invalid component type'
+        ];
+    }
+    
+    if (empty($componentUuids) || !is_array($componentUuids)) {
+        return [
+            'success' => false,
+            'message' => 'No component UUIDs provided'
+        ];
+    }
+    
+    try {
+        $table = $tableMap[$componentType];
+        $updated = 0;
+        $errors = [];
+        
+        $pdo->beginTransaction();
+        
+        foreach ($componentUuids as $uuid) {
+            $result = updateComponentStatusWithValidation($pdo, $componentType, $uuid, $newStatus, $reason, $userId);
+            if ($result['success']) {
+                $updated++;
+            } else {
+                $errors[$uuid] = $result['message'];
+            }
+        }
+        
+        $pdo->commit();
+        
+        return [
+            'success' => true,
+            'message' => "Updated $updated components",
+            'updated_count' => $updated,
+            'total_count' => count($componentUuids),
+            'errors' => $errors
+        ];
+        
+    } catch (Exception $e) {
+        $pdo->rollback();
+        error_log("Error in bulk update: " . $e->getMessage());
+        return [
+            'success' => false,
+            'message' => 'Bulk update failed: ' . $e->getMessage()
+        ];
+    }
+}
+
+/**
+ * Export components to CSV
+ */
+function exportComponentsToCSV($pdo, $componentType, $filters = []) {
+    $tableMap = [
+        'cpu' => 'cpuinventory',
+        'ram' => 'raminventory',
+        'storage' => 'storageinventory',
+        'motherboard' => 'motherboardinventory',
+        'nic' => 'nicinventory',
+        'caddy' => 'caddyinventory'
+    ];
+    
+    if (!isset($tableMap[$componentType])) {
+        return false;
+    }
+    
+    try {
+        $table = $tableMap[$componentType];
+        $whereConditions = [];
+        $params = [];
+        
+        // Apply filters
+        if (isset($filters['status']) && $filters['status'] !== '') {
+            $whereConditions[] = "Status = ?";
+            $params[] = $filters['status'];
+        }
+        
+        if (isset($filters['search']) && !empty($filters['search'])) {
+            $whereConditions[] = "(SerialNumber LIKE ? OR Location LIKE ? OR Notes LIKE ?)";
+            $searchTerm = "%{$filters['search']}%";
+            $params[] = $searchTerm;
+            $params[] = $searchTerm;
+            $params[] = $searchTerm;
+        }
+        
+        $whereClause = empty($whereConditions) ? "" : "WHERE " . implode(" AND ", $whereConditions);
+        
+        $stmt = $pdo->prepare("SELECT * FROM $table $whereClause ORDER BY SerialNumber");
+        $stmt->execute($params);
+        $components = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        
+        if (empty($components)) {
+            return false;
+        }
+        
+        // Generate CSV
+        $filename = $componentType . '_export_' . date('Y-m-d_H-i-s') . '.csv';
+        $filepath = sys_get_temp_dir() . '/' . $filename;
+        
+        $file = fopen($filepath, 'w');
+        
+        // Write header
+        $headers = array_keys($components[0]);
+        fputcsv($file, $headers);
+        
+        // Write data
+        foreach ($components as $component) {
+            // Add status text
+            $component['StatusText'] = getStatusText($component['Status']);
+            fputcsv($file, $component);
+        }
+        
+        fclose($file);
+        
+        return [
+            'success' => true,
+            'filename' => $filename,
+            'filepath' => $filepath,
+            'record_count' => count($components)
+        ];
+        
+    } catch (Exception $e) {
+        error_log("Error exporting components: " . $e->getMessage());
+        return false;
+    }
+}
+
+/**
+ * Import components from CSV
+ */
+function importComponentsFromCSV($pdo, $componentType, $csvFile, $options = []) {
+    $tableMap = [
+        'cpu' => 'cpuinventory',
+        'ram' => 'raminventory',
+        'storage' => 'storageinventory',
+        'motherboard' => 'motherboardinventory',
+        'nic' => 'nicinventory',
+        'caddy' => 'caddyinventory'
+    ];
+    
+    if (!isset($tableMap[$componentType])) {
+        return [
+            'success' => false,
+            'message' => 'Invalid component type'
+        ];
+    }
+    
+    if (!file_exists($csvFile)) {
+        return [
+            'success' => false,
+            'message' => 'CSV file not found'
+        ];
+    }
+    
+    try {
+        $table = $tableMap[$componentType];
+        $imported = 0;
+        $skipped = 0;
+        $errors = [];
+        
+        $file = fopen($csvFile, 'r');
+        $headers = fgetcsv($file);
+        
+        if (!$headers) {
+            return [
+                'success' => false,
+                'message' => 'Invalid CSV format'
+            ];
+        }
+        
+        $pdo->beginTransaction();
+        
+        while (($row = fgetcsv($file)) !== false) {
+            $data = array_combine($headers, $row);
+            
+            // Validate required fields
+            if (empty($data['SerialNumber'])) {
+                $errors[] = "Row skipped: Missing SerialNumber";
+                $skipped++;
+                continue;
+            }
+            
+            // Check for duplicates
+            $checkStmt = $pdo->prepare("SELECT ID FROM $table WHERE SerialNumber = ?");
+            $checkStmt->execute([$data['SerialNumber']]);
+            if ($checkStmt->fetch()) {
+                if ($options['skip_duplicates'] ?? true) {
+                    $skipped++;
+                    continue;
+                } else {
+                    $errors[] = "Duplicate SerialNumber: {$data['SerialNumber']}";
+                    $skipped++;
+                    continue;
+                }
+            }
+            
+            // Generate UUID if not provided
+            if (empty($data['UUID'])) {
+                $data['UUID'] = generateUUID();
+            }
+            
+            // Set defaults
+            $data['Status'] = $data['Status'] ?? 1;
+            $data['CreatedAt'] = date('Y-m-d H:i:s');
+            $data['UpdatedAt'] = date('Y-m-d H:i:s');
+            $data['CreatedBy'] = $options['created_by'] ?? 'Import';
+            $data['UpdatedBy'] = $options['updated_by'] ?? 'Import';
+            
+            // Build insert query
+            $fields = array_keys($data);
+            $placeholders = array_fill(0, count($data), '?');
+            $values = array_values($data);
+            
+            $query = "INSERT INTO $table (" . implode(', ', $fields) . ") VALUES (" . implode(', ', $placeholders) . ")";
+            $stmt = $pdo->prepare($query);
+            
+            if ($stmt->execute($values)) {
+                $imported++;
+            } else {
+                $errors[] = "Failed to import: {$data['SerialNumber']}";
+                $skipped++;
+            }
+        }
+        
+        fclose($file);
+        $pdo->commit();
+        
+        return [
+            'success' => true,
+            'message' => "Import completed: $imported imported, $skipped skipped",
+            'imported_count' => $imported,
+            'skipped_count' => $skipped,
+            'errors' => $errors
+        ];
+        
+    } catch (Exception $e) {
+        if (isset($file)) fclose($file);
+        $pdo->rollback();
+        error_log("Error importing components: " . $e->getMessage());
+        return [
+            'success' => false,
+            'message' => 'Import failed: ' . $e->getMessage()
+        ];
+    }
+}
+
 ?>

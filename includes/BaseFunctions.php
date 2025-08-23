@@ -141,7 +141,7 @@ if (!function_exists('initializeACLSystem')) {
     function initializeACLSystem($pdo) {
         try {
             // Check if ACL tables exist
-            $stmt = $pdo->query("SHOW TABLES LIKE 'acl_permissions'");
+            $stmt = $pdo->query("SHOW TABLES LIKE 'permissions'");
             if ($stmt->rowCount() == 0) {
                 error_log("ACL tables not found. Please run database migrations.");
                 return false;
@@ -165,8 +165,8 @@ if (!function_exists('hasPermission')) {
             $stmt = $pdo->prepare("
                 SELECT COUNT(*) as count 
                 FROM user_permissions up 
-                JOIN acl_permissions ap ON up.permission_id = ap.id 
-                WHERE up.user_id = ? AND ap.permission_name = ?
+                JOIN permissions ap ON up.permission_id = ap.id 
+                WHERE up.user_id = ? AND ap.name = ?
             ");
             $stmt->execute([$userId, $permission]);
             $result = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -180,8 +180,8 @@ if (!function_exists('hasPermission')) {
                 SELECT COUNT(*) as count 
                 FROM user_roles ur 
                 JOIN role_permissions rp ON ur.role_id = rp.role_id 
-                JOIN acl_permissions ap ON rp.permission_id = ap.id 
-                WHERE ur.user_id = ? AND ap.permission_name = ?
+                JOIN permissions ap ON rp.permission_id = ap.id 
+                WHERE ur.user_id = ? AND ap.name = ?
             ");
             $stmt->execute([$userId, $permission]);
             $result = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -204,27 +204,27 @@ if (!function_exists('getUserPermissions')) {
             
             // Get direct permissions
             $stmt = $pdo->prepare("
-                SELECT ap.permission_name 
+                SELECT ap.name 
                 FROM user_permissions up 
-                JOIN acl_permissions ap ON up.permission_id = ap.id 
+                JOIN permissions ap ON up.permission_id = ap.id 
                 WHERE up.user_id = ?
             ");
             $stmt->execute([$userId]);
             while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-                $permissions[] = $row['permission_name'];
+                $permissions[] = $row['name'];
             }
             
             // Get role-based permissions
             $stmt = $pdo->prepare("
-                SELECT ap.permission_name 
+                SELECT ap.name 
                 FROM user_roles ur 
                 JOIN role_permissions rp ON ur.role_id = rp.role_id 
-                JOIN acl_permissions ap ON rp.permission_id = ap.id 
+                JOIN permissions ap ON rp.permission_id = ap.id 
                 WHERE ur.user_id = ?
             ");
             $stmt->execute([$userId]);
             while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-                $permissions[] = $row['permission_name'];
+                $permissions[] = $row['name'];
             }
             
             return array_unique($permissions);
@@ -830,6 +830,45 @@ if (!function_exists('getUserById')) {
         } catch (Exception $e) {
             error_log("Error getting user by ID: " . $e->getMessage());
             return null;
+        }
+    }
+}
+
+/**
+ * Log activity for audit trail
+ */
+if (!function_exists('logActivity')) {
+    function logActivity($pdo, $userId, $action, $module, $objectId = null, $description = '') {
+        try {
+            // For now, log to error log since there's no activity_log table in the database
+            // This prevents the API from crashing while providing basic logging functionality
+            $logMessage = sprintf(
+                "[ACTIVITY] User: %s, Action: %s, Module: %s, Object: %s, Description: %s",
+                $userId,
+                $action,
+                $module,
+                $objectId ?? 'N/A',
+                $description
+            );
+            
+            error_log($logMessage);
+            
+            // If you want to implement database logging in the future, 
+            // uncomment and modify the following code:
+            /*
+            $stmt = $pdo->prepare("
+                INSERT INTO activity_log (user_id, action, module, object_id, description, created_at) 
+                VALUES (?, ?, ?, ?, ?, NOW())
+            ");
+            return $stmt->execute([$userId, $action, $module, $objectId, $description]);
+            */
+            
+            return true; // Always return true to prevent API crashes
+            
+        } catch (Exception $e) {
+            // Log the error but don't throw exception to prevent API crashes
+            error_log("Error in logActivity function: " . $e->getMessage());
+            return false;
         }
     }
 }
