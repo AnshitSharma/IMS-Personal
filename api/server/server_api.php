@@ -84,31 +84,96 @@ switch ($action) {
  * Start server creation process
  */
 function handleCreateStart($serverBuilder, $user) {
+    global $pdo;
+    
     $serverName = trim($_POST['server_name'] ?? '');
     $description = trim($_POST['description'] ?? '');
     $category = trim($_POST['category'] ?? 'custom');
+    $motherboardUuid = trim($_POST['motherboard_uuid'] ?? '');
     
     if (empty($serverName)) {
         send_json_response(0, 1, 400, "Server name is required");
     }
     
+    if (empty($motherboardUuid)) {
+        send_json_response(0, 1, 400, "Motherboard UUID is required to start server creation");
+    }
+    
     try {
+        // Validate motherboard exists and is available
+        $motherboardDetails = getComponentDetails($pdo, 'motherboard', $motherboardUuid);
+        if (!$motherboardDetails) {
+            send_json_response(0, 1, 404, "Motherboard not found", [
+                'motherboard_uuid' => $motherboardUuid
+            ]);
+        }
+        
+        // Check motherboard availability
+        $motherboardStatus = (int)$motherboardDetails['Status'];
+        if ($motherboardStatus !== 1) {
+            $statusMessage = getStatusText($motherboardStatus);
+            send_json_response(0, 1, 400, "Motherboard is not available", [
+                'motherboard_status' => $motherboardStatus,
+                'status_message' => $statusMessage,
+                'motherboard_uuid' => $motherboardUuid
+            ]);
+        }
+        
+        // Create configuration
         $configUuid = $serverBuilder->createConfiguration($serverName, $user['id'], [
             'description' => $description,
             'category' => $category
         ]);
         
-        send_json_response(1, 1, 200, "Server configuration created successfully", [
+        // Add motherboard to configuration
+        $addResult = $serverBuilder->addComponent($configUuid, 'motherboard', $motherboardUuid, [
+            'quantity' => 1,
+            'notes' => 'Initial motherboard for server configuration',
+            'user_id' => $user['id']
+        ]);
+        
+        if (!$addResult['success']) {
+            // If motherboard addition failed, clean up the configuration
+            $serverBuilder->deleteConfiguration($configUuid);
+            send_json_response(0, 1, 400, "Failed to add motherboard to configuration: " . $addResult['message']);
+        }
+        
+        // Parse motherboard specifications for component limits
+        $motherboardSpecs = parseMotherboardSpecs($motherboardDetails);
+        
+        send_json_response(1, 1, 200, "Server configuration created successfully with motherboard", [
             'config_uuid' => $configUuid,
             'server_name' => $serverName,
             'description' => $description,
             'category' => $category,
-            'next_step' => 'motherboard',
+            'motherboard_added' => [
+                'uuid' => $motherboardUuid,
+                'serial_number' => $motherboardDetails['SerialNumber'],
+                'specifications' => $motherboardSpecs
+            ],
             'progress' => [
                 'total_steps' => 6,
-                'completed_steps' => 0,
-                'current_step' => 'component_selection',
-                'components_added' => []
+                'completed_steps' => 1,
+                'current_step' => 'cpu_selection',
+                'step_descriptions' => [
+                    1 => 'Motherboard Selection (Completed)',
+                    2 => 'CPU Selection',
+                    3 => 'Memory Selection', 
+                    4 => 'Storage Selection',
+                    5 => 'Network/Expansion Cards',
+                    6 => 'Review & Finalization'
+                ]
+            ],
+            'component_limits' => [
+                'cpu_sockets' => $motherboardSpecs['cpu_sockets'] ?? 1,
+                'memory_slots' => $motherboardSpecs['memory_slots'] ?? 4,
+                'storage_slots' => $motherboardSpecs['storage_slots'] ?? [],
+                'pcie_slots' => $motherboardSpecs['pcie_slots'] ?? []
+            ],
+            'next_recommendations' => [
+                'component_type' => 'cpu',
+                'max_quantity' => $motherboardSpecs['cpu_sockets'] ?? 1,
+                'message' => 'Add CPU(s) compatible with motherboard socket type'
             ],
             'compatibility_engine_available' => class_exists('CompatibilityEngine')
         ]);
@@ -210,6 +275,33 @@ function handleAddComponent($serverBuilder, $user) {
             // Get updated configuration summary
             $summary = $serverBuilder->getConfigurationSummary($configUuid);
             
+            // Calculate progress and determine next step
+            $progressInfo = calculateConfigurationProgress($summary);
+            
+            // Get component limits from motherboard specs
+            $componentLimits = [];
+            $motherboardComponent = $summary['components']['motherboard'][0] ?? null;
+            if ($motherboardComponent && isset($motherboardComponent['details'])) {
+                $motherboardSpecs = parseMotherboardSpecs($motherboardComponent['details']);
+                $componentLimits = [
+                    'cpu_sockets' => [
+                        'max' => $motherboardSpecs['cpu_sockets'] ?? 1,
+                        'used' => $summary['component_counts']['cpu'] ?? 0,
+                        'remaining' => ($motherboardSpecs['cpu_sockets'] ?? 1) - ($summary['component_counts']['cpu'] ?? 0)
+                    ],
+                    'memory_slots' => [
+                        'max' => $motherboardSpecs['memory_slots'] ?? 4,
+                        'used' => $summary['component_counts']['ram'] ?? 0,
+                        'remaining' => ($motherboardSpecs['memory_slots'] ?? 4) - ($summary['component_counts']['ram'] ?? 0)
+                    ],
+                    'storage_slots' => [
+                        'max' => array_sum($motherboardSpecs['storage_slots'] ?? []),
+                        'used' => $summary['component_counts']['storage'] ?? 0,
+                        'remaining' => array_sum($motherboardSpecs['storage_slots'] ?? []) - ($summary['component_counts']['storage'] ?? 0)
+                    ]
+                ];
+            }
+            
             // Get next recommended components if compatibility engine is available
             $nextRecommendations = [];
             if (class_exists('CompatibilityEngine')) {
@@ -226,7 +318,9 @@ function handleAddComponent($serverBuilder, $user) {
                     'original_status' => $statusMessage
                 ],
                 'configuration_summary' => $summary,
-                'next_recommendations' => $nextRecommendations,
+                'progress' => $progressInfo,
+                'component_limits' => $componentLimits,
+                'next_recommendations' => getNextRecommendations($summary, $componentLimits),
                 'compatibility_issues' => $result['compatibility_issues'] ?? []
             ]);
         } else {
@@ -495,7 +589,9 @@ function handleGetAvailableComponents($user) {
     }
     
     try {
-        $components = getAvailableComponents($pdo, $componentType, !$includeInUse, $limit);
+        // Respect the include_in_use parameter strictly
+        $availableOnly = !$includeInUse;
+        $components = getAvailableComponents($pdo, $componentType, $availableOnly, $limit);
         $count = getComponentCount($pdo, $componentType);
         
         send_json_response(1, 1, 200, "Available components retrieved successfully", [
@@ -558,6 +654,7 @@ function handleGetCompatible($serverBuilder, $user) {
     $componentType = $_GET['component_type'] ?? $_POST['component_type'] ?? '';
     $componentUuid = $_GET['component_uuid'] ?? $_POST['component_uuid'] ?? '';
     $includeInUse = filter_var($_GET['include_in_use'] ?? $_POST['include_in_use'] ?? false, FILTER_VALIDATE_BOOLEAN);
+    $availableOnly = filter_var($_GET['available_only'] ?? $_POST['available_only'] ?? true, FILTER_VALIDATE_BOOLEAN);
     
     try {
         $result = [];
@@ -580,7 +677,7 @@ function handleGetCompatible($serverBuilder, $user) {
                 $result = $compatibilityEngine->getCompatibleComponents($configUuid, $componentType);
             } else {
                 // Fallback to basic component listing
-                $result['components'] = getAvailableComponents($pdo, $componentType, !$includeInUse);
+                $result['components'] = getAvailableComponents($pdo, $componentType, $availableOnly);
                 $result['compatibility_engine_available'] = false;
             }
         }
@@ -596,13 +693,13 @@ function handleGetCompatible($serverBuilder, $user) {
                 $result = $compatibilityEngine->getCompatibleComponentsFor($componentType, $componentUuid);
             } else {
                 // Basic fallback - return similar components
-                $result['components'] = getAvailableComponents($pdo, $componentType, !$includeInUse);
+                $result['components'] = getAvailableComponents($pdo, $componentType, $availableOnly);
                 $result['compatibility_engine_available'] = false;
             }
         }
         // If only component type is provided, return all available components of that type
         elseif (!empty($componentType)) {
-            $result['components'] = getAvailableComponents($pdo, $componentType, !$includeInUse);
+            $result['components'] = getAvailableComponents($pdo, $componentType, $availableOnly);
             $result['compatibility_engine_available'] = class_exists('CompatibilityEngine');
         } else {
             send_json_response(0, 1, 400, "Either config_uuid or component_type (with optional component_uuid) is required");
@@ -612,7 +709,8 @@ function handleGetCompatible($serverBuilder, $user) {
             'config_uuid' => $configUuid,
             'component_type' => $componentType,
             'component_uuid' => $componentUuid,
-            'include_in_use' => $includeInUse
+            'include_in_use' => $includeInUse,
+            'available_only' => $availableOnly
         ];
         
         send_json_response(1, 1, 200, "Compatible components retrieved successfully", $result);
@@ -718,7 +816,7 @@ function getAvailableComponents($pdo, $componentType, $availableOnly = true, $li
     }
     
     $table = $tableMap[$componentType];
-    $whereClause = $availableOnly ? "WHERE Status IN (1, 2)" : "WHERE Status != 0";
+    $whereClause = $availableOnly ? "WHERE Status = 1" : "WHERE Status IN (1, 2)";
     
     try {
         $stmt = $pdo->prepare("
@@ -769,6 +867,359 @@ function getComponentCount($pdo, $componentType) {
         error_log("Error getting component count for $componentType: " . $e->getMessage());
         return ['total' => 0, 'available' => 0, 'in_use' => 0, 'failed' => 0];
     }
+}
+
+/**
+ * Helper function to parse motherboard specifications from Notes field
+ */
+function parseMotherboardSpecs($motherboardDetails) {
+    $specs = [
+        'cpu_sockets' => 1,
+        'memory_slots' => 4,
+        'storage_slots' => [
+            'sata_ports' => 4,
+            'm2_slots' => 1,
+            'u2_slots' => 0
+        ],
+        'pcie_slots' => [
+            'x16_slots' => 1,
+            'x8_slots' => 0,
+            'x4_slots' => 0,
+            'x1_slots' => 0
+        ],
+        'socket_type' => 'Unknown',
+        'memory_type' => 'DDR4'
+    ];
+    
+    try {
+        // Try to find matching motherboard JSON data
+        $jsonFiles = [
+            __DIR__ . '/../../All JSON/motherboad jsons/motherboard level 3.json'
+        ];
+        
+        $serialNumber = $motherboardDetails['SerialNumber'];
+        $notes = $motherboardDetails['Notes'] ?? '';
+        
+        foreach ($jsonFiles as $jsonFile) {
+            if (file_exists($jsonFile)) {
+                $jsonData = json_decode(file_get_contents($jsonFile), true);
+                if ($jsonData) {
+                    $matchedSpecs = findMotherboardInJSON($jsonData, $serialNumber, $notes);
+                    if ($matchedSpecs) {
+                        $specs = array_merge($specs, $matchedSpecs);
+                        break;
+                    }
+                }
+            }
+        }
+        
+        // Fallback: Parse from Notes field if JSON not found
+        if ($notes) {
+            $parsedFromNotes = parseSpecsFromNotes($notes);
+            $specs = array_merge($specs, $parsedFromNotes);
+        }
+        
+    } catch (Exception $e) {
+        error_log("Error parsing motherboard specs: " . $e->getMessage());
+    }
+    
+    return $specs;
+}
+
+/**
+ * Find motherboard specifications in JSON data
+ */
+function findMotherboardInJSON($jsonData, $serialNumber, $notes) {
+    foreach ($jsonData as $brand) {
+        if (isset($brand['models'])) {
+            foreach ($brand['models'] as $model) {
+                // Check if this model matches our motherboard
+                if (stripos($notes, $model['model']) !== false) {
+                    return extractSpecsFromJSON($model);
+                }
+            }
+        }
+        
+        // Check family level models
+        if (isset($brand['family']) && is_array($brand['family'])) {
+            foreach ($brand['family'] as $family) {
+                if (isset($family['models'])) {
+                    foreach ($family['models'] as $model) {
+                        if (stripos($notes, $model['model']) !== false) {
+                            return extractSpecsFromJSON($model);
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Check series level
+        if (isset($brand['series'])) {
+            foreach ($brand as $key => $value) {
+                if ($key === 'models' && is_array($value)) {
+                    foreach ($value as $model) {
+                        if (stripos($notes, $model['model']) !== false) {
+                            return extractSpecsFromJSON($model);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    return null;
+}
+
+/**
+ * Extract specifications from JSON model data
+ */
+function extractSpecsFromJSON($modelData) {
+    $specs = [];
+    
+    // CPU socket information
+    if (isset($modelData['socket'])) {
+        $specs['cpu_sockets'] = $modelData['socket']['count'] ?? 1;
+        $specs['socket_type'] = $modelData['socket']['type'] ?? 'Unknown';
+    }
+    
+    // Memory information
+    if (isset($modelData['memory'])) {
+        $specs['memory_slots'] = $modelData['memory']['slots'] ?? 4;
+        $specs['memory_type'] = $modelData['memory']['type'] ?? 'DDR4';
+        $specs['memory_max_capacity'] = $modelData['memory']['max_capacity_TB'] ?? 1;
+        $specs['memory_channels'] = $modelData['memory']['channels'] ?? 2;
+    }
+    
+    // Storage information
+    $storageSlots = [];
+    if (isset($modelData['storage'])) {
+        if (isset($modelData['storage']['sata']['ports'])) {
+            $storageSlots['sata_ports'] = $modelData['storage']['sata']['ports'];
+        }
+        if (isset($modelData['storage']['nvme']['m2_slots'])) {
+            $m2Count = 0;
+            foreach ($modelData['storage']['nvme']['m2_slots'] as $m2Slot) {
+                $m2Count += $m2Slot['count'] ?? 0;
+            }
+            $storageSlots['m2_slots'] = $m2Count;
+        }
+        if (isset($modelData['storage']['nvme']['u2_slots']['count'])) {
+            $storageSlots['u2_slots'] = $modelData['storage']['nvme']['u2_slots']['count'];
+        }
+    }
+    $specs['storage_slots'] = $storageSlots;
+    
+    // PCIe slots information
+    $pcieSlots = [];
+    if (isset($modelData['expansion_slots']['pcie_slots'])) {
+        foreach ($modelData['expansion_slots']['pcie_slots'] as $slot) {
+            $slotType = $slot['type'] ?? '';
+            $count = $slot['count'] ?? 0;
+            
+            if (strpos($slotType, 'x16') !== false) {
+                $pcieSlots['x16_slots'] = ($pcieSlots['x16_slots'] ?? 0) + $count;
+            } elseif (strpos($slotType, 'x8') !== false) {
+                $pcieSlots['x8_slots'] = ($pcieSlots['x8_slots'] ?? 0) + $count;
+            } elseif (strpos($slotType, 'x4') !== false) {
+                $pcieSlots['x4_slots'] = ($pcieSlots['x4_slots'] ?? 0) + $count;
+            } elseif (strpos($slotType, 'x1') !== false) {
+                $pcieSlots['x1_slots'] = ($pcieSlots['x1_slots'] ?? 0) + $count;
+            }
+        }
+    }
+    $specs['pcie_slots'] = $pcieSlots;
+    
+    return $specs;
+}
+
+/**
+ * Parse basic specs from Notes field as fallback
+ */
+function parseSpecsFromNotes($notes) {
+    $specs = [];
+    
+    // Try to extract basic information from notes
+    if (preg_match('/(\d+)[\s]*socket/i', $notes, $matches)) {
+        $specs['cpu_sockets'] = (int)$matches[1];
+    }
+    
+    if (preg_match('/(\d+)[\s]*dimm/i', $notes, $matches)) {
+        $specs['memory_slots'] = (int)$matches[1];
+    }
+    
+    if (preg_match('/DDR(\d)/i', $notes, $matches)) {
+        $specs['memory_type'] = 'DDR' . $matches[1];
+    }
+    
+    return $specs;
+}
+
+/**
+ * Calculate configuration progress based on components added
+ */
+function calculateConfigurationProgress($summary) {
+    $stepDescriptions = [
+        1 => 'Motherboard Selection',
+        2 => 'CPU Selection',
+        3 => 'Memory Selection',
+        4 => 'Storage Selection',
+        5 => 'Network/Expansion Cards',
+        6 => 'Review & Finalization'
+    ];
+    
+    $completedSteps = 0;
+    $currentStep = 2; // Start with CPU after motherboard
+    
+    // Step 1: Motherboard (always completed if we have a summary)
+    if (isset($summary['components']['motherboard'])) {
+        $completedSteps = 1;
+    }
+    
+    // Step 2: CPU
+    if (isset($summary['components']['cpu']) && !empty($summary['components']['cpu'])) {
+        $completedSteps = 2;
+        $currentStep = 3;
+    }
+    
+    // Step 3: Memory/RAM
+    if (isset($summary['components']['ram']) && !empty($summary['components']['ram'])) {
+        $completedSteps = 3;
+        $currentStep = 4;
+    }
+    
+    // Step 4: Storage
+    if (isset($summary['components']['storage']) && !empty($summary['components']['storage'])) {
+        $completedSteps = 4;
+        $currentStep = 5;
+    }
+    
+    // Step 5: Network/Expansion (optional)
+    if (isset($summary['components']['nic']) && !empty($summary['components']['nic'])) {
+        $completedSteps = 5;
+        $currentStep = 6;
+    }
+    
+    // Check if ready for finalization (minimum requirements met)
+    $readyForFinalization = $completedSteps >= 4; // Motherboard, CPU, RAM, Storage
+    
+    if ($readyForFinalization && $currentStep < 6) {
+        $currentStep = 6;
+    }
+    
+    return [
+        'total_steps' => 6,
+        'completed_steps' => $completedSteps,
+        'current_step' => $currentStep,
+        'current_step_name' => getCurrentStepName($currentStep),
+        'step_descriptions' => array_map(function($step, $desc) use ($completedSteps) {
+            return $desc . ($step <= $completedSteps ? ' (Completed)' : '');
+        }, array_keys($stepDescriptions), $stepDescriptions),
+        'ready_for_finalization' => $readyForFinalization,
+        'progress_percentage' => round(($completedSteps / 6) * 100, 1)
+    ];
+}
+
+/**
+ * Get current step name for UI
+ */
+function getCurrentStepName($stepNumber) {
+    $stepNames = [
+        1 => 'motherboard_selection',
+        2 => 'cpu_selection', 
+        3 => 'memory_selection',
+        4 => 'storage_selection',
+        5 => 'expansion_selection',
+        6 => 'review_finalization'
+    ];
+    
+    return $stepNames[$stepNumber] ?? 'unknown_step';
+}
+
+/**
+ * Get next recommendations based on current configuration
+ */
+function getNextRecommendations($summary, $componentLimits) {
+    $recommendations = [];
+    
+    // Check what's missing and recommend next steps
+    if (!isset($summary['components']['cpu']) || empty($summary['components']['cpu'])) {
+        $maxCpus = $componentLimits['cpu_sockets']['remaining'] ?? 1;
+        $recommendations[] = [
+            'component_type' => 'cpu',
+            'priority' => 'high',
+            'message' => "Add CPU(s) - Up to $maxCpus CPU(s) can be installed",
+            'max_quantity' => $maxCpus,
+            'required' => true
+        ];
+    } else {
+        $remaining = $componentLimits['cpu_sockets']['remaining'] ?? 0;
+        if ($remaining > 0) {
+            $recommendations[] = [
+                'component_type' => 'cpu',
+                'priority' => 'medium',
+                'message' => "Add additional CPU - $remaining socket(s) available",
+                'max_quantity' => $remaining,
+                'required' => false
+            ];
+        }
+    }
+    
+    if (!isset($summary['components']['ram']) || empty($summary['components']['ram'])) {
+        $maxRam = $componentLimits['memory_slots']['remaining'] ?? 4;
+        $recommendations[] = [
+            'component_type' => 'ram',
+            'priority' => 'high',
+            'message' => "Add memory modules - Up to $maxRam slot(s) available",
+            'max_quantity' => $maxRam,
+            'required' => true
+        ];
+    } else {
+        $remaining = $componentLimits['memory_slots']['remaining'] ?? 0;
+        if ($remaining > 0) {
+            $recommendations[] = [
+                'component_type' => 'ram',
+                'priority' => 'medium',
+                'message' => "Add additional memory - $remaining slot(s) available",
+                'max_quantity' => $remaining,
+                'required' => false
+            ];
+        }
+    }
+    
+    if (!isset($summary['components']['storage']) || empty($summary['components']['storage'])) {
+        $maxStorage = $componentLimits['storage_slots']['remaining'] ?? 1;
+        $recommendations[] = [
+            'component_type' => 'storage',
+            'priority' => 'high',
+            'message' => "Add storage device - Up to $maxStorage connection(s) available",
+            'max_quantity' => $maxStorage,
+            'required' => true
+        ];
+    } else {
+        $remaining = $componentLimits['storage_slots']['remaining'] ?? 0;
+        if ($remaining > 0) {
+            $recommendations[] = [
+                'component_type' => 'storage',
+                'priority' => 'low',
+                'message' => "Add additional storage - $remaining connection(s) available",
+                'max_quantity' => $remaining,
+                'required' => false
+            ];
+        }
+    }
+    
+    // Optional components
+    if (!isset($summary['components']['nic']) || empty($summary['components']['nic'])) {
+        $recommendations[] = [
+            'component_type' => 'nic',
+            'priority' => 'low',
+            'message' => 'Add network interface cards (optional)',
+            'max_quantity' => 10, // Reasonable default
+            'required' => false
+        ];
+    }
+    
+    return $recommendations;
 }
 
 ?>
