@@ -1,24 +1,26 @@
 <?php
 
 class ServerBuilder {
+    
     private $pdo;
-    private $componentTables = [
-        'cpu' => 'cpuinventory',
-        'ram' => 'raminventory',
-        'storage' => 'storageinventory',
-        'motherboard' => 'motherboardinventory',
-        'nic' => 'nicinventory',
-        'caddy' => 'caddyinventory'
-    ];
+    private $componentTables;
     
     public function __construct($pdo) {
         $this->pdo = $pdo;
+        $this->componentTables = [
+            'cpu' => 'cpuinventory',
+            'ram' => 'raminventory',
+            'storage' => 'storageinventory',
+            'motherboard' => 'motherboardinventory',
+            'nic' => 'nicinventory',
+            'caddy' => 'caddyinventory'
+        ];
     }
     
     /**
      * Create a new server configuration
      */
-    public function createConfiguration($serverName, $userId, $options = []) {
+    public function createConfiguration($serverName, $createdBy, $options = []) {
         try {
             $configUuid = $this->generateUuid();
             $description = $options['description'] ?? '';
@@ -26,39 +28,26 @@ class ServerBuilder {
             
             $stmt = $this->pdo->prepare("
                 INSERT INTO server_configurations 
-                (config_uuid, server_name, description, category, configuration_status, created_by, created_at, updated_at) 
-                VALUES (?, ?, ?, ?, 0, ?, NOW(), NOW())
+                (config_uuid, server_name, description, category, created_by, created_at, updated_at, configuration_status) 
+                VALUES (?, ?, ?, ?, ?, NOW(), NOW(), 0)
             ");
             
-            $stmt->execute([
-                $configUuid,
-                $serverName,
-                $description,
-                $category,
-                $userId
-            ]);
-            
-            // Log the creation
-            $this->logConfigurationAction($configUuid, 'create', 'configuration', null, [
-                'server_name' => $serverName,
-                'description' => $description,
-                'category' => $category
-            ], $userId);
+            $stmt->execute([$configUuid, $serverName, $description, $category, $createdBy]);
             
             return $configUuid;
             
         } catch (Exception $e) {
             error_log("Error creating server configuration: " . $e->getMessage());
-            throw new Exception("Failed to create server configuration");
+            throw new Exception("Failed to create server configuration: " . $e->getMessage());
         }
     }
     
     /**
-     * Add component to configuration
+     * Add component to server configuration with proper database updates
      */
     public function addComponent($configUuid, $componentType, $componentUuid, $options = []) {
         try {
-            // Validate inputs
+            // Validate component type
             if (!$this->isValidComponentType($componentType)) {
                 return [
                     'success' => false,
@@ -66,107 +55,73 @@ class ServerBuilder {
                 ];
             }
             
-            // Get component details
+            // Get component details to validate existence and check status
             $componentDetails = $this->getComponentByUuid($componentType, $componentUuid);
             if (!$componentDetails) {
                 return [
                     'success' => false,
-                    'message' => "Component not found"
+                    'message' => "Component not found: $componentUuid"
                 ];
             }
             
-            // Enhanced availability check
-            $availability = $this->checkComponentAvailability($componentDetails, $options);
+            // Check availability
+            $availability = $this->checkComponentAvailability($componentDetails, $configUuid, $options);
             if (!$availability['available'] && !($options['override_used'] ?? false)) {
                 return [
                     'success' => false,
                     'message' => $availability['message'],
-                    'component_status' => $availability['status'],
-                    'can_override' => $availability['can_override']
+                    'availability_details' => $availability
                 ];
             }
             
-            // Check motherboard-based component limits
-            $limitCheck = $this->checkComponentLimits($configUuid, $componentType, $options['quantity'] ?? 1);
-            if (!$limitCheck['allowed']) {
-                return [
-                    'success' => false,
-                    'message' => $limitCheck['message'],
-                    'current_count' => $limitCheck['current_count'],
-                    'max_allowed' => $limitCheck['max_allowed'],
-                    'motherboard_specs' => $limitCheck['motherboard_specs'] ?? null
-                ];
-            }
-            
-            // Check for existing component of same type (for single-instance components)
+            // For single-instance components, check if already exists in config
             if ($this->isSingleInstanceComponent($componentType)) {
                 $existingComponent = $this->getConfigurationComponent($configUuid, $componentType);
-                if ($existingComponent && !($options['replace'] ?? false)) {
+                if ($existingComponent) {
                     return [
                         'success' => false,
-                        'message' => "Component type $componentType already exists in configuration",
-                        'existing_component' => $existingComponent,
-                        'can_replace' => true
+                        'message' => "Configuration already has a $componentType. Remove existing component first."
                     ];
                 }
             }
             
+            // Begin transaction
+            $this->pdo->beginTransaction();
+            
+            // Add component to configuration_components table
             $quantity = $options['quantity'] ?? 1;
             $slotPosition = $options['slot_position'] ?? null;
             $notes = $options['notes'] ?? '';
             
-            // Insert component into configuration
             $stmt = $this->pdo->prepare("
                 INSERT INTO server_configuration_components 
                 (config_uuid, component_type, component_uuid, quantity, slot_position, notes, added_at) 
                 VALUES (?, ?, ?, ?, ?, ?, NOW())
-                ON DUPLICATE KEY UPDATE 
-                quantity = quantity + VALUES(quantity),
-                notes = VALUES(notes),
-                updated_at = NOW()
             ");
+            $stmt->execute([$configUuid, $componentType, $componentUuid, $quantity, $slotPosition, $notes]);
             
-            $stmt->execute([
-                $configUuid,
-                $componentType,
-                $componentUuid,
-                $quantity,
-                $slotPosition,
-                $notes
-            ]);
+            // Update component status to "In Use" AND set ServerUUID to config_uuid
+            $this->updateComponentStatusAndServerUuid($componentType, $componentUuid, 2, $configUuid, "Added to configuration $configUuid");
             
-            // Update component status if it was available
-            if ($componentDetails['Status'] == 1) {
-                $this->updateComponentStatus($componentType, $componentUuid, 2, "Added to server configuration $configUuid");
-            }
+            // Update the main server_configurations table with component info
+            $this->updateServerConfigurationTable($configUuid, $componentType, $componentUuid, $quantity, 'add');
+            
+            // Update calculated fields (power, compatibility, etc.)
+            $this->updateConfigurationMetrics($configUuid);
             
             // Log the action
-            $this->logConfigurationAction($configUuid, 'add_component', $componentType, $componentUuid, [
-                'quantity' => $quantity,
-                'slot_position' => $slotPosition,
-                'notes' => $notes,
-                'override_used' => $options['override_used'] ?? false
-            ], $options['user_id'] ?? null);
+            $this->logConfigurationAction($configUuid, 'add_component', $componentType, $componentUuid, $options);
             
-            // Check compatibility if engine is available
-            $compatibilityIssues = [];
-            if (class_exists('ComponentCompatibility')) {
-                $compatibilityEngine = new ComponentCompatibility($this->pdo);
-                $compatibilityIssues = $this->checkConfigurationCompatibility($configUuid, $compatibilityEngine);
-            }
+            $this->pdo->commit();
             
             return [
                 'success' => true,
                 'message' => "Component added successfully",
-                'component_added' => [
-                    'type' => $componentType,
-                    'uuid' => $componentUuid,
-                    'quantity' => $quantity
-                ],
-                'compatibility_issues' => $compatibilityIssues
+                'component_details' => $componentDetails
             ];
             
         } catch (Exception $e) {
+            $this->pdo->rollback();
             error_log("Error adding component to configuration: " . $e->getMessage());
             return [
                 'success' => false,
@@ -176,39 +131,40 @@ class ServerBuilder {
     }
     
     /**
-     * Remove component from configuration
+     * Remove component from server configuration
      */
     public function removeComponent($configUuid, $componentType, $componentUuid) {
         try {
-            // Check if component exists in configuration
-            $stmt = $this->pdo->prepare("
-                SELECT * FROM server_configuration_components 
-                WHERE config_uuid = ? AND component_type = ? AND component_uuid = ?
-            ");
-            $stmt->execute([$configUuid, $componentType, $componentUuid]);
-            $configComponent = $stmt->fetch(PDO::FETCH_ASSOC);
+            $this->pdo->beginTransaction();
             
-            if (!$configComponent) {
-                return [
-                    'success' => false,
-                    'message' => "Component not found in configuration"
-                ];
-            }
-            
-            // Remove from configuration
+            // Remove from configuration_components table
             $stmt = $this->pdo->prepare("
                 DELETE FROM server_configuration_components 
                 WHERE config_uuid = ? AND component_type = ? AND component_uuid = ?
             ");
             $stmt->execute([$configUuid, $componentType, $componentUuid]);
             
-            // Update component status back to available
-            $this->updateComponentStatus($componentType, $componentUuid, 1, "Removed from server configuration $configUuid");
+            if ($stmt->rowCount() === 0) {
+                $this->pdo->rollback();
+                return [
+                    'success' => false,
+                    'message' => "Component not found in configuration"
+                ];
+            }
+            
+            // Update component status back to "Available" and clear ServerUUID
+            $this->updateComponentStatusAndServerUuid($componentType, $componentUuid, 1, null, "Removed from configuration $configUuid");
+            
+            // Update the main server_configurations table
+            $this->updateServerConfigurationTable($configUuid, $componentType, $componentUuid, 0, 'remove');
+            
+            // Update calculated fields
+            $this->updateConfigurationMetrics($configUuid);
             
             // Log the action
-            $this->logConfigurationAction($configUuid, 'remove_component', $componentType, $componentUuid, [
-                'quantity' => $configComponent['quantity']
-            ]);
+            $this->logConfigurationAction($configUuid, 'remove_component', $componentType, $componentUuid);
+            
+            $this->pdo->commit();
             
             return [
                 'success' => true,
@@ -216,6 +172,7 @@ class ServerBuilder {
             ];
             
         } catch (Exception $e) {
+            $this->pdo->rollback();
             error_log("Error removing component from configuration: " . $e->getMessage());
             return [
                 'success' => false,
@@ -225,78 +182,433 @@ class ServerBuilder {
     }
     
     /**
-     * Get configuration summary
+     * Get complete configuration details with proper component handling
      */
-    public function getConfigurationSummary($configUuid) {
+    public function getConfigurationDetails($configUuid) {
         try {
+            // Get base configuration
             $stmt = $this->pdo->prepare("
-                SELECT scc.*, sc.server_name, sc.configuration_status
-                FROM server_configuration_components scc
-                JOIN server_configurations sc ON scc.config_uuid = sc.config_uuid
-                WHERE scc.config_uuid = ?
-                ORDER BY scc.component_type, scc.added_at
+                SELECT sc.*, u.username as created_by_username 
+                FROM server_configurations sc 
+                LEFT JOIN users u ON sc.created_by = u.id 
+                WHERE sc.config_uuid = ?
+            ");
+            $stmt->execute([$configUuid]);
+            $configData = $stmt->fetch(PDO::FETCH_ASSOC);
+            
+            if (!$configData) {
+                return [
+                    'config_uuid' => $configUuid,
+                    'error' => 'Configuration not found'
+                ];
+            }
+            
+            // Get components from server_configuration_components table
+            $stmt = $this->pdo->prepare("
+                SELECT * FROM server_configuration_components 
+                WHERE config_uuid = ?
+                ORDER BY component_type, added_at
             ");
             $stmt->execute([$configUuid]);
             $components = $stmt->fetchAll(PDO::FETCH_ASSOC);
             
-            $summary = [
-                'config_uuid' => $configUuid,
-                'components' => [],
-                'component_counts' => [],
-                'total_components' => 0,
-                'server_name' => '',
-                'configuration_status' => 0
-            ];
+            // Build detailed component information
+            $componentDetails = [];
+            $componentCounts = [];
+            $totalComponents = 0;
+            $totalPowerConsumption = 0;
             
             foreach ($components as $component) {
                 $type = $component['component_type'];
                 
-                if (!isset($summary['components'][$type])) {
-                    $summary['components'][$type] = [];
-                    $summary['component_counts'][$type] = 0;
+                if (!isset($componentDetails[$type])) {
+                    $componentDetails[$type] = [];
+                    $componentCounts[$type] = 0;
                 }
                 
-                // Get component details
-                $componentDetails = $this->getComponentByUuid($type, $component['component_uuid']);
-                if ($componentDetails) {
-                    $component['details'] = $componentDetails;
+                // Get component details with proper ServerUUID check
+                $details = $this->getComponentByUuid($type, $component['component_uuid']);
+                if ($details) {
+                    $component['details'] = $details;
+                    
+                    // Calculate power consumption from component specifications
+                    $powerConsumption = $this->calculateComponentPower($type, $details);
+                    $totalPowerConsumption += $powerConsumption * $component['quantity'];
+                    
+                    // Add power info to component
+                    $component['power_consumption_watts'] = $powerConsumption;
+                    $component['total_power_watts'] = $powerConsumption * $component['quantity'];
+                } else {
+                    $component['details'] = [
+                        'UUID' => $component['component_uuid'],
+                        'SerialNumber' => 'Unknown',
+                        'Status' => 2,
+                        'ServerUUID' => $configUuid
+                    ];
+                    $component['power_consumption_watts'] = 0;
+                    $component['total_power_watts'] = 0;
                 }
                 
-                $summary['components'][$type][] = $component;
-                $summary['component_counts'][$type] += $component['quantity'];
-                $summary['total_components'] += $component['quantity'];
-                
-                // Set server name and status from first component
-                if (empty($summary['server_name'])) {
-                    $summary['server_name'] = $component['server_name'];
-                    $summary['configuration_status'] = $component['configuration_status'];
+                $componentDetails[$type][] = $component;
+                $componentCounts[$type] += $component['quantity'];
+                $totalComponents += $component['quantity'];
+            }
+            
+            // Add 20% overhead for safety margin on power
+            $totalPowerConsumptionWithOverhead = $totalPowerConsumption * 1.2;
+            
+            // Calculate compatibility score if CompatibilityEngine exists
+            $compatibilityScore = null;
+            if (class_exists('CompatibilityEngine')) {
+                try {
+                    $compatibilityEngine = new CompatibilityEngine($this->pdo);
+                    $compatibilityScore = $this->calculateHardwareCompatibilityScore($componentDetails);
+                } catch (Exception $e) {
+                    error_log("Error calculating compatibility: " . $e->getMessage());
+                    $compatibilityScore = null;
                 }
             }
             
-            return $summary;
+            // Update configuration with calculated values
+            $this->updateConfigurationCalculatedFields($configUuid, $totalPowerConsumptionWithOverhead, $compatibilityScore);
+            
+            // Remove cost-related fields and fix configuration data
+            unset($configData['total_cost']);
+            $configData['power_consumption'] = round($totalPowerConsumptionWithOverhead, 2);
+            $configData['compatibility_score'] = $compatibilityScore;
+            
+            return [
+                'configuration' => $configData,
+                'components' => $componentDetails,
+                'component_counts' => $componentCounts,
+                'component_ids_uuids' => $this->getComponentIdsAndUuids($components),
+                'total_components' => $totalComponents,
+                'power_consumption' => [
+                    'total_watts' => round($totalPowerConsumption, 2),
+                    'total_with_overhead_watts' => round($totalPowerConsumptionWithOverhead, 2),
+                    'overhead_percentage' => 20
+                ],
+                'configuration_status' => $configData['configuration_status'],
+                'server_name' => $configData['server_name'],
+                'created_at' => $configData['created_at'],
+                'updated_at' => $configData['updated_at']
+            ];
             
         } catch (Exception $e) {
-            error_log("Error getting configuration summary: " . $e->getMessage());
+            error_log("Error getting configuration details: " . $e->getMessage());
             return [
                 'config_uuid' => $configUuid,
-                'components' => [],
-                'component_counts' => [],
-                'total_components' => 0,
-                'error' => 'Failed to load configuration summary'
+                'error' => 'Failed to load configuration details: ' . $e->getMessage()
             ];
         }
     }
     
     /**
-     * Validate server configuration
+     * Update server_configurations table with component information
+     */
+    private function updateServerConfigurationTable($configUuid, $componentType, $componentUuid, $quantity, $action) {
+        try {
+            $updateFields = [];
+            $updateValues = [];
+            
+            switch ($componentType) {
+                case 'cpu':
+                    if ($action === 'add') {
+                        // For multiple CPUs, we store the primary one in cpu_uuid, others in additional_components
+                        $stmt = $this->pdo->prepare("SELECT cpu_uuid FROM server_configurations WHERE config_uuid = ?");
+                        $stmt->execute([$configUuid]);
+                        $currentCpuUuid = $stmt->fetchColumn();
+                        
+                        if (!$currentCpuUuid) {
+                            // First CPU
+                            $updateFields[] = "cpu_uuid = ?";
+                            $updateValues[] = $componentUuid;
+                        } else {
+                            // Additional CPU - store in additional_components JSON
+                            $this->addToAdditionalComponents($configUuid, 'cpu', $componentUuid);
+                        }
+                    } elseif ($action === 'remove') {
+                        // Check if this is the main CPU or additional
+                        $stmt = $this->pdo->prepare("SELECT cpu_uuid FROM server_configurations WHERE config_uuid = ?");
+                        $stmt->execute([$configUuid]);
+                        $currentCpuUuid = $stmt->fetchColumn();
+                        
+                        if ($currentCpuUuid === $componentUuid) {
+                            $updateFields[] = "cpu_uuid = NULL";
+                        } else {
+                            $this->removeFromAdditionalComponents($configUuid, 'cpu', $componentUuid);
+                        }
+                    }
+                    break;
+                    
+                case 'motherboard':
+                    if ($action === 'add') {
+                        $updateFields[] = "motherboard_uuid = ?";
+                        $updateValues[] = $componentUuid;
+                    } elseif ($action === 'remove') {
+                        $updateFields[] = "motherboard_uuid = NULL";
+                    }
+                    break;
+                    
+                case 'ram':
+                    $this->updateRamConfiguration($configUuid, $componentUuid, $quantity, $action);
+                    break;
+                    
+                case 'storage':
+                    $this->updateStorageConfiguration($configUuid, $componentUuid, $quantity, $action);
+                    break;
+                    
+                case 'nic':
+                    $this->updateNicConfiguration($configUuid, $componentUuid, $quantity, $action);
+                    break;
+                    
+                case 'caddy':
+                    $this->updateCaddyConfiguration($configUuid, $componentUuid, $quantity, $action);
+                    break;
+            }
+            
+            if (!empty($updateFields)) {
+                $sql = "UPDATE server_configurations SET " . implode(', ', $updateFields) . ", updated_at = NOW() WHERE config_uuid = ?";
+                $updateValues[] = $configUuid;
+                
+                $stmt = $this->pdo->prepare($sql);
+                $stmt->execute($updateValues);
+            }
+            
+        } catch (Exception $e) {
+            error_log("Error updating server configuration table: " . $e->getMessage());
+            throw $e;
+        }
+    }
+    
+    /**
+     * Update RAM configuration in JSON format
+     */
+    private function updateRamConfiguration($configUuid, $componentUuid, $quantity, $action) {
+        try {
+            $stmt = $this->pdo->prepare("SELECT ram_configuration FROM server_configurations WHERE config_uuid = ?");
+            $stmt->execute([$configUuid]);
+            $currentConfig = $stmt->fetchColumn();
+            
+            $ramConfig = $currentConfig ? json_decode($currentConfig, true) : [];
+            if (!is_array($ramConfig)) {
+                $ramConfig = [];
+            }
+            
+            if ($action === 'add') {
+                $ramConfig[] = [
+                    'uuid' => $componentUuid,
+                    'quantity' => $quantity,
+                    'added_at' => date('Y-m-d H:i:s')
+                ];
+            } elseif ($action === 'remove') {
+                $ramConfig = array_filter($ramConfig, function($ram) use ($componentUuid) {
+                    return $ram['uuid'] !== $componentUuid;
+                });
+                $ramConfig = array_values($ramConfig); // Reindex array
+            }
+            
+            $stmt = $this->pdo->prepare("UPDATE server_configurations SET ram_configuration = ?, updated_at = NOW() WHERE config_uuid = ?");
+            $stmt->execute([json_encode($ramConfig), $configUuid]);
+            
+        } catch (Exception $e) {
+            error_log("Error updating RAM configuration: " . $e->getMessage());
+            throw $e;
+        }
+    }
+    
+    /**
+     * Update storage configuration in JSON format
+     */
+    private function updateStorageConfiguration($configUuid, $componentUuid, $quantity, $action) {
+        try {
+            $stmt = $this->pdo->prepare("SELECT storage_configuration FROM server_configurations WHERE config_uuid = ?");
+            $stmt->execute([$configUuid]);
+            $currentConfig = $stmt->fetchColumn();
+            
+            $storageConfig = $currentConfig ? json_decode($currentConfig, true) : [];
+            if (!is_array($storageConfig)) {
+                $storageConfig = [];
+            }
+            
+            if ($action === 'add') {
+                $storageConfig[] = [
+                    'uuid' => $componentUuid,
+                    'quantity' => $quantity,
+                    'added_at' => date('Y-m-d H:i:s')
+                ];
+            } elseif ($action === 'remove') {
+                $storageConfig = array_filter($storageConfig, function($storage) use ($componentUuid) {
+                    return $storage['uuid'] !== $componentUuid;
+                });
+                $storageConfig = array_values($storageConfig);
+            }
+            
+            $stmt = $this->pdo->prepare("UPDATE server_configurations SET storage_configuration = ?, updated_at = NOW() WHERE config_uuid = ?");
+            $stmt->execute([json_encode($storageConfig), $configUuid]);
+            
+        } catch (Exception $e) {
+            error_log("Error updating storage configuration: " . $e->getMessage());
+            throw $e;
+        }
+    }
+
+
+    /**
+     * Update NIC configuration in JSON format
+     */
+    private function updateNicConfiguration($configUuid, $componentUuid, $quantity, $action) {
+        try {
+            $stmt = $this->pdo->prepare("SELECT nic_configuration FROM server_configurations WHERE config_uuid = ?");
+            $stmt->execute([$configUuid]);
+            $currentConfig = $stmt->fetchColumn();
+            
+            $nicConfig = $currentConfig ? json_decode($currentConfig, true) : [];
+            if (!is_array($nicConfig)) {
+                $nicConfig = [];
+            }
+            
+            if ($action === 'add') {
+                $nicConfig[] = [
+                    'uuid' => $componentUuid,
+                    'quantity' => $quantity,
+                    'added_at' => date('Y-m-d H:i:s')
+                ];
+            } elseif ($action === 'remove') {
+                $nicConfig = array_filter($nicConfig, function($nic) use ($componentUuid) {
+                    return $nic['uuid'] !== $componentUuid;
+                });
+                $nicConfig = array_values($nicConfig);
+            }
+            
+            $stmt = $this->pdo->prepare("UPDATE server_configurations SET nic_configuration = ?, updated_at = NOW() WHERE config_uuid = ?");
+            $stmt->execute([json_encode($nicConfig), $configUuid]);
+            
+        } catch (Exception $e) {
+            error_log("Error updating NIC configuration: " . $e->getMessage());
+            throw $e;
+        }
+    }
+    
+    /**
+     * Update caddy configuration in JSON format
+     */
+    private function updateCaddyConfiguration($configUuid, $componentUuid, $quantity, $action) {
+        try {
+            $stmt = $this->pdo->prepare("SELECT caddy_configuration FROM server_configurations WHERE config_uuid = ?");
+            $stmt->execute([$configUuid]);
+            $currentConfig = $stmt->fetchColumn();
+            
+            $caddyConfig = $currentConfig ? json_decode($currentConfig, true) : [];
+            if (!is_array($caddyConfig)) {
+                $caddyConfig = [];
+            }
+            
+            if ($action === 'add') {
+                $caddyConfig[] = [
+                    'uuid' => $componentUuid,
+                    'quantity' => $quantity,
+                    'added_at' => date('Y-m-d H:i:s')
+                ];
+            } elseif ($action === 'remove') {
+                $caddyConfig = array_filter($caddyConfig, function($caddy) use ($componentUuid) {
+                    return $caddy['uuid'] !== $componentUuid;
+                });
+                $caddyConfig = array_values($caddyConfig);
+            }
+            
+            $stmt = $this->pdo->prepare("UPDATE server_configurations SET caddy_configuration = ?, updated_at = NOW() WHERE config_uuid = ?");
+            $stmt->execute([json_encode($caddyConfig), $configUuid]);
+            
+        } catch (Exception $e) {
+            error_log("Error updating caddy configuration: " . $e->getMessage());
+            throw $e;
+        }
+    }
+    
+    /**
+     * Update configuration metrics (power, compatibility, validation)
+     */
+    private function updateConfigurationMetrics($configUuid) {
+        try {
+            $details = $this->getConfigurationSummary($configUuid);
+            
+            $totalPower = 0;
+            foreach ($details['components'] ?? [] as $type => $components) {
+                foreach ($components as $component) {
+                    if (isset($component['details'])) {
+                        $power = $this->calculateComponentPower($type, $component['details']);
+                        $totalPower += $power * ($component['quantity'] ?? 1);
+                    }
+                }
+            }
+            
+            $totalPowerWithOverhead = $totalPower * 1.2;
+            
+            // Calculate compatibility score
+            $compatibilityScore = null;
+            if (class_exists('CompatibilityEngine')) {
+                try {
+                    $compatibilityScore = $this->calculateHardwareCompatibilityScore($details);
+                } catch (Exception $e) {
+                    error_log("Error calculating compatibility: " . $e->getMessage());
+                }
+            }
+            
+            // Update the configuration
+            $this->updateConfigurationCalculatedFields($configUuid, $totalPowerWithOverhead, $compatibilityScore);
+            
+        } catch (Exception $e) {
+            error_log("Error updating configuration metrics: " . $e->getMessage());
+        }
+    }
+    
+    /**
+     * Update calculated fields in configuration
+     */
+    private function updateConfigurationCalculatedFields($configUuid, $powerConsumption, $compatibilityScore) {
+        try {
+            $sql = "UPDATE server_configurations SET power_consumption = ?, compatibility_score = ?, updated_at = NOW() WHERE config_uuid = ?";
+            $params = [$powerConsumption, $compatibilityScore, $configUuid];
+            
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute($params);
+            
+        } catch (Exception $e) {
+            error_log("Error updating calculated fields: " . $e->getMessage());
+        }
+    }
+    
+    /**
+     * Get configuration summary - backwards compatibility
+     */
+    public function getConfigurationSummary($configUuid) {
+        $details = $this->getConfigurationDetails($configUuid);
+        
+        // Return summary format for backwards compatibility
+        return [
+            'config_uuid' => $configUuid,
+            'components' => $details['components'] ?? [],
+            'component_counts' => $details['component_counts'] ?? [],
+            'total_components' => $details['total_components'] ?? 0,
+            'server_name' => $details['server_name'] ?? '',
+            'configuration_status' => $details['configuration_status'] ?? 0,
+            'error' => $details['error'] ?? null
+        ];
+    }
+    
+    /**
+     * Validate server configuration with FIXED compatibility-based scoring
      */
     public function validateConfiguration($configUuid) {
         try {
+            error_log("Starting validation for config: $configUuid");
+            
             $summary = $this->getConfigurationSummary($configUuid);
             
             $validation = [
                 'is_valid' => true,
-                'compatibility_score' => 100,
+                'compatibility_score' => 100.0,
                 'issues' => [],
                 'warnings' => [],
                 'recommendations' => [],
@@ -306,145 +618,64 @@ class ServerBuilder {
                 ]
             ];
             
-            // Check for required components with improved detection
+            // Check for required components
             $requiredComponents = ['cpu', 'motherboard', 'ram'];
-            $missingRequired = 0;
             $presentComponents = array_keys($summary['components'] ?? []);
             
             foreach ($requiredComponents as $required) {
-                $componentFound = false;
-                
-                // Check exact match first
-                if (isset($summary['components'][$required]) && !empty($summary['components'][$required])) {
-                    $componentFound = true;
-                }
-                
-                // If not found, check case-insensitive and variations
-                if (!$componentFound) {
-                    foreach ($presentComponents as $presentType) {
-                        if (strtolower($presentType) === strtolower($required)) {
-                            $componentFound = true;
-                            break;
-                        }
-                    }
-                }
-                
-                if (!$componentFound) {
+                if (!in_array($required, $presentComponents)) {
                     $validation['is_valid'] = false;
                     $validation['issues'][] = "Missing required component: " . ucfirst($required);
-                    $missingRequired++;
                 }
             }
             
-            // Check for recommended components
+            // Check recommended components
             $recommendedComponents = ['storage'];
-            $missingRecommended = 0;
-            
             foreach ($recommendedComponents as $recommended) {
-                $componentFound = false;
-                
-                // Check exact match first
-                if (isset($summary['components'][$recommended]) && !empty($summary['components'][$recommended])) {
-                    $componentFound = true;
-                }
-                
-                // If not found, check case-insensitive
-                if (!$componentFound) {
-                    foreach ($presentComponents as $presentType) {
-                        if (strtolower($presentType) === strtolower($recommended)) {
-                            $componentFound = true;
-                            break;
-                        }
-                    }
-                }
-                
-                if (!$componentFound) {
+                if (!in_array($recommended, $presentComponents)) {
                     $validation['warnings'][] = "Missing recommended component: " . ucfirst($recommended);
-                    $missingRecommended++;
                 }
             }
             
-            // Check component availability and status
-            $failedComponents = 0;
-            $inUseComponents = 0;
-            
-            foreach ($summary['components'] as $type => $components) {
+            // FIXED: Check for "in-use" warnings based on ServerUUID - only warn if in different config
+            foreach ($summary['components'] ?? [] as $type => $components) {
                 foreach ($components as $component) {
-                    if (isset($component['details']) && isset($component['details']['Status'])) {
+                    if (isset($component['details']['Status'])) {
                         $status = (int)$component['details']['Status'];
-                        switch ($status) {
-                            case 0: // Failed/Defective
-                                $validation['is_valid'] = false;
-                                $validation['issues'][] = "Component $type ({$component['component_uuid']}) is marked as failed/defective";
-                                $failedComponents++;
-                                break;
-                            case 2: // In Use
-                                $validation['warnings'][] = "Component $type ({$component['component_uuid']}) is currently in use";
-                                $inUseComponents++;
-                                break;
+                        $serverUuid = $component['details']['ServerUUID'] ?? null;
+                        
+                        if ($status === 2) { // In Use
+                            // Only show warning if component is in use in a DIFFERENT configuration
+                            if ($serverUuid && $serverUuid !== $configUuid) {
+                                $validation['warnings'][] = "Component {$component['component_uuid']} is in use in another configuration ($serverUuid)";
+                            }
+                            // If ServerUUID matches current config or is null, no warning needed
+                        } elseif ($status === 0) {
+                            $validation['issues'][] = "Component {$component['component_uuid']} is marked as failed/defective";
                         }
                     }
                 }
             }
             
-            // Calculate compatibility score based on various factors
-            $baseScore = 100;
+            // FIXED: Calculate compatibility score based on actual hardware compatibility (not component count)
+            $compatibilityScore = $this->calculateHardwareCompatibilityScore($summary);
+            $validation['compatibility_score'] = $compatibilityScore;
             
-            // Deduct for missing required components (major impact)
-            $baseScore -= ($missingRequired * 30);
-            
-            // Deduct for missing recommended components (minor impact)
-            $baseScore -= ($missingRecommended * 10);
-            
-            // Deduct for failed components (critical impact)
-            $baseScore -= ($failedComponents * 40);
-            
-            // Small deduction for in-use components (warning)
-            $baseScore -= ($inUseComponents * 5);
-            
-            // Ensure score doesn't go below 0
-            $validation['compatibility_score'] = max(0, $baseScore);
-            
-            // Run compatibility checks if engine is available
-            if (class_exists('ComponentCompatibility')) {
-                $compatibilityEngine = new ComponentCompatibility($this->pdo);
-                $compatibilityResults = $this->checkConfigurationCompatibility($configUuid, $compatibilityEngine);
-                
-                foreach ($compatibilityResults as $result) {
-                    if (!$result['compatible']) {
-                        $validation['is_valid'] = false;
-                        $validation['issues'] = array_merge($validation['issues'], $result['issues']);
-                        // Reduce score for each compatibility issue
-                        $validation['compatibility_score'] = max(0, $validation['compatibility_score'] - 15);
-                    }
-                    if (isset($result['warnings'])) {
-                        $validation['warnings'] = array_merge($validation['warnings'], $result['warnings']);
-                        // Small reduction for warnings
-                        $validation['compatibility_score'] = max(0, $validation['compatibility_score'] - 5);
-                    }
-                }
+            // Adjust overall validity based on compatibility
+            if ($compatibilityScore < 70) {
+                $validation['is_valid'] = false;
+                $validation['issues'][] = "Hardware compatibility issues detected (score: $compatibilityScore%)";
             }
             
-            // Add recommendations based on what's missing
-            if ($missingRequired > 0) {
-                $validation['recommendations'][] = "Add all required components (CPU, Motherboard, RAM) before finalizing";
+            // Add recommendations
+            if (!$validation['is_valid']) {
+                $validation['recommendations'][] = "Resolve all compatibility issues before finalizing";
             }
-            if ($missingRecommended > 0) {
-                $validation['recommendations'][] = "Consider adding storage components for a complete server build";
-            }
-            if ($failedComponents > 0) {
-                $validation['recommendations'][] = "Replace failed/defective components before finalizing configuration";
+            if ($compatibilityScore < 90) {
+                $validation['recommendations'][] = "Review component compatibility for optimal performance";
             }
             
-            // Add debug information
-            $validation['debug_info'] = [
-                'found_components' => $presentComponents,
-                'missing_required' => $missingRequired,
-                'missing_recommended' => $missingRecommended,
-                'failed_components' => $failedComponents,
-                'in_use_components' => $inUseComponents,
-                'total_component_types' => count($presentComponents)
-            ];
+            error_log("Validation complete. Is valid: " . ($validation['is_valid'] ? 'yes' : 'no') . ", Compatibility Score: " . $validation['compatibility_score']);
             
             return $validation;
             
@@ -456,11 +687,14 @@ class ServerBuilder {
                 'issues' => ['Validation failed due to system error: ' . $e->getMessage()],
                 'warnings' => [],
                 'recommendations' => [],
-                'debug_info' => ['error' => $e->getMessage()]
+                'component_summary' => [
+                    'total_components' => 0,
+                    'component_counts' => []
+                ]
             ];
         }
     }
-    
+
     /**
      * Finalize configuration
      */
@@ -479,7 +713,7 @@ class ServerBuilder {
             // Update configuration status
             $stmt = $this->pdo->prepare("
                 UPDATE server_configurations 
-                SET configuration_status = 3, finalization_notes = ?, finalized_at = NOW(), updated_at = NOW()
+                SET configuration_status = 3, notes = ?, updated_at = NOW()
                 WHERE config_uuid = ?
             ");
             $stmt->execute([$notes, $configUuid]);
@@ -487,14 +721,14 @@ class ServerBuilder {
             // Log the finalization
             $this->logConfigurationAction($configUuid, 'finalize', 'configuration', null, [
                 'notes' => $notes,
-                'validation_score' => $validation['compatibility_score']
+                'compatibility_score' => $validation['compatibility_score']
             ]);
             
             return [
                 'success' => true,
                 'message' => "Configuration finalized successfully",
                 'finalization_timestamp' => date('Y-m-d H:i:s'),
-                'validation_score' => $validation['compatibility_score']
+                'compatibility_score' => $validation['compatibility_score']
             ];
             
         } catch (Exception $e) {
@@ -519,14 +753,15 @@ class ServerBuilder {
                 WHERE config_uuid = ?
             ");
             $stmt->execute([$configUuid]);
-            $components = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            $components =$stmt->fetchAll(PDO::FETCH_ASSOC);
             
-            // Release components back to available status
+            // Release components back to available status and clear ServerUUID
             foreach ($components as $component) {
-                $this->updateComponentStatus(
+                $this->updateComponentStatusAndServerUuid(
                     $component['component_type'], 
                     $component['component_uuid'], 
                     1, 
+                    null,
                     "Released from deleted configuration $configUuid"
                 );
             }
@@ -534,6 +769,14 @@ class ServerBuilder {
             // Delete configuration components
             $stmt = $this->pdo->prepare("DELETE FROM server_configuration_components WHERE config_uuid = ?");
             $stmt->execute([$configUuid]);
+            
+            // Delete configuration history if exists
+            try {
+                $stmt = $this->pdo->prepare("DELETE FROM server_configuration_history WHERE config_uuid = ?");
+                $stmt->execute([$configUuid]);
+            } catch (Exception $historyError) {
+                error_log("Could not delete history (table might not exist): " . $historyError->getMessage());
+            }
             
             // Delete configuration
             $stmt = $this->pdo->prepare("DELETE FROM server_configurations WHERE config_uuid = ?");
@@ -559,6 +802,9 @@ class ServerBuilder {
     
     // Private helper methods
     
+    /**
+     * Generate UUID for configuration
+     */
     private function generateUuid() {
         return sprintf('%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
             mt_rand(0, 0xffff), mt_rand(0, 0xffff),
@@ -569,35 +815,65 @@ class ServerBuilder {
         );
     }
     
+    /**
+     * Check if component type is valid
+     */
     private function isValidComponentType($componentType) {
         return isset($this->componentTables[$componentType]);
     }
     
+    /**
+     * Check if component can only have single instance in configuration
+     */
     private function isSingleInstanceComponent($componentType) {
         return in_array($componentType, ['motherboard']);
     }
     
+    /**
+     * Get component by UUID with improved error handling
+     */
     private function getComponentByUuid($componentType, $componentUuid) {
         if (!isset($this->componentTables[$componentType])) {
+            error_log("Invalid component type: $componentType");
             return null;
         }
         
         try {
             $table = $this->componentTables[$componentType];
+            
+            // Try exact match first
             $stmt = $this->pdo->prepare("SELECT * FROM $table WHERE UUID = ?");
             $stmt->execute([$componentUuid]);
-            return $stmt->fetch(PDO::FETCH_ASSOC);
+            $result = $stmt->fetch(PDO::FETCH_ASSOC);
+            
+            if ($result) {
+                return $result;
+            }
+            
+            // Try case-insensitive match for UUID issues
+            $stmt = $this->pdo->prepare("SELECT * FROM $table WHERE TRIM(UPPER(UUID)) = UPPER(TRIM(?))");
+            $stmt->execute([$componentUuid]);
+            $result = $stmt->fetch(PDO::FETCH_ASSOC);
+            
+            return $result;
+            
         } catch (Exception $e) {
-            error_log("Error getting component by UUID: " . $e->getMessage());
+            error_log("Error getting component by UUID from {$this->componentTables[$componentType]}: " . $e->getMessage());
             return null;
         }
     }
     
-    private function checkComponentAvailability($componentDetails, $options = []) {
+    /**
+     * FIXED: Check component availability with ServerUUID context
+     */
+    private function checkComponentAvailability($componentDetails, $configUuid, $options = []) {
         $status = (int)$componentDetails['Status'];
+        $serverUuid = $componentDetails['ServerUUID'] ?? null;
+        
         $result = [
             'available' => false,
             'status' => $status,
+            'server_uuid' => $serverUuid,
             'message' => '',
             'can_override' => false
         ];
@@ -612,8 +888,16 @@ class ServerBuilder {
                 $result['message'] = "Component is Available";
                 break;
             case 2:
-                $result['message'] = "Component is currently In Use";
-                $result['can_override'] = true;
+                if ($serverUuid === $configUuid) {
+                    $result['available'] = true;
+                    $result['message'] = "Component is already assigned to this configuration";
+                } elseif ($serverUuid) {
+                    $result['message'] = "Component is currently in use in configuration: $serverUuid";
+                    $result['can_override'] = true;
+                } else {
+                    $result['message'] = "Component is currently In Use";
+                    $result['can_override'] = true;
+                }
                 break;
             default:
                 $result['message'] = "Component has unknown status: $status";
@@ -623,6 +907,9 @@ class ServerBuilder {
         return $result;
     }
     
+    /**
+     * Get configuration component by type
+     */
     private function getConfigurationComponent($configUuid, $componentType) {
         try {
             $stmt = $this->pdo->prepare("
@@ -637,356 +924,458 @@ class ServerBuilder {
         }
     }
     
-    private function updateComponentStatus($componentType, $componentUuid, $newStatus, $reason = '') {
+    /**
+     * Update component status AND ServerUUID 
+     */
+    private function updateComponentStatusAndServerUuid($componentType, $componentUuid, $newStatus, $serverUuid, $reason = '') {
         if (!isset($this->componentTables[$componentType])) {
+            error_log("Cannot update status - invalid component type: $componentType");
             return false;
         }
         
         try {
             $table = $this->componentTables[$componentType];
-            $stmt = $this->pdo->prepare("
-                UPDATE $table 
-                SET Status = ?, UpdatedAt = NOW() 
-                WHERE UUID = ?
-            ");
-            $stmt->execute([$newStatus, $componentUuid]);
             
-            // Log the status change if history table exists
-            try {
-                $historyTable = $table . '_history';
-                $stmt = $this->pdo->prepare("
-                    INSERT INTO $historyTable 
-                    (component_uuid, action, old_status, new_status, reason, created_at) 
-                    VALUES (?, 'status_change', (SELECT Status FROM $table WHERE UUID = ?), ?, ?, NOW())
-                ");
-                $stmt->execute([$componentUuid, $componentUuid, $newStatus, $reason]);
-            } catch (Exception $e) {
-                // History table might not exist, that's okay
+            // Get current status first for logging
+            $stmt = $this->pdo->prepare("SELECT Status, ServerUUID FROM $table WHERE UUID = ?");
+            $stmt->execute([$componentUuid]);
+            $current = $stmt->fetch(PDO::FETCH_ASSOC);
+            
+            if ($current === false) {
+                error_log("Cannot update status - component not found: $componentUuid in $table");
+                return false;
             }
             
-            return true;
+            // Update both status and ServerUUID
+            $stmt = $this->pdo->prepare("
+                UPDATE $table 
+                SET Status = ?, ServerUUID = ?, UpdatedAt = NOW() 
+                WHERE UUID = ?
+            ");
+            $result = $stmt->execute([$newStatus, $serverUuid, $componentUuid]);
+            
+            if ($result) {
+                error_log("Updated component: $componentUuid in $table - Status: {$current['Status']} -> $newStatus, ServerUUID: '{$current['ServerUUID']}' -> '$serverUuid' - $reason");
+            } else {
+                error_log("Failed to update component: $componentUuid in $table");
+            }
+            
+            return $result;
+            
         } catch (Exception $e) {
-            error_log("Error updating component status: " . $e->getMessage());
+            error_log("Error updating component status and ServerUUID: " . $e->getMessage());
             return false;
         }
     }
     
-    private function logConfigurationAction($configUuid, $action, $componentType = null, $componentUuid = null, $details = [], $userId = null) {
+    /**
+     * Get component IDs and UUIDs for detailed response
+     */
+    private function getComponentIdsAndUuids($components) {
+        $idsUuids = [];
+        
+        foreach ($components as $component) {
+            $type = $component['component_type'];
+            if (!isset($idsUuids[$type])) {
+                $idsUuids[$type] = [];
+            }
+            
+            $idsUuids[$type][] = [
+                'component_uuid' => $component['component_uuid'],
+                'quantity' => $component['quantity'],
+                'slot_position' => $component['slot_position'],
+                'notes' => $component['notes'],
+                'added_at' => $component['added_at']
+            ];
+        }
+        
+        return $idsUuids;
+    }
+    
+    /**
+     * Calculate component power consumption from specifications
+     */
+    private function calculateComponentPower($componentType, $componentDetails) {
+        // Default power estimates by component type (watts)
+        $defaultPower = [
+            'cpu' => 150,        
+            'ram' => 8,          
+            'storage' => 15,     
+            'motherboard' => 50, 
+            'nic' => 25,         
+            'caddy' => 5         
+        ];
+        
+        $basePower = $defaultPower[$componentType] ?? 50;
+        
         try {
+            // Try to extract power from Notes field or component specifications
+            $notes = $componentDetails['Notes'] ?? '';
+            
+            // Look for power consumption patterns in notes
+            if (preg_match('/(\d+)\s*W(?:att)?s?/i', $notes, $matches)) {
+                return (int)$matches[1];
+            }
+            
+            // Look for TDP patterns
+            if (preg_match('/TDP[:\s]*(\d+)\s*W/i', $notes, $matches)) {
+                return (int)$matches[1];
+            }
+            
+            // Component-specific power calculation
+            switch ($componentType) {
+                case 'cpu':
+                    // Try to extract core count and frequency for better estimation
+                    if (preg_match('/(\d+)-core/i', $notes, $matches)) {
+                        $cores = (int)$matches[1];
+                        $basePower = min(300, $cores * 2.5); // Rough estimate: 2.5W per core, max 300W
+                    }
+                    break;
+                    
+                case 'ram':
+                    // Try to extract memory size
+                    if (preg_match('/(\d+)\s*GB/i', $notes, $matches)) {
+                        $size = (int)$matches[1];
+                        $basePower = max(4, min(16, $size / 4)); // Rough: 1W per 4GB, min 4W, max 16W
+                    }
+                    break;
+                    
+                case 'storage':
+                    // SSDs generally consume less power than HDDs
+                    if (stripos($notes, 'SSD') !== false || stripos($notes, 'NVMe') !== false) {
+                        $basePower = 8;
+                    } elseif (stripos($notes, 'HDD') !== false) {
+                        $basePower = 12;
+                    }
+                    break;
+            }
+            
+        } catch (Exception $e) {
+            error_log("Error calculating power for component: " . $e->getMessage());
+        }
+        
+        return $basePower;
+    }
+    
+    /**
+     * FIXED: Calculate hardware compatibility score based on actual component compatibility
+     */
+    private function calculateHardwareCompatibilityScore($summary) {
+        $score = 100.0;
+        $components = $summary['components'] ?? [];
+        
+        try {
+            // If we don't have basic components, score is low
+            if (empty($components)) {
+                return 0.0;
+            }
+            
+            $motherboard = null;
+            $cpus = [];
+            $rams = [];
+            
+            // Extract key components
+            if (isset($components['motherboard']) && !empty($components['motherboard'])) {
+                $motherboard = $components['motherboard'][0]['details'] ?? null;
+            }
+            
+            if (isset($components['cpu'])) {
+                foreach ($components['cpu'] as $cpu) {
+                    if (isset($cpu['details'])) {
+                        $cpus[] = $cpu['details'];
+                    }
+                }
+            }
+            
+            if (isset($components['ram'])) {
+                foreach ($components['ram'] as $ram) {
+                    if (isset($ram['details'])) {
+                        $rams[] = $ram['details'];
+                    }
+                }
+            }
+            
+            // Check motherboard-CPU compatibility
+            if ($motherboard && !empty($cpus)) {
+                $compatibilityScore = $this->checkMotherboardCpuCompatibility($motherboard, $cpus);
+                $score = min($score, $compatibilityScore);
+            }
+            
+            // Check motherboard-RAM compatibility
+            if ($motherboard && !empty($rams)) {
+                $ramCompatibilityScore = $this->checkMotherboardRamCompatibility($motherboard, $rams);
+                $score = min($score, $ramCompatibilityScore);
+            }
+            
+            // Check power requirements vs motherboard capacity
+            $powerScore = $this->checkPowerCompatibility($components);
+            $score = min($score, $powerScore);
+            
+            // Check form factor compatibility
+            $formFactorScore = $this->checkFormFactorCompatibility($components);
+            $score = min($score, $formFactorScore);
+            
+        } catch (Exception $e) {
+            error_log("Error calculating hardware compatibility score: " . $e->getMessage());
+            $score = 50.0; // Default to medium compatibility on error
+        }
+        
+        return round($score, 1);
+    }
+    
+    /**
+     * Check motherboard-CPU socket compatibility
+     */
+    private function checkMotherboardCpuCompatibility($motherboard, $cpus) {
+        $score = 100.0;
+        
+        try {
+            $mbNotes = strtolower($motherboard['Notes'] ?? '');
+            
+            // Extract motherboard socket type
+            $mbSocket = $this->extractSocketType($mbNotes);
+            
+            foreach ($cpus as $cpu) {
+                $cpuNotes = strtolower($cpu['Notes'] ?? '');
+                $cpuSocket = $this->extractSocketType($cpuNotes);
+                
+                if ($mbSocket && $cpuSocket) {
+                    if ($mbSocket !== $cpuSocket) {
+                        $score = 0.0; // Complete incompatibility
+                        error_log("CPU socket mismatch: Motherboard has $mbSocket, CPU requires $cpuSocket");
+                        break;
+                    }
+                } else {
+                    // If we can't determine socket types, reduce score but don't fail completely
+                    $score = min($score, 70.0);
+                    error_log("Could not determine socket compatibility - MB socket: $mbSocket, CPU socket: $cpuSocket");
+                }
+            }
+            
+        } catch (Exception $e) {
+            error_log("Error checking motherboard-CPU compatibility: " . $e->getMessage());
+            $score = 50.0;
+        }
+        
+        return $score;
+    }
+    
+    /**
+     * Check motherboard-RAM compatibility
+     */
+    private function checkMotherboardRamCompatibility($motherboard, $rams) {
+        $score = 100.0;
+        
+        try {
+            $mbNotes = strtolower($motherboard['Notes'] ?? '');
+            
+            // Extract motherboard supported RAM types
+            $mbMemoryTypes = $this->extractMemoryTypes($mbNotes);
+            
+            foreach ($rams as $ram) {
+                $ramNotes = strtolower($ram['Notes'] ?? '');
+                $ramType = $this->extractMemoryType($ramNotes);
+                
+                if (!empty($mbMemoryTypes) && $ramType) {
+                    if (!in_array($ramType, $mbMemoryTypes)) {
+                        $score = min($score, 10.0); // Major incompatibility
+                        error_log("RAM type mismatch: Motherboard supports " . implode(',', $mbMemoryTypes) . ", RAM is $ramType");
+                    }
+                } else {
+                    // If we can't determine memory types, reduce score slightly
+                    $score = min($score, 80.0);
+                }
+            }
+            
+        } catch (Exception $e) {
+            error_log("Error checking motherboard-RAM compatibility: " . $e->getMessage());
+            $score = 60.0;
+        }
+        
+        return $score;
+    }
+    
+    /**
+     * Check power compatibility
+     */
+    private function checkPowerCompatibility($components) {
+        $score = 100.0;
+        
+        try {
+            $totalPower = 0;
+            
+            foreach ($components as $type => $typeComponents) {
+                foreach ($typeComponents as $component) {
+                    $details = $component['details'] ?? [];
+                    $power = $this->calculateComponentPower($type, $details);
+                    $quantity = $component['quantity'] ?? 1;
+                    $totalPower += $power * $quantity;
+                }
+            }
+            
+            // Check if total power is reasonable (not too high for typical motherboard)
+            if ($totalPower > 1000) { // Very high power consumption
+                $score = 30.0;
+            } elseif ($totalPower > 750) {
+                $score = 60.0;
+            } elseif ($totalPower > 500) {
+                $score = 85.0;
+            }
+            
+        } catch (Exception $e) {
+            error_log("Error checking power compatibility: " . $e->getMessage());
+            $score = 75.0;
+        }
+        
+        return $score;
+    }
+    
+    /**
+     * Check form factor compatibility
+     */
+    private function checkFormFactorCompatibility($components) {
+        $score = 100.0;
+        
+        try {
+            // This is a placeholder for more advanced form factor checking
+            // Could check if components physically fit together
+            
+            // For now, just check basic constraints
+            if (isset($components['motherboard']) && isset($components['ram'])) {
+                $ramCount = count($components['ram']);
+                
+                // Rough check: most motherboards support 2-4 RAM modules
+                if ($ramCount > 8) {
+                    $score = 40.0;
+                } elseif ($ramCount > 6) {
+                    $score = 70.0;
+                }
+            }
+            
+        } catch (Exception $e) {
+            error_log("Error checking form factor compatibility: " . $e->getMessage());
+            $score = 85.0;
+        }
+        
+        return $score;
+    }
+    
+    /**
+     * Extract socket type from component notes
+     */
+    private function extractSocketType($notes) {
+        $commonSockets = [
+            'lga1151', 'lga1150', 'lga1155', 'lga1156', 'lga1200', 'lga1700',
+            'lga2011', 'lga2066', 'lga3647',
+            'am4', 'am5', 'tr4', 'strx4',
+            'socket 1151', 'socket 1150', 'socket 1200', 'socket 1700',
+            'socket am4', 'socket am5'
+        ];
+        
+        foreach ($commonSockets as $socket) {
+            if (strpos($notes, $socket) !== false) {
+                // Normalize socket name
+                $socket = str_replace('socket ', '', $socket);
+                return $socket;
+            }
+        }
+        
+        return null;
+    }
+    
+    /**
+     * Extract memory types from motherboard notes
+     */
+    private function extractMemoryTypes($notes) {
+        $types = [];
+        
+        if (strpos($notes, 'ddr5') !== false) {
+            $types[] = 'ddr5';
+        }
+        if (strpos($notes, 'ddr4') !== false) {
+            $types[] = 'ddr4';
+        }
+        if (strpos($notes, 'ddr3') !== false) {
+            $types[] = 'ddr3';
+        }
+        
+        return $types;
+    }
+    
+    /**
+     * Extract memory type from RAM notes
+     */
+    private function extractMemoryType($notes) {
+        if (strpos($notes, 'ddr5') !== false) {
+            return 'ddr5';
+        }
+        if (strpos($notes, 'ddr4') !== false) {
+            return 'ddr4';
+        }
+        if (strpos($notes, 'ddr3') !== false) {
+            return 'ddr3';
+        }
+        
+        return null;
+    }
+    
+    /**
+     * Log configuration action
+     */
+    private function logConfigurationAction($configUuid, $action, $componentType = null, $componentUuid = null, $metadata = null) {
+        try {
+            // Check if history table exists
+            $stmt = $this->pdo->prepare("SHOW TABLES LIKE 'server_configuration_history'");
+            $stmt->execute();
+            if (!$stmt->fetch()) {
+                // Create history table if it doesn't exist
+                $this->createHistoryTable();
+            }
+            
             $stmt = $this->pdo->prepare("
                 INSERT INTO server_configuration_history 
-                (config_uuid, action, component_type, component_uuid, action_details, user_id, created_at) 
-                VALUES (?, ?, ?, ?, ?, ?, NOW())
+                (config_uuid, action, component_type, component_uuid, metadata, created_at) 
+                VALUES (?, ?, ?, ?, ?, NOW())
             ");
             $stmt->execute([
-                $configUuid,
-                $action,
-                $componentType,
-                $componentUuid,
-                json_encode($details),
-                $userId
+                $configUuid, 
+                $action, 
+                $componentType, 
+                $componentUuid, 
+                json_encode($metadata)
             ]);
         } catch (Exception $e) {
             error_log("Error logging configuration action: " . $e->getMessage());
         }
     }
     
-    private function checkComponentLimits($configUuid, $componentType, $requestedQuantity) {
+    /**
+     * Create history table if it doesn't exist
+     */
+    private function createHistoryTable() {
         try {
-            // Get motherboard from configuration to check limits
-            $motherboardComponent = $this->getConfigurationComponent($configUuid, 'motherboard');
-            if (!$motherboardComponent) {
-                return [
-                    'allowed' => false,
-                    'message' => 'Motherboard must be added first to determine component limits',
-                    'current_count' => 0,
-                    'max_allowed' => 0
-                ];
-            }
-            
-            // Get motherboard specifications
-            $motherboardDetails = $this->getComponentByUuid('motherboard', $motherboardComponent['component_uuid']);
-            if (!$motherboardDetails) {
-                return [
-                    'allowed' => false,
-                    'message' => 'Unable to retrieve motherboard specifications',
-                    'current_count' => 0,
-                    'max_allowed' => 0
-                ];
-            }
-            
-            $motherboardSpecs = $this->parseMotherboardSpecs($motherboardDetails);
-            
-            // Get current count of this component type in configuration
-            $currentCount = $this->getCurrentComponentCount($configUuid, $componentType);
-            
-            // Check limits based on component type
-            $limitResult = $this->validateComponentLimit($componentType, $currentCount, $requestedQuantity, $motherboardSpecs);
-            
-            return array_merge($limitResult, [
-                'current_count' => $currentCount,
-                'motherboard_specs' => $motherboardSpecs
-            ]);
-            
+            $sql = "
+                CREATE TABLE IF NOT EXISTS server_configuration_history (
+                    id int(11) NOT NULL AUTO_INCREMENT,
+                    config_uuid varchar(36) NOT NULL,
+                    action varchar(50) NOT NULL COMMENT 'created, updated, component_added, component_removed, validated, etc.',
+                    component_type varchar(20) DEFAULT NULL,
+                    component_uuid varchar(36) DEFAULT NULL,
+                    metadata text DEFAULT NULL COMMENT 'JSON metadata for the action',
+                    created_at timestamp NOT NULL DEFAULT current_timestamp(),
+                    PRIMARY KEY (id),
+                    KEY idx_config_uuid (config_uuid),
+                    KEY idx_component_uuid (component_uuid),
+                    KEY idx_created_at (created_at)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+            ";
+            $this->pdo->exec($sql);
+            error_log("Created server_configuration_history table");
         } catch (Exception $e) {
-            error_log("Error checking component limits: " . $e->getMessage());
-            return [
-                'allowed' => false,
-                'message' => 'Error validating component limits: ' . $e->getMessage(),
-                'current_count' => 0,
-                'max_allowed' => 0
-            ];
-        }
-    }
-    
-    private function getCurrentComponentCount($configUuid, $componentType) {
-        try {
-            $stmt = $this->pdo->prepare("
-                SELECT SUM(quantity) as total_count 
-                FROM server_configuration_components 
-                WHERE config_uuid = ? AND component_type = ?
-            ");
-            $stmt->execute([$configUuid, $componentType]);
-            $result = $stmt->fetch(PDO::FETCH_ASSOC);
-            return (int)($result['total_count'] ?? 0);
-        } catch (Exception $e) {
-            error_log("Error getting current component count: " . $e->getMessage());
-            return 0;
-        }
-    }
-    
-    private function validateComponentLimit($componentType, $currentCount, $requestedQuantity, $motherboardSpecs) {
-        $newTotal = $currentCount + $requestedQuantity;
-        
-        switch ($componentType) {
-            case 'cpu':
-                $maxAllowed = $motherboardSpecs['cpu_sockets'] ?? 1;
-                if ($newTotal > $maxAllowed) {
-                    return [
-                        'allowed' => false,
-                        'message' => "CPU limit exceeded. Motherboard supports $maxAllowed CPU socket(s), attempting to add $requestedQuantity more (current: $currentCount)",
-                        'max_allowed' => $maxAllowed
-                    ];
-                }
-                break;
-                
-            case 'ram':
-                $maxAllowed = $motherboardSpecs['memory_slots'] ?? 4;
-                if ($newTotal > $maxAllowed) {
-                    return [
-                        'allowed' => false,
-                        'message' => "RAM limit exceeded. Motherboard supports $maxAllowed memory slot(s), attempting to add $requestedQuantity more (current: $currentCount)",
-                        'max_allowed' => $maxAllowed
-                    ];
-                }
-                break;
-                
-            case 'storage':
-                // For storage, we need to consider different types of storage slots
-                $storageSlots = $motherboardSpecs['storage_slots'] ?? [];
-                $totalStorageSlots = ($storageSlots['sata_ports'] ?? 0) + 
-                                  ($storageSlots['m2_slots'] ?? 0) + 
-                                  ($storageSlots['u2_slots'] ?? 0);
-                
-                if ($newTotal > $totalStorageSlots) {
-                    return [
-                        'allowed' => false,
-                        'message' => "Storage limit exceeded. Motherboard supports $totalStorageSlots storage connection(s), attempting to add $requestedQuantity more (current: $currentCount)",
-                        'max_allowed' => $totalStorageSlots
-                    ];
-                }
-                break;
-                
-            case 'nic':
-            case 'caddy':
-                // These components generally don't have strict motherboard-based limits
-                // They're typically limited by PCIe slots or other expansion options
-                $pcieSlots = $motherboardSpecs['pcie_slots'] ?? [];
-                $totalPcieSlots = ($pcieSlots['x16_slots'] ?? 0) + 
-                                ($pcieSlots['x8_slots'] ?? 0) + 
-                                ($pcieSlots['x4_slots'] ?? 0) + 
-                                ($pcieSlots['x1_slots'] ?? 0);
-                
-                // Allow reasonable expansion but provide warning if exceeding slots
-                if ($newTotal > $totalPcieSlots) {
-                    return [
-                        'allowed' => true, // Allow but warn
-                        'message' => "Warning: Adding more expansion components than available PCIe slots ($totalPcieSlots)",
-                        'max_allowed' => $totalPcieSlots,
-                        'warning' => true
-                    ];
-                }
-                break;
-                
-            default:
-                // For unknown component types, allow with warning
-                return [
-                    'allowed' => true,
-                    'message' => "Component type $componentType limit validation not implemented",
-                    'max_allowed' => 999
-                ];
-        }
-        
-        return [
-            'allowed' => true,
-            'message' => 'Component quantity within limits',
-            'max_allowed' => $maxAllowed ?? 999
-        ];
-    }
-    
-    private function parseMotherboardSpecs($motherboardDetails) {
-        // This method would be similar to the one in server_api.php
-        // For now, implement basic parsing from Notes field
-        $specs = [
-            'cpu_sockets' => 1,
-            'memory_slots' => 4,
-            'storage_slots' => [
-                'sata_ports' => 4,
-                'm2_slots' => 1,
-                'u2_slots' => 0
-            ],
-            'pcie_slots' => [
-                'x16_slots' => 1,
-                'x8_slots' => 0,
-                'x4_slots' => 0,
-                'x1_slots' => 0
-            ],
-            'socket_type' => 'Unknown',
-            'memory_type' => 'DDR4'
-        ];
-        
-        $notes = $motherboardDetails['Notes'] ?? '';
-        
-        // Try to extract basic information from notes
-        if (preg_match('/(\d+)[\s]*socket/i', $notes, $matches)) {
-            $specs['cpu_sockets'] = (int)$matches[1];
-        }
-        
-        if (preg_match('/(\d+)[\s]*dimm/i', $notes, $matches)) {
-            $specs['memory_slots'] = (int)$matches[1];
-        }
-        
-        if (preg_match('/DDR(\d)/i', $notes, $matches)) {
-            $specs['memory_type'] = 'DDR' . $matches[1];
-        }
-        
-        // Try to find motherboard model in JSON data
-        try {
-            $jsonFile = __DIR__ . '/../../All JSON/motherboad jsons/motherboard level 3.json';
-            if (file_exists($jsonFile)) {
-                $jsonData = json_decode(file_get_contents($jsonFile), true);
-                if ($jsonData) {
-                    $matchedSpecs = $this->findMotherboardSpecsInJSON($jsonData, $notes);
-                    if ($matchedSpecs) {
-                        $specs = array_merge($specs, $matchedSpecs);
-                    }
-                }
-            }
-        } catch (Exception $e) {
-            error_log("Error parsing motherboard JSON: " . $e->getMessage());
-        }
-        
-        return $specs;
-    }
-    
-    private function findMotherboardSpecsInJSON($jsonData, $notes) {
-        foreach ($jsonData as $brand) {
-            if (isset($brand['models'])) {
-                foreach ($brand['models'] as $model) {
-                    if (stripos($notes, $model['model']) !== false) {
-                        return $this->extractSpecsFromJSONModel($model);
-                    }
-                }
-            }
-        }
-        return null;
-    }
-    
-    private function extractSpecsFromJSONModel($modelData) {
-        $specs = [];
-        
-        // CPU socket information
-        if (isset($modelData['socket'])) {
-            $specs['cpu_sockets'] = $modelData['socket']['count'] ?? 1;
-            $specs['socket_type'] = $modelData['socket']['type'] ?? 'Unknown';
-        }
-        
-        // Memory information
-        if (isset($modelData['memory'])) {
-            $specs['memory_slots'] = $modelData['memory']['slots'] ?? 4;
-            $specs['memory_type'] = $modelData['memory']['type'] ?? 'DDR4';
-        }
-        
-        // Storage information
-        $storageSlots = [];
-        if (isset($modelData['storage'])) {
-            if (isset($modelData['storage']['sata']['ports'])) {
-                $storageSlots['sata_ports'] = $modelData['storage']['sata']['ports'];
-            }
-            if (isset($modelData['storage']['nvme']['m2_slots'])) {
-                $m2Count = 0;
-                foreach ($modelData['storage']['nvme']['m2_slots'] as $m2Slot) {
-                    $m2Count += $m2Slot['count'] ?? 0;
-                }
-                $storageSlots['m2_slots'] = $m2Count;
-            }
-            if (isset($modelData['storage']['nvme']['u2_slots']['count'])) {
-                $storageSlots['u2_slots'] = $modelData['storage']['nvme']['u2_slots']['count'];
-            }
-        }
-        $specs['storage_slots'] = $storageSlots;
-        
-        // PCIe slots information
-        $pcieSlots = [];
-        if (isset($modelData['expansion_slots']['pcie_slots'])) {
-            foreach ($modelData['expansion_slots']['pcie_slots'] as $slot) {
-                $slotType = $slot['type'] ?? '';
-                $count = $slot['count'] ?? 0;
-                
-                if (strpos($slotType, 'x16') !== false) {
-                    $pcieSlots['x16_slots'] = ($pcieSlots['x16_slots'] ?? 0) + $count;
-                } elseif (strpos($slotType, 'x8') !== false) {
-                    $pcieSlots['x8_slots'] = ($pcieSlots['x8_slots'] ?? 0) + $count;
-                } elseif (strpos($slotType, 'x4') !== false) {
-                    $pcieSlots['x4_slots'] = ($pcieSlots['x4_slots'] ?? 0) + $count;
-                } elseif (strpos($slotType, 'x1') !== false) {
-                    $pcieSlots['x1_slots'] = ($pcieSlots['x1_slots'] ?? 0) + $count;
-                }
-            }
-        }
-        $specs['pcie_slots'] = $pcieSlots;
-        
-        return $specs;
-    }
-
-    private function checkConfigurationCompatibility($configUuid, $compatibilityEngine) {
-        try {
-            $summary = $this->getConfigurationSummary($configUuid);
-            $components = [];
-            
-            foreach ($summary['components'] as $type => $typeComponents) {
-                foreach ($typeComponents as $component) {
-                    $components[] = [
-                        'type' => $type,
-                        'uuid' => $component['component_uuid'],
-                        'details' => $component['details'] ?? null
-                    ];
-                }
-            }
-            
-            if (count($components) < 2) {
-                return []; // Need at least 2 components to check compatibility
-            }
-            
-            return $compatibilityEngine->validateComponentConfiguration($components);
-            
-        } catch (Exception $e) {
-            error_log("Error checking configuration compatibility: " . $e->getMessage());
-            return [];
+            error_log("Error creating history table: " . $e->getMessage());
         }
     }
 }
 
 ?>
-
 

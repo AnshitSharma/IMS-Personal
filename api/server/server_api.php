@@ -185,7 +185,7 @@ function handleCreateStart($serverBuilder, $user) {
 }
 
 /**
- * Add component to server configuration
+ * FIXED: Add component to server configuration with proper ServerUUID handling
  */
 function handleAddComponent($serverBuilder, $user) {
     global $pdo;
@@ -223,8 +223,9 @@ function handleAddComponent($serverBuilder, $user) {
             ]);
         }
         
-        // Enhanced availability check with better error messages
+        // FIXED: Enhanced availability check with ServerUUID context
         $componentStatus = (int)$componentDetails['Status'];
+        $componentServerUuid = $componentDetails['ServerUUID'] ?? null;
         $isAvailable = false;
         $statusMessage = '';
         
@@ -237,12 +238,21 @@ function handleAddComponent($serverBuilder, $user) {
                 $statusMessage = "Component is Available";
                 break;
             case 2:
-                // Allow "In Use" components if override is enabled or for development
-                if ($override) {
+                // Check if component is in same config or different config
+                if ($componentServerUuid === $configUuid) {
                     $isAvailable = true;
-                    $statusMessage = "Component is In Use (override enabled)";
+                    $statusMessage = "Component is already assigned to this configuration";
                 } else {
-                    $statusMessage = "Component is currently In Use";
+                    if ($override) {
+                        $isAvailable = true;
+                        $statusMessage = $componentServerUuid ? 
+                            "Component is In Use in configuration $componentServerUuid (override enabled)" :
+                            "Component is In Use (override enabled)";
+                    } else {
+                        $statusMessage = $componentServerUuid ? 
+                            "Component is currently In Use in configuration: $componentServerUuid" :
+                            "Component is currently In Use";
+                    }
                 }
                 break;
             default:
@@ -253,12 +263,14 @@ function handleAddComponent($serverBuilder, $user) {
             send_json_response(0, 1, 400, "Component is not available", [
                 'component_status' => $componentStatus,
                 'status_message' => $statusMessage,
+                'component_server_uuid' => $componentServerUuid,
+                'current_config_uuid' => $configUuid,
                 'component_details' => [
                     'uuid' => $componentDetails['UUID'],
                     'serial_number' => $componentDetails['SerialNumber'],
                     'current_status' => getStatusText($componentStatus)
                 ],
-                'can_override' => true,
+                'can_override' => $componentStatus === 2,
                 'suggested_alternatives' => getSuggestedAlternatives($pdo, $componentType, $componentUuid)
             ]);
         }
@@ -302,30 +314,22 @@ function handleAddComponent($serverBuilder, $user) {
                 ];
             }
             
-            // Get next recommended components if compatibility engine is available
-            $nextRecommendations = [];
-            if (class_exists('CompatibilityEngine')) {
-                $compatibilityEngine = new CompatibilityEngine($pdo);
-                $nextRecommendations = $compatibilityEngine->getRecommendedNextComponents($configUuid);
-            }
-            
             send_json_response(1, 1, 200, "Component added successfully", [
                 'component_added' => [
                     'type' => $componentType,
                     'uuid' => $componentUuid,
                     'quantity' => $quantity,
                     'status_override_used' => $override,
-                    'original_status' => $statusMessage
+                    'original_status' => $statusMessage,
+                    'server_uuid_updated' => $configUuid
                 ],
                 'configuration_summary' => $summary,
                 'progress' => $progressInfo,
                 'component_limits' => $componentLimits,
-                'next_recommendations' => getNextRecommendations($summary, $componentLimits),
-                'compatibility_issues' => $result['compatibility_issues'] ?? []
+                'next_recommendations' => getNextRecommendations($summary, $componentLimits)
             ]);
         } else {
             send_json_response(0, 1, 400, $result['message'] ?? "Failed to add component", [
-                'compatibility_issues' => $result['compatibility_issues'] ?? [],
                 'suggested_alternatives' => getSuggestedAlternatives($pdo, $componentType, $componentUuid)
             ]);
         }
@@ -370,7 +374,8 @@ function handleRemoveComponent($serverBuilder, $user) {
             send_json_response(1, 1, 200, "Component removed successfully", [
                 'component_removed' => [
                     'type' => $componentType,
-                    'uuid' => $componentUuid
+                    'uuid' => $componentUuid,
+                    'server_uuid_cleared' => true
                 ],
                 'configuration_summary' => $summary
             ]);
@@ -385,7 +390,7 @@ function handleRemoveComponent($serverBuilder, $user) {
 }
 
 /**
- * Get server configuration details
+ * FIXED: Get server configuration details - Returns complete config info (no cost fields)
  */
 function handleGetConfiguration($serverBuilder, $user) {
     global $pdo;
@@ -407,13 +412,49 @@ function handleGetConfiguration($serverBuilder, $user) {
             send_json_response(0, 1, 403, "Insufficient permissions to view this configuration");
         }
         
-        $summary = $serverBuilder->getConfigurationSummary($configUuid);
-        $validation = $serverBuilder->validateConfiguration($configUuid);
+        // Use getConfigurationDetails for complete information
+        $details = $serverBuilder->getConfigurationDetails($configUuid);
+        
+        if (isset($details['error'])) {
+            send_json_response(0, 1, 500, "Failed to retrieve configuration: " . $details['error']);
+        }
+        
+        // Clean up configuration data - remove cost fields and fix JSON configurations
+        $configuration = $details['configuration'];
+        
+        // Remove unwanted fields
+        unset($configuration['total_cost']);
+        
+        // Ensure all calculated fields are present and up-to-date
+        $configuration['power_consumption'] = $details['power_consumption']['total_with_overhead_watts'] ?? 0;
+        $configuration['compatibility_score'] = $details['configuration']['compatibility_score'] ?? null;
+        
+        // Fix JSON configuration fields - parse them properly
+        $ramConfig = !empty($configuration['ram_configuration']) ? 
+            json_decode($configuration['ram_configuration'], true) : [];
+        $storageConfig = !empty($configuration['storage_configuration']) ? 
+            json_decode($configuration['storage_configuration'], true) : [];
+        $nicConfig = !empty($configuration['nic_configuration']) ? 
+            json_decode($configuration['nic_configuration'], true) : [];
+        $caddyConfig = !empty($configuration['caddy_configuration']) ? 
+            json_decode($configuration['caddy_configuration'], true) : [];
+        
+        // Replace JSON strings with properly parsed arrays
+        $configuration['ram_configuration'] = $ramConfig;
+        $configuration['storage_configuration'] = $storageConfig;
+        $configuration['nic_configuration'] = $nicConfig;
+        $configuration['caddy_configuration'] = $caddyConfig;
         
         send_json_response(1, 1, 200, "Configuration retrieved successfully", [
-            'configuration' => $config->toArray(),
-            'summary' => $summary,
-            'validation' => $validation
+            'configuration' => $configuration,
+            'components' => $details['components'],
+            'component_counts' => $details['component_counts'],
+            'component_ids_uuids' => $details['component_ids_uuids'],
+            'total_components' => $details['total_components'],
+            'power_consumption' => $details['power_consumption'],
+            'server_name' => $details['server_name'],
+            'configuration_status' => $details['configuration_status'],
+            'configuration_status_text' => getConfigurationStatusText($details['configuration_status'])
         ]);
         
     } catch (Exception $e) {
@@ -461,6 +502,12 @@ function handleListConfigurations($serverBuilder, $user) {
         $params[] = $offset;
         $stmt->execute($params);
         $configurations = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        
+        // Remove cost fields from each configuration
+        foreach ($configurations as &$config) {
+            unset($config['total_cost']);
+            $config['configuration_status_text'] = getConfigurationStatusText($config['configuration_status']);
+        }
         
         // Get total count
         $countStmt = $pdo->prepare("SELECT COUNT(*) as total FROM server_configurations sc $whereClause");
@@ -511,7 +558,8 @@ function handleFinalizeConfiguration($serverBuilder, $user) {
         $validation = $serverBuilder->validateConfiguration($configUuid);
         if (!$validation['is_valid']) {
             send_json_response(0, 1, 400, "Configuration is not valid for finalization", [
-                'validation_errors' => $validation['issues']
+                'validation_errors' => $validation['issues'],
+                'compatibility_score' => $validation['compatibility_score']
             ]);
         }
         
@@ -520,7 +568,9 @@ function handleFinalizeConfiguration($serverBuilder, $user) {
         if ($result['success']) {
             send_json_response(1, 1, 200, "Configuration finalized successfully", [
                 'config_uuid' => $configUuid,
-                'finalization_details' => $result
+                'finalization_details' => $result,
+                'configuration_status' => 3,
+                'configuration_status_text' => 'Finalized'
             ]);
         } else {
             send_json_response(0, 1, 400, $result['message'] ?? "Failed to finalize configuration");
@@ -563,7 +613,9 @@ function handleDeleteConfiguration($serverBuilder, $user) {
         $result = $serverBuilder->deleteConfiguration($configUuid);
         
         if ($result['success']) {
-            send_json_response(1, 1, 200, "Configuration deleted successfully");
+            send_json_response(1, 1, 200, "Configuration deleted successfully", [
+                'components_released' => $result['components_released']
+            ]);
         } else {
             send_json_response(0, 1, 400, $result['message'] ?? "Failed to delete configuration");
         }
@@ -609,7 +661,7 @@ function handleGetAvailableComponents($user) {
 }
 
 /**
- * Validate server configuration
+ * FIXED: Validate server configuration - Updated with proper compatibility scoring and warnings
  */
 function handleValidateConfiguration($serverBuilder, $user) {
     global $pdo;
@@ -673,8 +725,15 @@ function handleGetCompatible($serverBuilder, $user) {
             
             // Use CompatibilityEngine if available
             if (class_exists('CompatibilityEngine')) {
-                $compatibilityEngine = new CompatibilityEngine($pdo);
-                $result = $compatibilityEngine->getCompatibleComponents($configUuid, $componentType);
+                try {
+                    $compatibilityEngine = new CompatibilityEngine($pdo);
+                    $result = $compatibilityEngine->getCompatibleComponents($configUuid, $componentType);
+                } catch (Exception $compatError) {
+                    error_log("CompatibilityEngine error: " . $compatError->getMessage());
+                    $result['components'] = getAvailableComponents($pdo, $componentType, $availableOnly);
+                    $result['compatibility_engine_available'] = false;
+                    $result['compatibility_engine_error'] = $compatError->getMessage();
+                }
             } else {
                 // Fallback to basic component listing
                 $result['components'] = getAvailableComponents($pdo, $componentType, $availableOnly);
@@ -689,8 +748,15 @@ function handleGetCompatible($serverBuilder, $user) {
             }
             
             if (class_exists('CompatibilityEngine')) {
-                $compatibilityEngine = new CompatibilityEngine($pdo);
-                $result = $compatibilityEngine->getCompatibleComponentsFor($componentType, $componentUuid);
+                try {
+                    $compatibilityEngine = new CompatibilityEngine($pdo);
+                    $result = $compatibilityEngine->getCompatibleComponentsFor($componentType, $componentUuid);
+                } catch (Exception $compatError) {
+                    error_log("CompatibilityEngine error: " . $compatError->getMessage());
+                    $result['components'] = getAvailableComponents($pdo, $componentType, $availableOnly);
+                    $result['compatibility_engine_available'] = false;
+                    $result['compatibility_engine_error'] = $compatError->getMessage();
+                }
             } else {
                 // Basic fallback - return similar components
                 $result['components'] = getAvailableComponents($pdo, $componentType, $availableOnly);
@@ -720,6 +786,9 @@ function handleGetCompatible($serverBuilder, $user) {
         send_json_response(0, 1, 500, "Failed to get compatible components: " . $e->getMessage());
     }
 }
+
+
+// Helper Functions
 
 /**
  * Helper function to get component details
@@ -764,6 +833,20 @@ function getStatusText($statusCode) {
 }
 
 /**
+ * Helper function to get configuration status text
+ */
+function getConfigurationStatusText($statusCode) {
+    $statusMap = [
+        0 => 'Draft',
+        1 => 'Validated', 
+        2 => 'Built',
+        3 => 'Finalized'
+    ];
+    
+    return $statusMap[$statusCode] ?? 'Unknown';
+}
+
+/**
  * Helper function to get suggested alternatives
  */
 function getSuggestedAlternatives($pdo, $componentType, $excludeUuid, $limit = 5) {
@@ -784,7 +867,7 @@ function getSuggestedAlternatives($pdo, $componentType, $excludeUuid, $limit = 5
     
     try {
         $stmt = $pdo->prepare("
-            SELECT UUID, SerialNumber, Status 
+            SELECT UUID, SerialNumber, Status, ServerUUID 
             FROM $table 
             WHERE UUID != ? AND Status = 1 
             ORDER BY SerialNumber 
@@ -1214,12 +1297,34 @@ function getNextRecommendations($summary, $componentLimits) {
             'component_type' => 'nic',
             'priority' => 'low',
             'message' => 'Add network interface cards (optional)',
-            'max_quantity' => 10, // Reasonable default
+            'max_quantity' => 10,
             'required' => false
         ];
     }
     
     return $recommendations;
+}
+
+/**
+ * Check user permissions (fallback function if not exists)
+ */
+if (!function_exists('hasPermission')) {
+    function hasPermission($pdo, $permission, $userId) {
+        try {
+            $stmt = $pdo->prepare("
+                SELECT COUNT(*) 
+                FROM role_permissions rp
+                JOIN user_roles ur ON rp.role_id = ur.role_id
+                JOIN permissions p ON rp.permission_id = p.id
+                WHERE ur.user_id = ? AND p.name = ?
+            ");
+            $stmt->execute([$userId, $permission]);
+            return $stmt->fetchColumn() > 0;
+        } catch (Exception $e) {
+            error_log("Error checking permission: " . $e->getMessage());
+            return false;
+        }
+    }
 }
 
 ?>
