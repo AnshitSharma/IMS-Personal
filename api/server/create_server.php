@@ -3,7 +3,7 @@
  * Infrastructure Management System - Server Creation Endpoint
  * File: api/server/create_server.php
  * 
- * Dedicated endpoint for step-by-step server creation
+ * UPDATED: Now includes location, rack_position, notes support
  * Note: User authentication and permission checks are handled in the main api.php
  * This file is included after those checks pass
  */
@@ -69,14 +69,17 @@ try {
 }
 
 /**
- * Initialize new server creation session
+ * UPDATED: Initialize new server creation session - Now includes location, rack_position, notes
  */
- 
 function handleInitializeServerCreation() {
     global $pdo, $user;
     
     $serverName = trim($_POST['server_name'] ?? '');
     $description = trim($_POST['description'] ?? '');
+    $category = trim($_POST['category'] ?? 'custom');
+    $location = trim($_POST['location'] ?? '');
+    $rackPosition = trim($_POST['rack_position'] ?? '');
+    $notes = trim($_POST['notes'] ?? '');
     $startWith = $_POST['start_with'] ?? 'any'; // 'cpu', 'motherboard', or 'any'
     
     if (empty($serverName)) {
@@ -84,13 +87,20 @@ function handleInitializeServerCreation() {
     }
     
     try {
-        // Create new server configuration record
+        $pdo->beginTransaction();
+        
+        // Create new server configuration record with additional fields
         $configUuid = generateUUID();
         $stmt = $pdo->prepare("
-            INSERT INTO server_configurations (config_uuid, server_name, description, created_by, created_at, configuration_status) 
-            VALUES (?, ?, ?, ?, NOW(), 0)
+            INSERT INTO server_configurations (
+                config_uuid, server_name, description, location, rack_position, notes,
+                created_by, created_at, updated_at, configuration_status
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), NOW(), 0)
         ");
-        $stmt->execute([$configUuid, $serverName, $description, $user['id']]);
+        $stmt->execute([
+            $configUuid, $serverName, $description, 
+            $location, $rackPosition, $notes, $user['id']
+        ]);
         
         // Get initial component options based on starting preference
         $initialOptions = [];
@@ -110,15 +120,25 @@ function handleInitializeServerCreation() {
             $initialOptions['caddy'] = getAvailableComponents($pdo, 'caddy');
         }
         
-        // Log the initialization
+        // Log the initialization with enhanced metadata
         logServerBuildAction($pdo, $configUuid, 'initialize', null, null, [
             'server_name' => $serverName,
+            'description' => $description,
+            'location' => $location,
+            'rack_position' => $rackPosition,
+            'notes' => $notes,
             'start_with' => $startWith
         ], $user['id']);
+        
+        $pdo->commit();
         
         send_json_response(1, 1, 200, "Server creation initialized", [
             'config_uuid' => $configUuid,
             'server_name' => $serverName,
+            'description' => $description,
+            'location' => $location,
+            'rack_position' => $rackPosition,
+            'notes' => $notes,
             'starting_options' => $initialOptions,
             'workflow_step' => 1,
             'next_recommended' => $startWith === 'cpu' ? 'motherboard' : ($startWith === 'motherboard' ? 'cpu' : 'any'),
@@ -130,6 +150,7 @@ function handleInitializeServerCreation() {
         ]);
         
     } catch (Exception $e) {
+        $pdo->rollBack();
         error_log("Error initializing server creation: " . $e->getMessage());
         send_json_response(0, 1, 500, "Failed to initialize server creation: " . $e->getMessage());
     }
@@ -145,234 +166,153 @@ function handleStepAddComponent() {
     $componentType = $_POST['component_type'] ?? '';
     $componentUuid = $_POST['component_uuid'] ?? '';
     $quantity = (int)($_POST['quantity'] ?? 1);
-    $slotPosition = $_POST['slot_position'] ?? null;
-    $override = filter_var($_POST['override'] ?? false, FILTER_VALIDATE_BOOLEAN);
+    $slotPosition = $_POST['slot_position'] ?? '';
+    $notes = $_POST['notes'] ?? '';
     
     if (empty($configUuid) || empty($componentType) || empty($componentUuid)) {
-        send_json_response(0, 1, 400, "Config UUID, component type, and component UUID are required");
+        send_json_response(0, 1, 400, "Configuration UUID, component type, and component UUID are required");
     }
     
     try {
-        // Verify configuration exists and user has access
-        $stmt = $pdo->prepare("SELECT id, server_name, configuration_data FROM server_configurations WHERE config_uuid = ? AND created_by = ? AND configuration_status < 3");
+        $pdo->beginTransaction();
+        
+        // Verify ownership and status
+        $stmt = $pdo->prepare("SELECT created_by, configuration_status FROM server_configurations WHERE config_uuid = ? AND created_by = ?");
         $stmt->execute([$configUuid, $user['id']]);
         $config = $stmt->fetch(PDO::FETCH_ASSOC);
         
         if (!$config) {
-            send_json_response(0, 1, 404, "Server configuration not found, access denied, or already finalized");
+            send_json_response(0, 1, 404, "Server configuration not found or access denied");
         }
         
-        // Get current configuration data
-        $configData = json_decode($config['configuration_data'] ?? '{}', true);
-        
-        // Verify component exists and get details
-        $componentDetails = getComponentDetails($pdo, $componentType, $componentUuid);
-        if (!$componentDetails) {
-            send_json_response(0, 1, 404, "Component not found");
+        if ($config['configuration_status'] > 0) {
+            send_json_response(0, 1, 400, "Cannot modify configuration that has been validated or finalized");
         }
         
         // Check if component is available
-        if ($componentDetails['Status'] != '1' && !$override) {
-            send_json_response(0, 1, 409, "Component is not available (Status: " . getStatusText($componentDetails['Status']) . ")", [
-                'component_status' => $componentDetails['Status'],
-                'component_status_text' => getStatusText($componentDetails['Status']),
-                'can_override' => true,
-                'component_details' => $componentDetails
-            ]);
+        $tableName = $componentType . 'inventory';
+        $stmt = $pdo->prepare("SELECT Status FROM $tableName WHERE UUID = ?");
+        $stmt->execute([$componentUuid]);
+        $component = $stmt->fetch(PDO::FETCH_ASSOC);
+        
+        if (!$component) {
+            send_json_response(0, 1, 404, "Component not found");
         }
         
-        // Check for compatibility issues
-        $compatibilityIssues = checkComponentCompatibility($pdo, $configData, $componentType, $componentDetails);
+        if ($component['Status'] != 1) {
+            send_json_response(0, 1, 400, "Component is not available (Status: {$component['Status']})");
+        }
         
-        if (!empty($compatibilityIssues) && !$override) {
-            send_json_response(0, 1, 409, "Compatibility issues found", [
-                'compatibility_issues' => $compatibilityIssues,
-                'can_override' => true,
-                'component_details' => $componentDetails
-            ]);
+        // Check if component is already added to this configuration
+        $stmt = $pdo->prepare("
+            SELECT id FROM server_configuration_components 
+            WHERE config_uuid = ? AND component_type = ? AND component_uuid = ?
+        ");
+        $stmt->execute([$configUuid, $componentType, $componentUuid]);
+        
+        if ($stmt->fetch()) {
+            send_json_response(0, 1, 400, "Component is already added to this configuration");
         }
         
         // Add component to configuration
-        if (!isset($configData['components'])) {
-            $configData['components'] = [];
-        }
-        
-        // Handle components that allow multiple instances vs single instance
-        $multiInstanceComponents = ['ram', 'storage', 'nic'];
-        
-        if (in_array($componentType, $multiInstanceComponents)) {
-            // For multi-instance components, create array if doesn't exist
-            if (!isset($configData['components'][$componentType])) {
-                $configData['components'][$componentType] = [];
-            }
-            
-            // Add new instance
-            $instanceKey = $slotPosition ?: (count($configData['components'][$componentType]) + 1);
-            $configData['components'][$componentType][$instanceKey] = [
-                'uuid' => $componentUuid,
-                'quantity' => $quantity,
-                'slot_position' => $slotPosition,
-                'added_at' => date('Y-m-d H:i:s'),
-                'details' => $componentDetails
-            ];
-        } else {
-            // For single-instance components (CPU, Motherboard)
-            if (isset($configData['components'][$componentType]) && !$override) {
-                send_json_response(0, 1, 409, "Component type $componentType already exists in configuration", [
-                    'existing_component' => $configData['components'][$componentType],
-                    'can_override' => true
-                ]);
-            }
-            
-            $configData['components'][$componentType] = [
-                'uuid' => $componentUuid,
-                'quantity' => $quantity,
-                'slot_position' => $slotPosition,
-                'added_at' => date('Y-m-d H:i:s'),
-                'details' => $componentDetails
-            ];
-        }
-        
-        // Update configuration in database
         $stmt = $pdo->prepare("
-            UPDATE server_configurations 
-            SET configuration_data = ?, updated_by = ?, updated_at = NOW() 
-            WHERE config_uuid = ?
+            INSERT INTO server_configuration_components 
+            (config_uuid, component_type, component_uuid, quantity, slot_position, notes, added_at) 
+            VALUES (?, ?, ?, ?, ?, ?, NOW())
         ");
-        $stmt->execute([json_encode($configData), $user['id'], $configUuid]);
+        $stmt->execute([$configUuid, $componentType, $componentUuid, $quantity, $slotPosition, $notes]);
+        
+        // Update configuration's updated_by and updated_at
+        $stmt = $pdo->prepare("UPDATE server_configurations SET updated_by = ?, updated_at = NOW() WHERE config_uuid = ?");
+        $stmt->execute([$user['id'], $configUuid]);
         
         // Log the action
-        logServerBuildAction($pdo, $configUuid, 'add_component', $componentType, $componentUuid, [
+        logServerBuildAction($pdo, $configUuid, 'component_added', $componentType, $componentUuid, [
             'quantity' => $quantity,
             'slot_position' => $slotPosition,
-            'override_used' => $override,
-            'compatibility_issues' => $compatibilityIssues
+            'notes' => $notes
         ], $user['id']);
         
-        // Determine next recommended component
-        $nextStep = determineNextStep($configData);
-        $nextOptions = $nextStep ? getAvailableComponents($pdo, $nextStep) : [];
+        $pdo->commit();
         
-        // Calculate progress
-        $progress = calculateConfigurationProgress($configData);
+        // Get updated progress
+        $progress = getServerProgress($pdo, $configUuid);
         
         send_json_response(1, 1, 200, "Component added successfully", [
-            'component_added' => [
-                'type' => $componentType,
-                'uuid' => $componentUuid,
-                'quantity' => $quantity,
-                'slot_position' => $slotPosition,
-                'details' => $componentDetails
-            ],
-            'current_configuration' => $configData,
-            'configuration_summary' => getConfigurationSummary($configData),
-            'next_step' => $nextStep,
-            'next_options' => $nextOptions,
-            'progress' => $progress,
-            'compatibility_override_used' => $override,
-            'compatibility_issues_ignored' => $override ? $compatibilityIssues : []
+            'component_type' => $componentType,
+            'component_uuid' => $componentUuid,
+            'progress' => $progress
         ]);
         
     } catch (Exception $e) {
-        error_log("Error adding component in step process: " . $e->getMessage());
+        $pdo->rollBack();
+        error_log("Error adding component: " . $e->getMessage());
         send_json_response(0, 1, 500, "Failed to add component: " . $e->getMessage());
     }
 }
 
 /**
- * Remove component in step-by-step process
+ * Remove component from step-by-step process
  */
 function handleStepRemoveComponent() {
     global $pdo, $user;
     
     $configUuid = $_POST['config_uuid'] ?? '';
     $componentType = $_POST['component_type'] ?? '';
-    $instanceKey = $_POST['instance_key'] ?? null; // For multi-instance components
+    $componentUuid = $_POST['component_uuid'] ?? '';
     
-    if (empty($configUuid) || empty($componentType)) {
-        send_json_response(0, 1, 400, "Config UUID and component type are required");
+    if (empty($configUuid) || empty($componentType) || empty($componentUuid)) {
+        send_json_response(0, 1, 400, "Configuration UUID, component type, and component UUID are required");
     }
     
     try {
-        // Verify configuration exists and user has access
-        $stmt = $pdo->prepare("SELECT id, server_name, configuration_data FROM server_configurations WHERE config_uuid = ? AND created_by = ? AND configuration_status < 3");
+        $pdo->beginTransaction();
+        
+        // Verify ownership
+        $stmt = $pdo->prepare("SELECT created_by, configuration_status FROM server_configurations WHERE config_uuid = ? AND created_by = ?");
         $stmt->execute([$configUuid, $user['id']]);
         $config = $stmt->fetch(PDO::FETCH_ASSOC);
         
         if (!$config) {
-            send_json_response(0, 1, 404, "Server configuration not found, access denied, or already finalized");
+            send_json_response(0, 1, 404, "Server configuration not found or access denied");
         }
         
-        // Get current configuration data
-        $configData = json_decode($config['configuration_data'] ?? '{}', true);
-        
-        if (!isset($configData['components'][$componentType])) {
-            send_json_response(0, 1, 404, "Component type not found in configuration");
+        if ($config['configuration_status'] > 0) {
+            send_json_response(0, 1, 400, "Cannot modify configuration that has been validated or finalized");
         }
         
-        // Handle removal based on component type
-        $removedComponent = null;
-        $multiInstanceComponents = ['ram', 'storage', 'nic'];
-        
-        if (in_array($componentType, $multiInstanceComponents)) {
-            // Multi-instance component
-            if ($instanceKey && isset($configData['components'][$componentType][$instanceKey])) {
-                $removedComponent = $configData['components'][$componentType][$instanceKey];
-                unset($configData['components'][$componentType][$instanceKey]);
-                
-                // If no more instances, remove the component type entirely
-                if (empty($configData['components'][$componentType])) {
-                    unset($configData['components'][$componentType]);
-                }
-            } else {
-                send_json_response(0, 1, 400, "Instance key required for multi-instance component type");
-            }
-        } else {
-            // Single-instance component
-            $removedComponent = $configData['components'][$componentType];
-            unset($configData['components'][$componentType]);
-        }
-        
-        if (!$removedComponent) {
-            send_json_response(0, 1, 404, "Component instance not found");
-        }
-        
-        // Update configuration in database
+        // Remove component
         $stmt = $pdo->prepare("
-            UPDATE server_configurations 
-            SET configuration_data = ?, updated_by = ?, updated_at = NOW() 
-            WHERE config_uuid = ?
+            DELETE FROM server_configuration_components 
+            WHERE config_uuid = ? AND component_type = ? AND component_uuid = ?
         ");
-        $stmt->execute([json_encode($configData), $user['id'], $configUuid]);
+        $stmt->execute([$configUuid, $componentType, $componentUuid]);
+        
+        if ($stmt->rowCount() === 0) {
+            send_json_response(0, 1, 404, "Component not found in configuration");
+        }
+        
+        // Update configuration's updated_by and updated_at
+        $stmt = $pdo->prepare("UPDATE server_configurations SET updated_by = ?, updated_at = NOW() WHERE config_uuid = ?");
+        $stmt->execute([$user['id'], $configUuid]);
         
         // Log the action
-        logServerBuildAction($pdo, $configUuid, 'remove_component', $componentType, $removedComponent['uuid'] ?? null, [
-            'instance_key' => $instanceKey,
-            'removed_details' => $removedComponent
-        ], $user['id']);
+        logServerBuildAction($pdo, $configUuid, 'component_removed', $componentType, $componentUuid, [], $user['id']);
         
-        // Recalculate next step and options
-        $nextStep = determineNextStep($configData);
-        $allOptions = getAllAvailableComponents($pdo);
+        $pdo->commit();
         
-        // Calculate progress
-        $progress = calculateConfigurationProgress($configData);
+        // Get updated progress
+        $progress = getServerProgress($pdo, $configUuid);
         
         send_json_response(1, 1, 200, "Component removed successfully", [
-            'component_removed' => [
-                'type' => $componentType,
-                'instance_key' => $instanceKey,
-                'details' => $removedComponent
-            ],
-            'current_configuration' => $configData,
-            'configuration_summary' => getConfigurationSummary($configData),
-            'next_step' => $nextStep,
-            'all_options' => $allOptions,
+            'component_type' => $componentType,
+            'component_uuid' => $componentUuid,
             'progress' => $progress
         ]);
         
     } catch (Exception $e) {
-        error_log("Error removing component in step process: " . $e->getMessage());
+        $pdo->rollBack();
+        error_log("Error removing component: " . $e->getMessage());
         send_json_response(0, 1, 500, "Failed to remove component: " . $e->getMessage());
     }
 }
@@ -384,47 +324,66 @@ function handleGetNextOptions() {
     global $pdo, $user;
     
     $configUuid = $_GET['config_uuid'] ?? $_POST['config_uuid'] ?? '';
-    $requestedType = $_GET['requested_type'] ?? $_POST['requested_type'] ?? '';
     
     if (empty($configUuid)) {
-        send_json_response(0, 1, 400, "Config UUID is required");
+        send_json_response(0, 1, 400, "Configuration UUID is required");
     }
     
     try {
-        // Verify configuration exists and user has access
-        $stmt = $pdo->prepare("SELECT id, server_name, configuration_data FROM server_configurations WHERE config_uuid = ? AND created_by = ?");
+        // Verify ownership
+        $stmt = $pdo->prepare("SELECT created_by FROM server_configurations WHERE config_uuid = ? AND created_by = ?");
         $stmt->execute([$configUuid, $user['id']]);
-        $config = $stmt->fetch(PDO::FETCH_ASSOC);
         
-        if (!$config) {
+        if (!$stmt->fetch()) {
             send_json_response(0, 1, 404, "Server configuration not found or access denied");
         }
         
-        // Get current configuration data
-        $configData = json_decode($config['configuration_data'] ?? '{}', true);
-        
-        if ($requestedType) {
-            // Get options for specific component type
-            $options = getCompatibleComponents($pdo, $configData, $requestedType);
-            $response = [
-                'component_type' => $requestedType,
-                'options' => $options,
-                'count' => count($options)
-            ];
-        } else {
-            // Get all available options
-            $allOptions = getAllCompatibleComponents($pdo, $configData);
-            $response = [
-                'all_options' => $allOptions,
-                'recommended_next' => determineNextStep($configData)
-            ];
+        // Get current components
+        $stmt = $pdo->prepare("
+            SELECT component_type, COUNT(*) as count 
+            FROM server_configuration_components 
+            WHERE config_uuid = ? 
+            GROUP BY component_type
+        ");
+        $stmt->execute([$configUuid]);
+        $currentComponents = [];
+        while ($row = $stmt->fetch()) {
+            $currentComponents[$row['component_type']] = $row['count'];
         }
         
-        $response['current_configuration'] = $configData;
-        $response['configuration_summary'] = getConfigurationSummary($configData);
-        $response['progress'] = calculateConfigurationProgress($configData);
+        // Determine what components are still needed
+        $allTypes = ['cpu', 'motherboard', 'ram', 'storage', 'nic', 'caddy'];
+        $options = [];
         
-        send_json_response(1, 1, 200, "Next options retrieved", $response);
+        foreach ($allTypes as $type) {
+            if (!isset($currentComponents[$type])) {
+                $options[$type] = getAvailableComponents($pdo, $type);
+            }
+        }
+        
+        // Suggest next step
+        $nextSuggestion = 'complete';
+        if (!isset($currentComponents['cpu'])) {
+            $nextSuggestion = 'cpu';
+        } elseif (!isset($currentComponents['motherboard'])) {
+            $nextSuggestion = 'motherboard';
+        } elseif (!isset($currentComponents['ram'])) {
+            $nextSuggestion = 'ram';
+        } elseif (!isset($currentComponents['storage'])) {
+            $nextSuggestion = 'storage';
+        } elseif (!isset($currentComponents['nic'])) {
+            $nextSuggestion = 'nic';
+        }
+        
+        send_json_response(1, 1, 200, "Next options retrieved", [
+            'available_components' => $options,
+            'current_components' => $currentComponents,
+            'next_suggestion' => $nextSuggestion,
+            'can_finalize' => isset($currentComponents['cpu']) && 
+                            isset($currentComponents['motherboard']) && 
+                            isset($currentComponents['ram']) && 
+                            isset($currentComponents['storage'])
+        ]);
         
     } catch (Exception $e) {
         error_log("Error getting next options: " . $e->getMessage());
@@ -438,39 +397,50 @@ function handleGetNextOptions() {
 function handleValidateCurrent() {
     global $pdo, $user;
     
-    $configUuid = $_POST['config_uuid'] ?? $_GET['config_uuid'] ?? '';
+    $configUuid = $_GET['config_uuid'] ?? $_POST['config_uuid'] ?? '';
     
     if (empty($configUuid)) {
-        send_json_response(0, 1, 400, "Config UUID is required");
+        send_json_response(0, 1, 400, "Configuration UUID is required");
     }
     
     try {
-        // Verify configuration exists and user has access
-        $stmt = $pdo->prepare("SELECT id, server_name, configuration_data FROM server_configurations WHERE config_uuid = ? AND created_by = ?");
+        // Verify ownership
+        $stmt = $pdo->prepare("SELECT created_by FROM server_configurations WHERE config_uuid = ? AND created_by = ?");
         $stmt->execute([$configUuid, $user['id']]);
-        $config = $stmt->fetch(PDO::FETCH_ASSOC);
         
-        if (!$config) {
+        if (!$stmt->fetch()) {
             send_json_response(0, 1, 404, "Server configuration not found or access denied");
         }
         
-        // Get current configuration data
-        $configData = json_decode($config['configuration_data'] ?? '{}', true);
+        // Get configuration details
+        require_once __DIR__ . '/../../includes/models/ServerBuilder.php';
+        $serverBuilder = new ServerBuilder($pdo);
+        $details = $serverBuilder->getConfigurationDetails($configUuid);
         
-        // Perform comprehensive validation
-        $validationResults = validateServerConfiguration($pdo, $configData);
+        // Generate validation results
+        $validation = generateValidationResults($pdo, $configUuid, $details);
+        $compatibilityScore = calculateCompatibilityScore($pdo, $configUuid);
         
-        // Log validation action
-        logServerBuildAction($pdo, $configUuid, 'validate', null, null, [
-            'validation_results' => $validationResults
+        // Update configuration with validation results
+        $stmt = $pdo->prepare("
+            UPDATE server_configurations 
+            SET validation_results = ?, compatibility_score = ?, updated_by = ?, updated_at = NOW() 
+            WHERE config_uuid = ?
+        ");
+        $stmt->execute([json_encode($validation), $compatibilityScore, $user['id'], $configUuid]);
+        
+        // Log validation
+        logServerBuildAction($pdo, $configUuid, 'validated', null, null, [
+            'compatibility_score' => $compatibilityScore,
+            'is_complete' => $validation['is_complete'],
+            'errors_count' => count($validation['errors']),
+            'warnings_count' => count($validation['warnings'])
         ], $user['id']);
         
-        send_json_response(1, 1, 200, "Configuration validation completed", [
-            'configuration' => $configData,
-            'configuration_summary' => getConfigurationSummary($configData),
-            'validation' => $validationResults,
-            'is_valid' => $validationResults['is_complete'] && empty($validationResults['critical_errors']),
-            'can_finalize' => $validationResults['is_complete'] && empty($validationResults['critical_errors'])
+        send_json_response(1, 1, 200, "Configuration validated", [
+            'validation_results' => $validation,
+            'compatibility_score' => $compatibilityScore,
+            'can_finalize' => $validation['is_complete'] && empty($validation['critical_errors'])
         ]);
         
     } catch (Exception $e) {
@@ -479,180 +449,154 @@ function handleValidateCurrent() {
     }
 }
 
+
 /**
- * Finalize server configuration and create actual server record
+ * UPDATED: Finalize server configuration - Now properly sets deployed_date and updated_by
  */
 function handleFinalizeServer() {
     global $pdo, $user;
     
     $configUuid = $_POST['config_uuid'] ?? '';
-    $serverName = trim($_POST['server_name'] ?? '');
-    $serverLocation = trim($_POST['server_location'] ?? '');
-    $serverRackPosition = trim($_POST['server_rack_position'] ?? '');
-    $serverNotes = trim($_POST['server_notes'] ?? '');
+    $finalNotes = $_POST['notes'] ?? '';
     
     if (empty($configUuid)) {
-        send_json_response(0, 1, 400, "Config UUID is required");
+        send_json_response(0, 1, 400, "Configuration UUID is required");
     }
     
     try {
-        // Verify configuration exists and user has access
-        $stmt = $pdo->prepare("SELECT * FROM server_configurations WHERE config_uuid = ? AND created_by = ? AND configuration_status = 0");
+        $pdo->beginTransaction();
+        
+        // Verify ownership and current status
+        $stmt = $pdo->prepare("
+            SELECT created_by, configuration_status, notes 
+            FROM server_configurations 
+            WHERE config_uuid = ? AND created_by = ?
+        ");
         $stmt->execute([$configUuid, $user['id']]);
         $config = $stmt->fetch(PDO::FETCH_ASSOC);
         
         if (!$config) {
-            send_json_response(0, 1, 404, "Server configuration not found, access denied, or already finalized");
+            send_json_response(0, 1, 404, "Server configuration not found or access denied");
         }
         
-        // Get current configuration data
-        $configData = json_decode($config['configuration_data'] ?? '{}', true);
+        if ($config['configuration_status'] == 3) {
+            send_json_response(0, 1, 400, "Configuration is already finalized");
+        }
         
-        // Validate configuration is complete
-        $validationResults = validateServerConfiguration($pdo, $configData);
-        if (!$validationResults['is_complete'] || !empty($validationResults['critical_errors'])) {
-            send_json_response(0, 1, 400, "Configuration validation failed - cannot finalize", [
-                'validation_errors' => $validationResults
+        // Validate configuration before finalizing
+        require_once __DIR__ . '/../../includes/models/ServerBuilder.php';
+        $serverBuilder = new ServerBuilder($pdo);
+        $details = $serverBuilder->getConfigurationDetails($configUuid);
+        $validation = generateValidationResults($pdo, $configUuid, $details);
+        
+        if (!$validation['is_complete'] || !empty($validation['critical_errors'])) {
+            send_json_response(0, 1, 400, "Configuration cannot be finalized - validation failed", [
+                'validation_results' => $validation
             ]);
         }
         
-        // Start transaction
-        $pdo->beginTransaction();
+        // Calculate final compatibility score
+        $compatibilityScore = calculateCompatibilityScore($pdo, $configUuid);
         
-        try {
-            // Create server record
-            $serverUuid = generateUUID();
-            $finalServerName = !empty($serverName) ? $serverName : $config['server_name'];
-            $serialNumber = 'SRV-' . date('YmdHis') . '-' . substr($serverUuid, 0, 8);
-            
-            // Insert server record
-            $stmt = $pdo->prepare("
-                INSERT INTO servers (
-                    UUID, SerialNumber, Status, ServerUUID, Location, RackPosition, 
-                    Notes, Flag, configuration_uuid, created_at
-                ) VALUES (?, ?, '1', ?, ?, ?, ?, 'Active', ?, NOW())
-            ");
-            $stmt->execute([
-                $serverUuid,
-                $serialNumber,
-                $serverUuid,
-                $serverLocation ?: 'Data Center',
-                $serverRackPosition ?: 'TBD',
-                $serverNotes ?: 'Server built from configuration: ' . $config['server_name'],
-                $configUuid
-            ]);
-            
-            $serverId = $pdo->lastInsertId();
-            
-            // Update all components to "In Use" status and assign to server
-            $componentsUpdated = 0;
-            if (isset($configData['components'])) {
-                foreach ($configData['components'] as $componentType => $componentInfo) {
-                    if (isset($componentInfo['uuid'])) {
-                        // Single instance component
-                        $stmt = $pdo->prepare("UPDATE $componentType SET Status = '2', ServerUUID = ? WHERE UUID = ?");
-                        $stmt->execute([$serverUuid, $componentInfo['uuid']]);
-                        $componentsUpdated++;
-                    } else {
-                        // Multi-instance component
-                        foreach ($componentInfo as $instance) {
-                            if (isset($instance['uuid'])) {
-                                $stmt = $pdo->prepare("UPDATE $componentType SET Status = '2', ServerUUID = ? WHERE UUID = ?");
-                                $stmt->execute([$serverUuid, $instance['uuid']]);
-                                $componentsUpdated++;
-                            }
-                        }
-                    }
-                }
-            }
-            
-            // Mark configuration as finalized
-            $stmt = $pdo->prepare("
-                UPDATE server_configurations 
-                SET configuration_status = 3, server_uuid = ?, updated_by = ?
-                WHERE config_uuid = ?
-            ");
-            $stmt->execute([$serverUuid, $user['id'], $configUuid]);
-            
-            // Log finalization
-            logServerBuildAction($pdo, $configUuid, 'finalize', null, null, [
-                'server_uuid' => $serverUuid,
-                'server_name' => $finalServerName,
-                'components_updated' => $componentsUpdated
-            ], $user['id']);
-            
-            $pdo->commit();
-            
-            send_json_response(1, 1, 200, "Server finalized successfully", [
-                'server_uuid' => $serverUuid,
-                'server_id' => $serverId,
-                'server_name' => $finalServerName,
-                'serial_number' => $serialNumber,
-                'components_assigned' => $componentsUpdated,
-                'configuration_uuid' => $configUuid,
-                'location' => $serverLocation,
-                'rack_position' => $serverRackPosition
-            ]);
-            
-        } catch (Exception $e) {
-            $pdo->rollBack();
-            throw $e;
-        }
+        // UPDATED: Set all required fields when finalizing
+        $deployedDate = date('Y-m-d H:i:s');
+        $builtDate = $deployedDate; // For step-by-step creation, built and deployed are the same
+        $combinedNotes = !empty($finalNotes) ? $finalNotes . "\n\n" . ($config['notes'] ?? '') : ($config['notes'] ?? '');
+        
+        $stmt = $pdo->prepare("
+            UPDATE server_configurations 
+            SET configuration_status = 3, 
+                built_date = ?,
+                deployed_date = ?, 
+                updated_by = ?,
+                updated_at = NOW(),
+                compatibility_score = ?,
+                validation_results = ?,
+                notes = ?
+            WHERE config_uuid = ?
+        ");
+        
+        $stmt->execute([
+            $builtDate,
+            $deployedDate,
+            $user['id'],
+            $compatibilityScore,
+            json_encode($validation),
+            $combinedNotes,
+            $configUuid
+        ]);
+        
+        // Log the finalization
+        logServerBuildAction($pdo, $configUuid, 'finalized', null, null, [
+            'finalized_by' => $user['id'],
+            'built_date' => $builtDate,
+            'deployed_date' => $deployedDate,
+            'compatibility_score' => $compatibilityScore,
+            'final_notes' => $finalNotes
+        ], $user['id']);
+        
+        $pdo->commit();
+        
+        send_json_response(1, 1, 200, "Server configuration finalized successfully", [
+            'config_uuid' => $configUuid,
+            'built_date' => $builtDate,
+            'deployed_date' => $deployedDate,
+            'compatibility_score' => $compatibilityScore,
+            'validation_results' => $validation,
+            'configuration_status' => 3,
+            'configuration_status_text' => 'Finalized'
+        ]);
         
     } catch (Exception $e) {
+        $pdo->rollBack();
         error_log("Error finalizing server: " . $e->getMessage());
         send_json_response(0, 1, 500, "Failed to finalize server: " . $e->getMessage());
     }
 }
 
 /**
- * Save configuration as draft
+ * Save draft configuration
  */
 function handleSaveDraft() {
     global $pdo, $user;
     
     $configUuid = $_POST['config_uuid'] ?? '';
-    $draftName = trim($_POST['draft_name'] ?? '');
-    $draftDescription = trim($_POST['draft_description'] ?? '');
+    $draftName = $_POST['draft_name'] ?? '';
+    $notes = $_POST['notes'] ?? '';
     
     if (empty($configUuid)) {
-        send_json_response(0, 1, 400, "Config UUID is required");
+        send_json_response(0, 1, 400, "Configuration UUID is required");
     }
     
     try {
-        $updateFields = [];
-        $updateValues = [];
+        // Verify ownership
+        $stmt = $pdo->prepare("SELECT created_by FROM server_configurations WHERE config_uuid = ? AND created_by = ?");
+        $stmt->execute([$configUuid, $user['id']]);
         
-        if (!empty($draftName)) {
-            $updateFields[] = "name = ?";
-            $updateValues[] = $draftName;
+        if (!$stmt->fetch()) {
+            send_json_response(0, 1, 404, "Server configuration not found or access denied");
         }
         
-        if (!empty($draftDescription)) {
-            $updateFields[] = "description = ?";
-            $updateValues[] = $draftDescription;
-        }
+        // Update draft information
+        $stmt = $pdo->prepare("
+            UPDATE server_configurations 
+            SET server_name = COALESCE(?, server_name), 
+                notes = COALESCE(?, notes),
+                updated_by = ?,
+                updated_at = NOW()
+            WHERE config_uuid = ?
+        ");
+        $stmt->execute([$draftName, $notes, $user['id'], $configUuid]);
         
-        if (!empty($updateFields)) {
-            $updateFields[] = "updated_at = NOW()";
-            $updateValues[] = $configUuid;
-            $updateValues[] = $user['id'];
-            
-            $sql = "UPDATE server_configurations SET " . implode(', ', $updateFields) . " WHERE config_uuid = ? AND created_by = ?";
-            $stmt = $pdo->prepare($sql);
-            $stmt->execute($updateValues);
-        }
-        
-        // Log save action
-        logServerBuildAction($pdo, $configUuid, 'save_draft', null, null, [
+        // Log the save
+        logServerBuildAction($pdo, $configUuid, 'draft_saved', null, null, [
             'draft_name' => $draftName,
-            'draft_description' => $draftDescription
+            'notes' => $notes
         ], $user['id']);
         
         send_json_response(1, 1, 200, "Draft saved successfully", [
             'config_uuid' => $configUuid,
-            'draft_name' => $draftName,
-            'draft_description' => $draftDescription
+            'draft_name' => $draftName
         ]);
         
     } catch (Exception $e) {
@@ -670,12 +614,18 @@ function handleLoadDraft() {
     $configUuid = $_GET['config_uuid'] ?? $_POST['config_uuid'] ?? '';
     
     if (empty($configUuid)) {
-        send_json_response(0, 1, 400, "Config UUID is required");
+        send_json_response(0, 1, 400, "Configuration UUID is required");
     }
     
     try {
-        // Get configuration
-        $stmt = $pdo->prepare("SELECT * FROM server_configurations WHERE config_uuid = ? AND created_by = ? AND configuration_status < 3");
+        // Get configuration details
+        $stmt = $pdo->prepare("
+            SELECT sc.*, u.username as created_by_username, uu.username as updated_by_username
+            FROM server_configurations sc
+            LEFT JOIN users u ON sc.created_by = u.id 
+            LEFT JOIN users uu ON sc.updated_by = uu.id
+            WHERE sc.config_uuid = ? AND sc.created_by = ?
+        ");
         $stmt->execute([$configUuid, $user['id']]);
         $config = $stmt->fetch(PDO::FETCH_ASSOC);
         
@@ -683,19 +633,23 @@ function handleLoadDraft() {
             send_json_response(0, 1, 404, "Draft configuration not found or access denied");
         }
         
-        // Get current configuration data
-        $configData = json_decode($config['configuration_data'] ?? '{}', true);
+        // Get components
+        $stmt = $pdo->prepare("
+            SELECT component_type, component_uuid, quantity, slot_position, notes, added_at
+            FROM server_configuration_components 
+            WHERE config_uuid = ?
+            ORDER BY added_at
+        ");
+        $stmt->execute([$configUuid]);
+        $components = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        
+        // Get progress
+        $progress = getServerProgress($pdo, $configUuid);
         
         send_json_response(1, 1, 200, "Draft loaded successfully", [
-            'config_uuid' => $configUuid,
-            'name' => $config['server_name'],
-            'description' => $config['description'],
-            'configuration' => $configData,
-            'configuration_summary' => getConfigurationSummary($configData),
-            'created_at' => $config['created_at'],
-            'updated_at' => $config['updated_at'],
-            'progress' => calculateConfigurationProgress($configData),
-            'next_step' => determineNextStep($configData)
+            'configuration' => $config,
+            'components' => $components,
+            'progress' => $progress
         ]);
         
     } catch (Exception $e) {
@@ -713,35 +667,22 @@ function handleGetServerProgress() {
     $configUuid = $_GET['config_uuid'] ?? $_POST['config_uuid'] ?? '';
     
     if (empty($configUuid)) {
-        send_json_response(0, 1, 400, "Config UUID is required");
+        send_json_response(0, 1, 400, "Configuration UUID is required");
     }
     
     try {
-        // Get configuration
-        $stmt = $pdo->prepare("SELECT server_name, configuration_data, status FROM server_configurations WHERE config_uuid = ? AND created_by = ?");
+        // Verify ownership
+        $stmt = $pdo->prepare("SELECT created_by FROM server_configurations WHERE config_uuid = ? AND created_by = ?");
         $stmt->execute([$configUuid, $user['id']]);
-        $config = $stmt->fetch(PDO::FETCH_ASSOC);
         
-        if (!$config) {
+        if (!$stmt->fetch()) {
             send_json_response(0, 1, 404, "Server configuration not found or access denied");
         }
         
-        // Get current configuration data
-        $configData = json_decode($config['configuration_data'] ?? '{}', true);
-        
-        $progress = calculateConfigurationProgress($configData);
-        
-        // Map status code to name
-        $statusMap = [0 => 'draft', 1 => 'validated', 2 => 'built', 3 => 'deployed'];
-        $statusName = $statusMap[$config['configuration_status']] ?? 'unknown';
+        $progress = getServerProgress($pdo, $configUuid);
         
         send_json_response(1, 1, 200, "Server progress retrieved", [
-            'config_uuid' => $configUuid,
-            'name' => $config['server_name'],
-            'status' => $statusName,
-            'progress' => $progress,
-            'next_step' => determineNextStep($configData),
-            'configuration_summary' => getConfigurationSummary($configData)
+            'progress' => $progress
         ]);
         
     } catch (Exception $e) {
@@ -751,7 +692,7 @@ function handleGetServerProgress() {
 }
 
 /**
- * Reset configuration (clear all components)
+ * Reset configuration
  */
 function handleResetConfiguration() {
     global $pdo, $user;
@@ -759,96 +700,120 @@ function handleResetConfiguration() {
     $configUuid = $_POST['config_uuid'] ?? '';
     
     if (empty($configUuid)) {
-        send_json_response(0, 1, 400, "Config UUID is required");
+        send_json_response(0, 1, 400, "Configuration UUID is required");
     }
     
     try {
-        // Reset configuration data
-        $configData = ['components' => []];
+        $pdo->beginTransaction();
         
+        // Verify ownership and status
         $stmt = $pdo->prepare("
-            UPDATE server_configurations 
-            SET configuration_data = ?, updated_by = ?, updated_at = NOW() 
-            WHERE config_uuid = ? AND created_by = ? AND configuration_status = 0
+            SELECT created_by, configuration_status 
+            FROM server_configurations 
+            WHERE config_uuid = ? AND created_by = ?
         ");
-        $result = $stmt->execute([json_encode($configData), $user['id'], $configUuid, $user['id']]);
+        $stmt->execute([$configUuid, $user['id']]);
+        $config = $stmt->fetch(PDO::FETCH_ASSOC);
         
-        if ($result && $stmt->rowCount() > 0) {
-            // Log reset action
-            logServerBuildAction($pdo, $configUuid, 'reset', null, null, [], $user['id']);
-            
-            send_json_response(1, 1, 200, "Configuration reset successfully", [
-                'config_uuid' => $configUuid,
-                'configuration' => $configData
-            ]);
-        } else {
-            send_json_response(0, 1, 404, "Configuration not found, access denied, or already finalized");
+        if (!$config) {
+            send_json_response(0, 1, 404, "Server configuration not found or access denied");
         }
         
+        if ($config['configuration_status'] > 1) {
+            send_json_response(0, 1, 400, "Cannot reset configuration that has been built or finalized");
+        }
+        
+        // Remove all components
+        $stmt = $pdo->prepare("DELETE FROM server_configuration_components WHERE config_uuid = ?");
+        $stmt->execute([$configUuid]);
+        
+        // Reset configuration status and clear calculated fields
+        $stmt = $pdo->prepare("
+            UPDATE server_configurations 
+            SET configuration_status = 0,
+                compatibility_score = NULL,
+                validation_results = NULL,
+                power_consumption = NULL,
+                updated_by = ?,
+                updated_at = NOW()
+            WHERE config_uuid = ?
+        ");
+        $stmt->execute([$user['id'], $configUuid]);
+        
+        // Log the reset
+        logServerBuildAction($pdo, $configUuid, 'reset', null, null, [], $user['id']);
+        
+        $pdo->commit();
+        
+        send_json_response(1, 1, 200, "Configuration reset successfully", [
+            'config_uuid' => $configUuid
+        ]);
+        
     } catch (Exception $e) {
+        $pdo->rollBack();
         error_log("Error resetting configuration: " . $e->getMessage());
         send_json_response(0, 1, 500, "Failed to reset configuration: " . $e->getMessage());
     }
 }
 
 /**
- * List user's draft configurations
+ * List draft configurations
  */
 function handleListDrafts() {
     global $pdo, $user;
     
     $limit = (int)($_GET['limit'] ?? 20);
     $offset = (int)($_GET['offset'] ?? 0);
-    $status = $_GET['status'] ?? 'draft'; // draft, finalized, all
     
     try {
-        $whereClause = "WHERE created_by = ?";
-        $params = [$user['id']];
-        
-        if ($status !== 'all') {
-            $whereClause .= " AND configuration_status = ?";
-            // Map status names to numbers: draft=0, validated=1, built=2, deployed=3
-            $statusCode = $status === 'draft' ? 0 : ($status === 'finalized' ? 3 : $status);
-            $params[] = $statusCode;
-        }
-        
-        // Get configurations
         $stmt = $pdo->prepare("
-            SELECT config_uuid, server_name, description, configuration_status, created_at, updated_at, server_uuid, configuration_data
-            FROM server_configurations 
-            $whereClause
-            ORDER BY updated_at DESC 
+            SELECT sc.*, 
+                   u.username as created_by_username, 
+                   uu.username as updated_by_username
+            FROM server_configurations sc
+            LEFT JOIN users u ON sc.created_by = u.id 
+            LEFT JOIN users uu ON sc.updated_by = uu.id
+            WHERE sc.created_by = ? AND sc.configuration_status < 3
+            ORDER BY sc.updated_at DESC
             LIMIT ? OFFSET ?
         ");
-        $params[] = $limit;
-        $params[] = $offset;
-        $stmt->execute($params);
-        $configurations = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $stmt->execute([$user['id'], $limit, $offset]);
+        $drafts = $stmt->fetchAll(PDO::FETCH_ASSOC);
         
-        // Get total count
-        $stmt = $pdo->prepare("SELECT COUNT(*) as total FROM server_configurations $whereClause");
-        $stmt->execute(array_slice($params, 0, -2)); // Remove limit and offset
-        $totalCount = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
-        
-        // Add progress info to each configuration
-        foreach ($configurations as &$config) {
-            $configData = json_decode($config['configuration_data'] ?? '{}', true);
-            $config['progress'] = calculateConfigurationProgress($configData);
-            $config['component_count'] = isset($configData['components']) ? count($configData['components']) : 0;
-            
-            // Map status code to name
-            $statusMap = [0 => 'draft', 1 => 'validated', 2 => 'built', 3 => 'deployed'];
-            $config['status'] = $statusMap[$config['configuration_status']] ?? 'unknown';
-            
-            unset($config['configuration_data']); // Remove full data from list view
+        // Get component counts for each draft
+        foreach ($drafts as &$draft) {
+            $stmt = $pdo->prepare("
+                SELECT component_type, COUNT(*) as count 
+                FROM server_configuration_components 
+                WHERE config_uuid = ? 
+                GROUP BY component_type
+            ");
+            $stmt->execute([$draft['config_uuid']]);
+            $componentCounts = [];
+            while ($row = $stmt->fetch()) {
+                $componentCounts[$row['component_type']] = $row['count'];
+            }
+            $draft['component_counts'] = $componentCounts;
+            $draft['total_components'] = array_sum($componentCounts);
         }
         
-        send_json_response(1, 1, 200, "Draft configurations retrieved", [
-            'configurations' => $configurations,
-            'total_count' => (int)$totalCount,
-            'limit' => $limit,
-            'offset' => $offset,
-            'has_more' => ($offset + $limit) < $totalCount
+        // Get total count
+        $stmt = $pdo->prepare("
+            SELECT COUNT(*) as total 
+            FROM server_configurations 
+            WHERE created_by = ? AND configuration_status < 3
+        ");
+        $stmt->execute([$user['id']]);
+        $totalCount = $stmt->fetch()['total'];
+        
+        send_json_response(1, 1, 200, "Drafts retrieved successfully", [
+            'drafts' => $drafts,
+            'pagination' => [
+                'total' => (int)$totalCount,
+                'limit' => $limit,
+                'offset' => $offset,
+                'has_more' => ($offset + $limit) < $totalCount
+            ]
         ]);
         
     } catch (Exception $e) {
@@ -866,33 +831,42 @@ function handleDeleteDraft() {
     $configUuid = $_POST['config_uuid'] ?? '';
     
     if (empty($configUuid)) {
-        send_json_response(0, 1, 400, "Config UUID is required");
+        send_json_response(0, 1, 400, "Configuration UUID is required");
     }
     
     try {
-        // Start transaction
         $pdo->beginTransaction();
         
-        // Delete build history
-        $stmt = $pdo->prepare("DELETE FROM server_build_history WHERE config_uuid = ?");
+        // Verify ownership and status
+        $stmt = $pdo->prepare("
+            SELECT created_by, configuration_status 
+            FROM server_configurations 
+            WHERE config_uuid = ? AND created_by = ?
+        ");
+        $stmt->execute([$configUuid, $user['id']]);
+        $config = $stmt->fetch(PDO::FETCH_ASSOC);
+        
+        if (!$config) {
+            send_json_response(0, 1, 404, "Draft configuration not found or access denied");
+        }
+        
+        if ($config['configuration_status'] == 3) {
+            send_json_response(0, 1, 400, "Cannot delete finalized configuration");
+        }
+        
+        // Delete related records
+        $stmt = $pdo->prepare("DELETE FROM server_configuration_components WHERE config_uuid = ?");
         $stmt->execute([$configUuid]);
         
-        // Delete configuration
-        $stmt = $pdo->prepare("
-            DELETE FROM server_configurations 
-            WHERE config_uuid = ? AND created_by = ? AND configuration_status = 0
-        ");
-        $result = $stmt->execute([$configUuid, $user['id']]);
+        $stmt = $pdo->prepare("DELETE FROM server_configuration_history WHERE config_uuid = ?");
+        $stmt->execute([$configUuid]);
         
-        if ($result && $stmt->rowCount() > 0) {
-            $pdo->commit();
-            send_json_response(1, 1, 200, "Draft configuration deleted successfully", [
-                'config_uuid' => $configUuid
-            ]);
-        } else {
-            $pdo->rollBack();
-            send_json_response(0, 1, 404, "Draft configuration not found, access denied, or already finalized");
-        }
+        $stmt = $pdo->prepare("DELETE FROM server_configurations WHERE config_uuid = ?");
+        $stmt->execute([$configUuid]);
+        
+        $pdo->commit();
+        
+        send_json_response(1, 1, 200, "Draft deleted successfully");
         
     } catch (Exception $e) {
         $pdo->rollBack();
@@ -901,408 +875,437 @@ function handleDeleteDraft() {
     }
 }
 
-// ===== HELPER FUNCTIONS =====
+// Helper functions
+
+/**
+ * Get server progress information
+ */
+function getServerProgress($pdo, $configUuid) {
+    try {
+        // Get current components
+        $stmt = $pdo->prepare("
+            SELECT component_type, COUNT(*) as count 
+            FROM server_configuration_components 
+            WHERE config_uuid = ? 
+            GROUP BY component_type
+        ");
+        $stmt->execute([$configUuid]);
+        $components = [];
+        $totalComponents = 0;
+        
+        while ($row = $stmt->fetch()) {
+            $components[$row['component_type']] = $row['count'];
+            $totalComponents += $row['count'];
+        }
+        
+        // Define required components for completion
+        $requiredComponents = ['cpu', 'motherboard', 'ram', 'storage'];
+        $completedSteps = 0;
+        
+        foreach ($requiredComponents as $required) {
+            if (isset($components[$required])) {
+                $completedSteps++;
+            }
+        }
+        
+        // Determine current step
+        $currentStep = 'component_selection';
+        if ($completedSteps >= 4) {
+            $currentStep = 'validation';
+        }
+        
+        // Check if ready for finalization
+        $canFinalize = $completedSteps >= 4;
+        
+        return [
+            'total_steps' => 6,
+            'completed_steps' => $completedSteps,
+            'current_step' => $currentStep,
+            'components_added' => $components,
+            'total_components' => $totalComponents,
+            'can_finalize' => $canFinalize,
+            'completion_percentage' => round(($completedSteps / 4) * 100, 1)
+        ];
+        
+    } catch (Exception $e) {
+        error_log("Error getting server progress: " . $e->getMessage());
+        return [
+            'total_steps' => 6,
+            'completed_steps' => 0,
+            'current_step' => 'component_selection',
+            'components_added' => [],
+            'total_components' => 0,
+            'can_finalize' => false,
+            'completion_percentage' => 0
+        ];
+    }
+}
 
 /**
  * Get available components of a specific type
  */
-function getAvailableComponents($pdo, $type) {
+function getAvailableComponents($pdo, $componentType) {
     try {
-        $stmt = $pdo->prepare("SELECT * FROM $type WHERE Status = '1' ORDER BY SerialNumber");
+        $tableName = $componentType . 'inventory';
+        
+        $stmt = $pdo->prepare("
+            SELECT ID, UUID, SerialNumber, Status, Location, RackPosition, Notes, Flag
+            FROM $tableName 
+            WHERE Status = 1 
+            ORDER BY Notes, SerialNumber
+        ");
         $stmt->execute();
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
+        
     } catch (Exception $e) {
-        error_log("Error getting available $type components: " . $e->getMessage());
+        error_log("Error getting available components for $componentType: " . $e->getMessage());
         return [];
     }
 }
 
 /**
- * Get all available components for all types
- */
-function getAllAvailableComponents($pdo) {
-    $componentTypes = ['cpu', 'motherboard', 'ram', 'storage', 'nic', 'caddy'];
-    $allComponents = [];
-    
-    foreach ($componentTypes as $type) {
-        $allComponents[$type] = getAvailableComponents($pdo, $type);
-    }
-    
-    return $allComponents;
-}
-
-/**
- * Get compatible components for a specific type based on current configuration
- */
-function getCompatibleComponents($pdo, $configData, $type) {
-    // For now, return all available components
-    // This can be enhanced with actual compatibility logic
-    return getAvailableComponents($pdo, $type);
-}
-
-/**
- * Get all compatible components based on current configuration
- */
-function getAllCompatibleComponents($pdo, $configData) {
-    $componentTypes = ['cpu', 'motherboard', 'ram', 'storage', 'nic', 'caddy'];
-    $allComponents = [];
-    
-    foreach ($componentTypes as $type) {
-        $allComponents[$type] = getCompatibleComponents($pdo, $configData, $type);
-    }
-    
-    return $allComponents;
-}
-
-/**
- * Get component details by type and UUID
- */
-function getComponentDetails($pdo, $type, $uuid) {
-    try {
-        $stmt = $pdo->prepare("SELECT * FROM $type WHERE UUID = ?");
-        $stmt->execute([$uuid]);
-        return $stmt->fetch(PDO::FETCH_ASSOC);
-    } catch (Exception $e) {
-        error_log("Error getting $type component details: " . $e->getMessage());
-        return null;
-    }
-}
-
-/**
- * Check component compatibility (enhanced implementation)
- */
-function checkComponentCompatibility($pdo, $configData, $newComponentType, $newComponentDetails) {
-    $issues = [];
-    
-    // Basic compatibility checks
-    if (!isset($configData['components'])) {
-        return $issues; // No existing components, no conflicts
-    }
-    
-    $components = $configData['components'];
-    
-    // Check for duplicate component types (where only one is allowed)
-    $singleComponentTypes = ['cpu', 'motherboard'];
-    if (in_array($newComponentType, $singleComponentTypes) && isset($components[$newComponentType])) {
-        $issues[] = [
-            'type' => 'duplicate',
-            'severity' => 'error',
-            'message' => "Only one $newComponentType component is allowed per server"
-        ];
-    }
-    
-    // CPU-Motherboard socket compatibility
-    if ($newComponentType === 'cpu' && isset($components['motherboard'])) {
-        $motherboard = $components['motherboard']['details'] ?? null;
-        if ($motherboard && !isSocketCompatible($newComponentDetails, $motherboard)) {
-            $issues[] = [
-                'type' => 'socket_mismatch',
-                'severity' => 'error',
-                'message' => 'CPU socket does not match motherboard socket'
-            ];
-        }
-    }
-    
-    if ($newComponentType === 'motherboard' && isset($components['cpu'])) {
-        $cpu = $components['cpu']['details'] ?? null;
-        if ($cpu && !isSocketCompatible($cpu, $newComponentDetails)) {
-            $issues[] = [
-                'type' => 'socket_mismatch',
-                'severity' => 'error',
-                'message' => 'Motherboard socket does not match CPU socket'
-            ];
-        }
-    }
-    
-    // RAM compatibility with motherboard
-    if ($newComponentType === 'ram' && isset($components['motherboard'])) {
-        $motherboard = $components['motherboard']['details'] ?? null;
-        if ($motherboard && !isRAMCompatible($newComponentDetails, $motherboard)) {
-            $issues[] = [
-                'type' => 'ram_incompatible',
-                'severity' => 'warning',
-                'message' => 'RAM type may not be compatible with motherboard'
-            ];
-        }
-    }
-    
-    return $issues;
-}
-
-/**
- * Check if CPU and motherboard sockets are compatible
- */
-function isSocketCompatible($cpu, $motherboard) {
-    // Extract socket information from Notes field
-    $cpuSocket = extractSocketFromNotes($cpu['Notes'] ?? '');
-    $mbSocket = extractSocketFromNotes($motherboard['Notes'] ?? '');
-    
-    if (!$cpuSocket || !$mbSocket) {
-        return true; // Can't determine, assume compatible
-    }
-    
-    return strtolower($cpuSocket) === strtolower($mbSocket);
-}
-
-/**
- * Check if RAM is compatible with motherboard
- */
-function isRAMCompatible($ram, $motherboard) {
-    // Extract RAM type from Notes field
-    $ramType = extractRAMTypeFromNotes($ram['Notes'] ?? '');
-    $mbRAMType = extractRAMTypeFromNotes($motherboard['Notes'] ?? '');
-    
-    if (!$ramType || !$mbRAMType) {
-        return true; // Can't determine, assume compatible
-    }
-    
-    return strtolower($ramType) === strtolower($mbRAMType);
-}
-
-/**
- * Extract socket information from notes
- */
-function extractSocketFromNotes($notes) {
-    // Look for patterns like "Socket: LGA1151", "Socket LGA1151", "LGA1151 socket"
-    if (preg_match('/socket[:\s]*([A-Z0-9]+)/i', $notes, $matches)) {
-        return $matches[1];
-    }
-    
-    // Look for common socket patterns
-    if (preg_match('/(LGA\d+|AM\d+|FM\d+|TR4)/i', $notes, $matches)) {
-        return $matches[1];
-    }
-    
-    return null;
-}
-
-/**
- * Extract RAM type from notes
- */
-function extractRAMTypeFromNotes($notes) {
-    // Look for DDR patterns
-    if (preg_match('/(DDR\d+)/i', $notes, $matches)) {
-        return $matches[1];
-    }
-    
-    return null;
-}
-
-/**
- * Determine next recommended step based on current configuration
- */
-function determineNextStep($configData) {
-    if (!isset($configData['components'])) {
-        return 'cpu'; // Start with CPU
-    }
-    
-    $components = $configData['components'];
-    
-    // Recommended order: CPU -> Motherboard -> RAM -> Storage -> NIC -> Caddy
-    $recommendedOrder = ['cpu', 'motherboard', 'ram', 'storage', 'nic', 'caddy'];
-    
-    foreach ($recommendedOrder as $type) {
-        if (!isset($components[$type])) {
-            return $type;
-        }
-    }
-    
-    return null; // All basic components added
-}
-
-/**
- * Calculate configuration progress
- */
-function calculateConfigurationProgress($configData) {
-    $requiredComponents = ['cpu', 'motherboard', 'ram', 'storage'];
-    $optionalComponents = ['nic', 'caddy'];
-    $allComponents = array_merge($requiredComponents, $optionalComponents);
-    
-    $completedRequired = 0;
-    $completedOptional = 0;
-    $totalComponents = isset($configData['components']) ? count($configData['components']) : 0;
-    
-    if (isset($configData['components'])) {
-        foreach ($requiredComponents as $type) {
-            if (isset($configData['components'][$type])) {
-                $completedRequired++;
-            }
-        }
-        
-        foreach ($optionalComponents as $type) {
-            if (isset($configData['components'][$type])) {
-                $completedOptional++;
-            }
-        }
-    }
-    
-    $requiredProgress = ($completedRequired / count($requiredComponents)) * 100;
-    $overallProgress = ($totalComponents / count($allComponents)) * 100;
-    
-    return [
-        'total_components' => $totalComponents,
-        'required_completed' => $completedRequired,
-        'required_total' => count($requiredComponents),
-        'optional_completed' => $completedOptional,
-        'optional_total' => count($optionalComponents),
-        'required_progress_percent' => round($requiredProgress, 1),
-        'overall_progress_percent' => round($overallProgress, 1),
-        'is_minimum_viable' => $completedRequired >= 3, // CPU, MB, RAM minimum
-        'is_complete' => $completedRequired === count($requiredComponents)
-    ];
-}
-
-/**
- * Get configuration summary
- */
-function getConfigurationSummary($configData) {
-    $summary = [
-        'total_components' => 0,
-        'components_by_type' => [],
-        'estimated_cost' => 0,
-        'power_consumption' => 0
-    ];
-    
-    if (!isset($configData['components'])) {
-        return $summary;
-    }
-    
-    foreach ($configData['components'] as $type => $componentInfo) {
-        if (isset($componentInfo['uuid'])) {
-            // Single instance component
-            $summary['total_components']++;
-            $summary['components_by_type'][$type] = 1;
-        } else {
-            // Multi-instance component
-            $count = is_array($componentInfo) ? count($componentInfo) : 0;
-            $summary['total_components'] += $count;
-            $summary['components_by_type'][$type] = $count;
-        }
-    }
-    
-    return $summary;
-}
-
-/**
- * Validate server configuration
- */
-function validateServerConfiguration($pdo, $configData) {
-    $errors = [];
-    $warnings = [];
-    $criticalErrors = [];
-    
-    if (!isset($configData['components']) || empty($configData['components'])) {
-        $criticalErrors[] = "No components added to configuration";
-        return [
-            'is_complete' => false,
-            'errors' => $errors,
-            'warnings' => $warnings,
-            'critical_errors' => $criticalErrors
-        ];
-    }
-    
-    $components = $configData['components'];
-    
-    // Check for required components
-    $requiredComponents = ['cpu', 'motherboard', 'ram'];
-    foreach ($requiredComponents as $type) {
-        if (!isset($components[$type])) {
-            $criticalErrors[] = "Missing required component: " . ucfirst($type);
-        }
-    }
-    
-    // Check for storage
-    if (!isset($components['storage'])) {
-        $errors[] = "No storage component added - server may not be bootable";
-    }
-    
-    // Check for network interface
-    if (!isset($components['nic'])) {
-        $warnings[] = "No network interface added - server will have limited connectivity";
-    }
-    
-    // Validate component compatibility
-    foreach ($components as $type => $componentInfo) {
-        $componentDetails = null;
-        if (isset($componentInfo['details'])) {
-            $componentDetails = $componentInfo['details'];
-        } elseif (isset($componentInfo['uuid'])) {
-            $componentDetails = getComponentDetails($pdo, $type, $componentInfo['uuid']);
-        }
-        
-        if (!$componentDetails) {
-            $errors[] = "Could not validate component details for $type";
-            continue;
-        }
-        
-        // Check if component is still available
-        if ($componentDetails['Status'] != '1' && $componentDetails['Status'] != '2') {
-            $criticalErrors[] = "Component $type is no longer available (Status: " . getStatusText($componentDetails['Status']) . ")";
-        }
-    }
-    
-    // Check compatibility between components
-    if (isset($components['cpu']) && isset($components['motherboard'])) {
-        $cpuDetails = $components['cpu']['details'] ?? getComponentDetails($pdo, 'cpu', $components['cpu']['uuid']);
-        $mbDetails = $components['motherboard']['details'] ?? getComponentDetails($pdo, 'motherboard', $components['motherboard']['uuid']);
-        
-        if ($cpuDetails && $mbDetails && !isSocketCompatible($cpuDetails, $mbDetails)) {
-            $criticalErrors[] = "CPU and motherboard socket incompatibility detected";
-        }
-    }
-    
-    $isComplete = empty($criticalErrors) && count($components) >= 3;
-    
-    return [
-        'is_complete' => $isComplete,
-        'component_count' => count($components),
-        'errors' => $errors,
-        'warnings' => $warnings,
-        'critical_errors' => $criticalErrors,
-        'validation_summary' => sprintf(
-            "Configuration has %d components. %d errors, %d warnings, %d critical errors.",
-            count($components),
-            count($errors),
-            count($warnings),
-            count($criticalErrors)
-        )
-    ];
-}
-
-/**
- * Get status text from status code
- */
-function getStatusText($statusCode) {
-    $statusMap = [
-        '0' => 'Failed/Defective',
-        '1' => 'Available',
-        '2' => 'In Use'
-    ];
-    
-    return $statusMap[$statusCode] ?? 'Unknown';
-}
-
-/**
  * Log server build action
  */
-function logServerBuildAction($pdo, $configUuid, $action, $componentType = null, $componentUuid = null, $details = [], $userId = null) {
+function logServerBuildAction($pdo, $configUuid, $action, $componentType = null, $componentUuid = null, $metadata = null, $userId = null) {
     try {
+        // Check if history table exists, create if it doesn't
+        $stmt = $pdo->prepare("SHOW TABLES LIKE 'server_configuration_history'");
+        $stmt->execute();
+        if (!$stmt->fetch()) {
+            createHistoryTable($pdo);
+        }
+        
         $stmt = $pdo->prepare("
-            INSERT INTO server_build_history (config_uuid, action, component_type, component_uuid, details, user_id, created_at)
+            INSERT INTO server_configuration_history 
+            (config_uuid, action, component_type, component_uuid, metadata, created_by, created_at) 
             VALUES (?, ?, ?, ?, ?, ?, NOW())
         ");
         $stmt->execute([
-            $configUuid,
-            $action,
-            $componentType,
-            $componentUuid,
-            json_encode($details),
+            $configUuid, 
+            $action, 
+            $componentType, 
+            $componentUuid, 
+            json_encode($metadata),
             $userId
         ]);
+        
     } catch (Exception $e) {
         error_log("Error logging server build action: " . $e->getMessage());
-        // Don't throw error, just log it
+        // Don't throw exception as this shouldn't break the main operation
     }
+}
+
+/**
+ * Create server configuration history table if it doesn't exist
+ */
+function createHistoryTable($pdo) {
+    try {
+        $sql = "
+            CREATE TABLE IF NOT EXISTS server_configuration_history (
+                id int(11) NOT NULL AUTO_INCREMENT,
+                config_uuid varchar(36) NOT NULL,
+                action varchar(50) NOT NULL COMMENT 'created, updated, component_added, component_removed, validated, etc.',
+                component_type varchar(20) DEFAULT NULL,
+                component_uuid varchar(36) DEFAULT NULL,
+                metadata text DEFAULT NULL COMMENT 'JSON metadata for the action',
+                created_by int(11) DEFAULT NULL,
+                created_at timestamp NOT NULL DEFAULT current_timestamp(),
+                PRIMARY KEY (id),
+                KEY idx_config_uuid (config_uuid),
+                KEY idx_component_uuid (component_uuid),
+                KEY idx_created_at (created_at)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+        ";
+        $pdo->exec($sql);
+        error_log("Created server_configuration_history table");
+    } catch (Exception $e) {
+        error_log("Error creating history table: " . $e->getMessage());
+    }
+}
+
+/**
+ * Calculate compatibility score for a configuration
+ */
+function calculateCompatibilityScore($pdo, $configUuid) {
+    try {
+        // Get configuration components
+        $stmt = $pdo->prepare("
+            SELECT component_type, component_uuid 
+            FROM server_configuration_components 
+            WHERE config_uuid = ?
+        ");
+        $stmt->execute([$configUuid]);
+        $components = $stmt->fetchAll();
+        
+        if (empty($components)) {
+            return null;
+        }
+        
+        $totalScore = 0;
+        $scoreCount = 0;
+        
+        // Basic compatibility checks
+        $cpuUuid = null;
+        $motherboardUuid = null;
+        $ramComponents = [];
+        
+        // Extract key components
+        foreach ($components as $component) {
+            if ($component['component_type'] === 'cpu') {
+                $cpuUuid = $component['component_uuid'];
+            } elseif ($component['component_type'] === 'motherboard') {
+                $motherboardUuid = $component['component_uuid'];
+            } elseif ($component['component_type'] === 'ram') {
+                $ramComponents[] = $component['component_uuid'];
+            }
+        }
+        
+        // CPU-Motherboard compatibility
+        if ($cpuUuid && $motherboardUuid) {
+            $score = checkCpuMotherboardCompatibility($pdo, $cpuUuid, $motherboardUuid);
+            $totalScore += $score;
+            $scoreCount++;
+        }
+        
+        // RAM-Motherboard compatibility
+        if ($motherboardUuid && !empty($ramComponents)) {
+            foreach ($ramComponents as $ramUuid) {
+                $score = checkRamMotherboardCompatibility($pdo, $ramUuid, $motherboardUuid);
+                $totalScore += $score;
+                $scoreCount++;
+            }
+        }
+        
+        // Calculate average score
+        $averageScore = $scoreCount > 0 ? ($totalScore / $scoreCount) : 85.0;
+        
+        return round($averageScore, 1);
+        
+    } catch (Exception $e) {
+        error_log("Error calculating compatibility score: " . $e->getMessage());
+        return 70.0; // Default fallback score
+    }
+}
+
+/**
+ * Generate validation results for a configuration
+ */
+function generateValidationResults($pdo, $configUuid, $details = null) {
+    try {
+        if (!$details) {
+            require_once __DIR__ . '/../../includes/models/ServerBuilder.php';
+            $serverBuilder = new ServerBuilder($pdo);
+            $details = $serverBuilder->getConfigurationDetails($configUuid);
+        }
+        
+        $validation = [
+            'is_complete' => false,
+            'errors' => [],
+            'warnings' => [],
+            'critical_errors' => [],
+            'component_status' => [],
+            'timestamp' => date('Y-m-d H:i:s')
+        ];
+        
+        $components = $details['components'] ?? [];
+        $requiredComponents = ['cpu', 'motherboard', 'ram', 'storage'];
+        
+        // Check for required components
+        foreach ($requiredComponents as $requiredType) {
+            if (empty($components[$requiredType])) {
+                $validation['critical_errors'][] = "Missing required component: " . strtoupper($requiredType);
+                $validation['component_status'][$requiredType] = 'missing';
+            } else {
+                $validation['component_status'][$requiredType] = 'present';
+            }
+        }
+        
+        // Check for optional but recommended components
+        $optionalComponents = ['nic'];
+        foreach ($optionalComponents as $optionalType) {
+            if (empty($components[$optionalType])) {
+                $validation['warnings'][] = "Recommended component missing: " . strtoupper($optionalType);
+                $validation['component_status'][$optionalType] = 'missing';
+            } else {
+                $validation['component_status'][$optionalType] = 'present';
+            }
+        }
+        
+        // Power consumption validation
+        $powerConsumption = $details['power_consumption']['total_with_overhead_watts'] ?? 0;
+        if ($powerConsumption > 1000) {
+            $validation['warnings'][] = "High power consumption: {$powerConsumption}W";
+        } elseif ($powerConsumption > 1500) {
+            $validation['errors'][] = "Excessive power consumption: {$powerConsumption}W";
+        }
+        
+        // Compatibility score validation
+        $compatibilityScore = calculateCompatibilityScore($pdo, $configUuid);
+        if ($compatibilityScore && $compatibilityScore < 60) {
+            $validation['critical_errors'][] = "Low compatibility score: {$compatibilityScore}%";
+        } elseif ($compatibilityScore && $compatibilityScore < 80) {
+            $validation['warnings'][] = "Moderate compatibility score: {$compatibilityScore}%";
+        }
+        
+        // Check if configuration is complete
+        $validation['is_complete'] = empty($validation['critical_errors']);
+        
+        return $validation;
+        
+    } catch (Exception $e) {
+        error_log("Error generating validation results: " . $e->getMessage());
+        return [
+            'is_complete' => false,
+            'errors' => ['Validation system error'],
+            'warnings' => [],
+            'critical_errors' => ['Unable to validate configuration'],
+            'component_status' => [],
+            'timestamp' => date('Y-m-d H:i:s')
+        ];
+    }
+}
+
+/**
+ * Check CPU-Motherboard compatibility
+ */
+function checkCpuMotherboardCompatibility($pdo, $cpuUuid, $motherboardUuid) {
+    try {
+        // Get CPU socket info
+        $stmt = $pdo->prepare("SELECT Notes FROM cpuinventory WHERE UUID = ?");
+        $stmt->execute([$cpuUuid]);
+        $cpu = $stmt->fetch();
+        
+        // Get Motherboard socket info
+        $stmt = $pdo->prepare("SELECT Notes FROM motherboardinventory WHERE UUID = ?");
+        $stmt->execute([$motherboardUuid]);
+        $motherboard = $stmt->fetch();
+        
+        if (!$cpu || !$motherboard) {
+            return 50.0;
+        }
+        
+        $cpuNotes = strtolower($cpu['Notes'] ?? '');
+        $motherboardNotes = strtolower($motherboard['Notes'] ?? '');
+        
+        // Extract socket types
+        $commonSockets = ['lga1151', 'lga1200', 'lga1700', 'am4', 'am5', 'tr4'];
+        
+        $cpuSocket = null;
+        $motherboardSocket = null;
+        
+        foreach ($commonSockets as $socket) {
+            if (strpos($cpuNotes, $socket) !== false) {
+                $cpuSocket = $socket;
+                break;
+            }
+        }
+        
+        foreach ($commonSockets as $socket) {
+            if (strpos($motherboardNotes, $socket) !== false) {
+                $motherboardSocket = $socket;
+                break;
+            }
+        }
+        
+        if ($cpuSocket && $motherboardSocket && $cpuSocket === $motherboardSocket) {
+            return 95.0; // Perfect compatibility
+        } elseif ($cpuSocket && $motherboardSocket) {
+            return 30.0; // Incompatible sockets
+        } else {
+            return 75.0; // Unknown compatibility
+        }
+        
+    } catch (Exception $e) {
+        error_log("Error checking CPU-Motherboard compatibility: " . $e->getMessage());
+        return 70.0;
+    }
+}
+
+/**
+ * Check RAM-Motherboard compatibility
+ */
+function checkRamMotherboardCompatibility($pdo, $ramUuid, $motherboardUuid) {
+    try {
+        // Get RAM type info
+        $stmt = $pdo->prepare("SELECT Notes FROM raminventory WHERE UUID = ?");
+        $stmt->execute([$ramUuid]);
+        $ram = $stmt->fetch();
+        
+        // Get Motherboard memory support info
+        $stmt = $pdo->prepare("SELECT Notes FROM motherboardinventory WHERE UUID = ?");
+        $stmt->execute([$motherboardUuid]);
+        $motherboard = $stmt->fetch();
+        
+        if (!$ram || !$motherboard) {
+            return 50.0;
+        }
+        
+        $ramNotes = strtolower($ram['Notes'] ?? '');
+        $motherboardNotes = strtolower($motherboard['Notes'] ?? '');
+        
+        // Check DDR type compatibility
+        if ((strpos($ramNotes, 'ddr4') !== false && strpos($motherboardNotes, 'ddr4') !== false) ||
+            (strpos($ramNotes, 'ddr5') !== false && strpos($motherboardNotes, 'ddr5') !== false)) {
+            return 90.0; // Good compatibility
+        } elseif ((strpos($ramNotes, 'ddr4') !== false && strpos($motherboardNotes, 'ddr5') !== false) ||
+                  (strpos($ramNotes, 'ddr5') !== false && strpos($motherboardNotes, 'ddr4') !== false)) {
+            return 20.0; // Incompatible DDR types
+        } else {
+            return 75.0; // Unknown compatibility
+        }
+        
+    } catch (Exception $e) {
+        error_log("Error checking RAM-Motherboard compatibility: " . $e->getMessage());
+        return 70.0;
+    }
+}
+
+
+
+
+/**
+ * Get configuration status text
+ */
+function getConfigurationStatusText($status) {
+    $statusMap = [
+        0 => 'Draft',
+        1 => 'Validated', 
+        2 => 'Built',
+        3 => 'Finalized'
+    ];
+    
+    return $statusMap[$status] ?? 'Unknown';
+}
+
+/**
+ * Validate server configuration completeness
+ */
+function validateServerConfiguration($pdo, $configData) {
+    $validation = [
+        'is_complete' => false,
+        'errors' => [],
+        'warnings' => [],
+        'critical_errors' => []
+    ];
+    
+    // Check for required components
+    $requiredComponents = ['cpu', 'motherboard', 'ram', 'storage'];
+    
+    if (!isset($configData['components'])) {
+        $validation['critical_errors'][] = 'No components configured';
+        return $validation;
+    }
+    
+    foreach ($requiredComponents as $required) {
+        if (empty($configData['components'][$required])) {
+            $validation['critical_errors'][] = "Missing required component: " . strtoupper($required);
+        }
+    }
+    
+    // Check if configuration is complete
+    $validation['is_complete'] = empty($validation['critical_errors']);
+    
+    return $validation;
 }
 
 ?>

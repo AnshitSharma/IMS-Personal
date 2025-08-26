@@ -3,6 +3,7 @@ require_once __DIR__ . '/../../includes/config.php';
 require_once __DIR__ . '/../../includes/BaseFunctions.php';
 require_once __DIR__ . '/../../includes/models/ServerBuilder.php';
 require_once __DIR__ . '/../../includes/models/ServerConfiguration.php';
+require_once __DIR__ . '/../../includes/models/CompatibilityEngine.php';
 
 header('Content-Type: application/json');
 
@@ -390,7 +391,7 @@ function handleRemoveComponent($serverBuilder, $user) {
 }
 
 /**
- * FIXED: Get server configuration details - Returns complete config info (no cost fields)
+ * ENHANCED: Get server configuration details with compatibility scoring and validation
  */
 function handleGetConfiguration($serverBuilder, $user) {
     global $pdo;
@@ -419,6 +420,42 @@ function handleGetConfiguration($serverBuilder, $user) {
             send_json_response(0, 1, 500, "Failed to retrieve configuration: " . $details['error']);
         }
         
+        // Calculate compatibility score and validation results
+        $compatibilityScore = null;
+        $validationResults = null;
+        
+        try {
+            // Use CompatibilityEngine if available for detailed compatibility analysis
+            if (class_exists('CompatibilityEngine')) {
+                $compatibilityEngine = new CompatibilityEngine($pdo);
+                $compatibilityValidation = $compatibilityEngine->validateServerConfiguration($details['configuration']);
+                $compatibilityScore = round($compatibilityValidation['overall_score'] * 100, 1);
+            }
+            
+            // Run comprehensive validation using ServerBuilder
+            $validation = $serverBuilder->validateConfiguration($configUuid);
+            $validationResults = $validation;
+            
+            // Use the ServerBuilder compatibility score if CompatibilityEngine didn't provide one
+            if ($compatibilityScore === null) {
+                $compatibilityScore = $validation['compatibility_score'] ?? null;
+            }
+            
+            // Store the calculated values in the database
+            if ($compatibilityScore !== null || $validationResults !== null) {
+                $serverBuilder->updateConfigurationValidation($configUuid, $compatibilityScore, $validationResults);
+            }
+            
+        } catch (Exception $compatError) {
+            error_log("Error calculating compatibility for config $configUuid: " . $compatError->getMessage());
+            // Continue without compatibility data rather than failing the entire request
+            $compatibilityScore = null;
+            $validationResults = [
+                'error' => 'Compatibility calculation failed',
+                'message' => $compatError->getMessage()
+            ];
+        }
+        
         // Clean up configuration data - remove cost fields and fix JSON configurations
         $configuration = $details['configuration'];
         
@@ -427,7 +464,8 @@ function handleGetConfiguration($serverBuilder, $user) {
         
         // Ensure all calculated fields are present and up-to-date
         $configuration['power_consumption'] = $details['power_consumption']['total_with_overhead_watts'] ?? 0;
-        $configuration['compatibility_score'] = $details['configuration']['compatibility_score'] ?? null;
+        $configuration['compatibility_score'] = $compatibilityScore;
+        $configuration['validation_results'] = $validationResults;
         
         // Fix JSON configuration fields - parse them properly
         $ramConfig = !empty($configuration['ram_configuration']) ? 
@@ -454,7 +492,10 @@ function handleGetConfiguration($serverBuilder, $user) {
             'power_consumption' => $details['power_consumption'],
             'server_name' => $details['server_name'],
             'configuration_status' => $details['configuration_status'],
-            'configuration_status_text' => getConfigurationStatusText($details['configuration_status'])
+            'configuration_status_text' => getConfigurationStatusText($details['configuration_status']),
+            'compatibility_score' => $compatibilityScore,
+            'validation_results' => $validationResults,
+            'compatibility_calculated_at' => date('Y-m-d H:i:s')
         ]);
         
     } catch (Exception $e) {
@@ -1326,5 +1367,4 @@ if (!function_exists('hasPermission')) {
         }
     }
 }
-
 ?>

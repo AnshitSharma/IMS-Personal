@@ -277,6 +277,11 @@ class ServerBuilder {
             $configData['power_consumption'] = round($totalPowerConsumptionWithOverhead, 2);
             $configData['compatibility_score'] = $compatibilityScore;
             
+            // Parse validation_results from JSON if it exists
+            if (!empty($configData['validation_results'])) {
+                $configData['validation_results'] = json_decode($configData['validation_results'], true);
+            }
+            
             return [
                 'configuration' => $configData,
                 'components' => $componentDetails,
@@ -576,6 +581,41 @@ class ServerBuilder {
             
         } catch (Exception $e) {
             error_log("Error updating calculated fields: " . $e->getMessage());
+        }
+    }
+    
+    /**
+     * Update configuration with compatibility score and validation results
+     */
+    public function updateConfigurationValidation($configUuid, $compatibilityScore = null, $validationResults = null) {
+        try {
+            $setParts = [];
+            $params = [];
+            
+            if ($compatibilityScore !== null) {
+                $setParts[] = "compatibility_score = ?";
+                $params[] = $compatibilityScore;
+            }
+            
+            if ($validationResults !== null) {
+                $setParts[] = "validation_results = ?";
+                $params[] = json_encode($validationResults);
+            }
+            
+            if (!empty($setParts)) {
+                $setParts[] = "updated_at = NOW()";
+                $sql = "UPDATE server_configurations SET " . implode(', ', $setParts) . " WHERE config_uuid = ?";
+                $params[] = $configUuid;
+                
+                $stmt = $this->pdo->prepare($sql);
+                $stmt->execute($params);
+                
+                error_log("Updated configuration $configUuid with compatibility score: " . ($compatibilityScore ?? 'null') . " and validation results");
+            }
+            
+        } catch (Exception $e) {
+            error_log("Error updating configuration validation: " . $e->getMessage());
+            throw $e;
         }
     }
     

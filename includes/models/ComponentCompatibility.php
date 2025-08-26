@@ -10,6 +10,7 @@ class ComponentCompatibility {
     private $pdo;
     private $jsonDataCache = [];
     
+
     public function __construct($pdo) {
         $this->pdo = $pdo;
     }
