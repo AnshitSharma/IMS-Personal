@@ -98,9 +98,7 @@ class ServerConfiguration {
         try {
             $allowedFields = [
                 'server_name', 'description', 'configuration_status',
-                'cpu_uuid', 'motherboard_uuid', 'ram_configuration',
-                'storage_configuration', 'nic_configuration', 'caddy_configuration',
-                'compatibility_score', 'power_consumption', 'total_cost',
+                'compatibility_score',
                 'validation_errors', 'notes', 'updated_at'
             ];
             
@@ -407,7 +405,6 @@ class ServerConfiguration {
             'total_components' => $this->getComponentCount(),
             'compatibility_score' => $this->data['compatibility_score'] ?? null,
             'power_consumption' => $this->data['power_consumption'] ?? null,
-            'total_cost' => $this->data['total_cost'] ?? null
         ];
     }
     

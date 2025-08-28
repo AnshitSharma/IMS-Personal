@@ -91,6 +91,11 @@
                     <span>Caddies</span>
                     <span class="count" id="caddyCount">0</span>
                 </li>
+                <li class="menu-item" data-component="servers">
+                    <i class="fas fa-server"></i>
+                    <span>Servers</span>
+                    <span class="count" id="serversCount">0</span>
+                </li>
             </ul>
         </aside>
 
@@ -198,6 +203,22 @@
                             </div>
                         </div>
                     </div>
+
+                    <div class="stat-card servers-card">
+                        <div class="stat-icon">
+                            <i class="fas fa-server"></i>
+                        </div>
+                        <div class="stat-info">
+                            <h3 id="dashServersTotal">0</h3>
+                            <p>Servers</p>
+                            <div class="stat-breakdown">
+                                <span class="draft">Draft: <span id="dashServersDraft">0</span></span>
+                                <span class="validated">Validated: <span id="dashServersValidated">0</span></span>
+                                <span class="built">Built: <span id="dashServersBuilt">0</span></span>
+                                <span class="finalized">Finalized: <span id="dashServersFinalized">0</span></span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Recent Activity -->
@@ -238,7 +259,7 @@
                 <!-- Components Table -->
                 <div class="table-container">
                     <table class="components-table" id="componentsTable">
-                        <thead>
+                        <thead id="componentsTableHeader">
                             <tr>
                                 <th>
                                     <input type="checkbox" id="selectAllComponents">

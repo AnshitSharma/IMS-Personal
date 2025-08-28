@@ -130,23 +130,10 @@ function handleUpdateConfiguration($serverBuilder, $user) {
         $updatableFields = [
             'server_name',
             'description', 
-            'cpu_uuid',
-            'cpu_id',
-            'motherboard_uuid', 
-            'motherboard_id',
-            'ram_configuration',
-            'storage_configuration',
-            'nic_configuration',
-            'caddy_configuration',
-            'additional_components',
             'configuration_status',
-            'total_cost',
-            'power_consumption',
             'location',
             'rack_position',
-            'notes',
-            'built_date',
-            'deployed_date'
+            'notes'
         ];
         
         // Build update query dynamically based on provided fields
@@ -168,40 +155,8 @@ function handleUpdateConfiguration($serverBuilder, $user) {
                         }
                         break;
                         
-                    case 'cpu_id':
-                    case 'motherboard_id':
                     case 'configuration_status':
                         $newValue = $newValue !== '' ? (int)$newValue : null;
-                        break;
-                        
-                    case 'total_cost':
-                    case 'power_consumption':
-                        $newValue = $newValue !== '' ? (float)$newValue : null;
-                        break;
-                        
-                    case 'ram_configuration':
-                    case 'storage_configuration':
-                    case 'nic_configuration':
-                    case 'caddy_configuration':
-                    case 'additional_components':
-                        // Handle JSON fields - validate JSON if provided
-                        if (!empty($newValue) && is_string($newValue)) {
-                            $decoded = json_decode($newValue, true);
-                            if (json_last_error() !== JSON_ERROR_NONE) {
-                                send_json_response(0, 1, 400, "Invalid JSON format for field: $field");
-                            }
-                        } elseif (is_array($newValue)) {
-                            $newValue = json_encode($newValue);
-                        }
-                        break;
-                        
-                    case 'built_date':
-                    case 'deployed_date':
-                        // Validate date format if provided
-                        if (!empty($newValue) && !validateDateTime($newValue)) {
-                            send_json_response(0, 1, 400, "Invalid date format for $field. Expected: YYYY-MM-DD HH:MM:SS");
-                        }
-                        $newValue = !empty($newValue) ? $newValue : null;
                         break;
                         
                     default:
@@ -266,14 +221,7 @@ function handleUpdateConfiguration($serverBuilder, $user) {
         $configData['compatibility_score'] = $updatedConfig->get('compatibility_score');
         $configData['validation_results'] = $updatedConfig->get('validation_results');
         
-        // Parse JSON fields for response
-        $jsonFields = ['ram_configuration', 'storage_configuration', 'nic_configuration', 'caddy_configuration', 'additional_components'];
-        foreach ($jsonFields as $jsonField) {
-            $jsonValue = $configData[$jsonField];
-            if (!empty($jsonValue) && is_string($jsonValue)) {
-                $configData[$jsonField] = json_decode($jsonValue, true);
-            }
-        }
+        // Parse JSON fields for response (none remaining)
         
         send_json_response(1, 1, 200, "Configuration updated successfully", [
             'config_uuid' => $configUuid,
@@ -667,11 +615,8 @@ function handleGetConfiguration($serverBuilder, $user) {
             ];
         }
         
-        // Clean up configuration data - remove cost fields and fix JSON configurations
+        // Clean up configuration data and fix JSON configurations
         $configuration = $details['configuration'];
-        
-        // Remove unwanted fields
-        unset($configuration['total_cost']);
         
         // Ensure all calculated fields are present and up-to-date
         $configuration['power_consumption'] = $details['power_consumption']['total_with_overhead_watts'] ?? 0;
@@ -755,9 +700,8 @@ function handleListConfigurations($serverBuilder, $user) {
         $stmt->execute($params);
         $configurations = $stmt->fetchAll(PDO::FETCH_ASSOC);
         
-        // Remove cost fields from each configuration
+        // Add configuration status text for each configuration
         foreach ($configurations as &$config) {
-            unset($config['total_cost']);
             $config['configuration_status_text'] = getConfigurationStatusText($config['configuration_status']);
         }
         

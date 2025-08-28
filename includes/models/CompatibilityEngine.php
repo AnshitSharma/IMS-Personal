@@ -149,7 +149,6 @@ class CompatibilityEngine {
             'global_checks' => [],
             'recommendations' => [],
             'estimated_power' => 0,
-            'estimated_cost' => 0.0
         ];
         
         try {
@@ -189,7 +188,6 @@ class CompatibilityEngine {
             
             // Calculate estimates
             $result['estimated_power'] = $this->calculatePowerConsumption($components);
-            $result['estimated_cost'] = $this->calculateTotalCost($components);
             
         } catch (Exception $e) {
             error_log("Server configuration validation error: " . $e->getMessage());
@@ -635,14 +633,6 @@ class CompatibilityEngine {
         return $totalPower;
     }
     
-    /**
-     * Calculate total estimated cost
-     */
-    private function calculateTotalCost($components) {
-        // This would integrate with your pricing system
-        // For now, return 0 as placeholder
-        return 0.0;
-    }
     
     /**
      * Extract socket type from JSON data

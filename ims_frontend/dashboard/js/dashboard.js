@@ -174,6 +174,18 @@ class Dashboard {
             // Show dashboard view
             document.getElementById('dashboardView').classList.add('active');
             await this.loadDashboard();
+        } else if (component === 'servers') {
+            // Show component list view
+            document.getElementById('componentView').classList.add('active');
+            document.getElementById('componentTitle').textContent = 'Servers';
+            
+            // Update add button text
+            const addBtn = document.getElementById('addComponentBtn');
+            if (addBtn) {
+                addBtn.innerHTML = `<i class="fas fa-plus"></i> Add Server`;
+            }
+            this.renderServerHeader();
+            await this.loadServerList();
         } else {
             // Show component list view
             document.getElementById('componentView').classList.add('active');
@@ -185,12 +197,51 @@ class Dashboard {
             if (addBtn) {
                 addBtn.innerHTML = `<i class="fas fa-plus"></i> Add ${component.toUpperCase()}`;
             }
-
+            this.renderComponentHeader();
             await this.loadComponentList(component);
         }
 
         // Update URL
         utils.updateURLParams({ view: component });
+    }
+
+    renderServerHeader() {
+        const thead = document.getElementById('componentsTableHeader');
+        if (!thead) return;
+        thead.innerHTML = `
+            <tr>
+                <th>
+                    <input type="checkbox" id="selectAllComponents">
+                </th>
+                <th>Server</th>
+                <th>CPU</th>
+                <th>Motherboard</th>
+                <th>RAM</th>
+                <th>NIC</th>
+                <th>Location</th>
+                <th>Status</th>
+                <th>Created By</th>
+                <th>Actions</th>
+            </tr>
+        `;
+    }
+
+    renderComponentHeader() {
+        const thead = document.getElementById('componentsTableHeader');
+        if (!thead) return;
+        thead.innerHTML = `
+            <tr>
+                <th>
+                    <input type="checkbox" id="selectAllComponents">
+                </th>
+                <th>Serial Number</th>
+                <th>Status</th>
+                <th>Server UUID</th>
+                <th>Location</th>
+                <th>Purchase Date</th>
+                <th>Actions</th>
+            </tr>
+        `;
     }
 
     async loadDashboard() {
@@ -199,9 +250,9 @@ class Dashboard {
             
             const result = await api.dashboard.getData();
             
-            if (result.success && result.data.stats) {
-                this.updateDashboardStats(result.data.stats);
-                this.updateSidebarCounts(result.data.stats);
+            if (result.success && result.data.component_counts) {
+                this.updateDashboardStats(result.data.component_counts);
+                this.updateSidebarCounts(result.data.component_counts);
                 await this.loadRecentActivity();
             }
             
@@ -226,8 +277,19 @@ class Dashboard {
             }
         });
 
+        // Handle servers separately because they have different status names
+        if (stats.servers) {
+            const serverStat = stats.servers;
+            document.getElementById('dashServersTotal').textContent = serverStat.total || 0;
+            document.getElementById('dashServersDraft').textContent = serverStat.draft || 0;
+            document.getElementById('dashServersValidated').textContent = serverStat.validated || 0;
+            document.getElementById('dashServersBuilt').textContent = serverStat.built || 0;
+            document.getElementById('dashServersFinalized').textContent = serverStat.finalized || 0;
+        }
+
         // Add click handlers to stat cards
-        components.forEach(component => {
+        const allComponents = [...components, 'servers'];
+        allComponents.forEach(component => {
             const card = document.querySelector(`.${component}-card`);
             if (card) {
                 card.style.cursor = 'pointer';
@@ -239,7 +301,7 @@ class Dashboard {
     }
 
     updateSidebarCounts(stats) {
-        const components = ['cpu', 'ram', 'storage', 'motherboard', 'nic', 'caddy'];
+        const components = ['cpu', 'ram', 'storage', 'motherboard', 'nic', 'caddy', 'servers'];
         
         components.forEach(component => {
             const countElement = document.getElementById(`${component}Count`);
@@ -326,6 +388,33 @@ class Dashboard {
         }
     }
 
+    async loadServerList() {
+        try {
+            utils.showLoading(true, `Loading servers...`);
+            
+            const params = {
+                limit: 20,
+                offset: 0,
+                status: 1
+            };
+
+            const result = await api.request('server-list-configs', params);
+            
+            if (result.success) {
+                this.renderServerList(result.data.configurations);
+                if (result.data.pagination) {
+                    this.renderPagination(result.data.pagination);
+                }
+            }
+            
+        } catch (error) {
+            console.error(`Error loading servers:`, error);
+            utils.showAlert(`Failed to load servers`, 'error');
+        } finally {
+            utils.showLoading(false);
+        }
+    }
+
     renderComponentTable(components, componentType) {
         const tbody = document.getElementById('componentsTableBody');
         if (!tbody) return;
@@ -362,15 +451,68 @@ class Dashboard {
                         ${component.UUID ? `<br><small style="color: var(--text-muted); font-family: monospace;">${component.UUID}</small>` : ''}
                     </td>
                     <td>${utils.createStatusBadge(component.Status)}</td>
-                    <td>${component.ServerUUID ? `<code>${utils.truncateText(component.ServerUUID, 20)}</code>` : '-'}</td>
-                    <td>${utils.escapeHtml(component.Location || '-')}</td>
-                    <td>${utils.formatDate(component.PurchaseDate)}</td>
+                    <td>${component.ServerUUID ? `<code>${utils.truncateText(component.ServerUUID, 20)}</code>` : '-'}
+                    <td>${utils.escapeHtml(component.Location || '-')}
+                    <td>${utils.formatDate(component.PurchaseDate)}
                     <td>
                         <div class="action-buttons">
                             <button class="action-btn edit" onclick="dashboard.showEditForm('${componentType}', ${component.ID})" title="Edit">
                                 <i class="fas fa-edit"></i>
                             </button>
                             <button class="action-btn delete" onclick="dashboard.handleDeleteComponent('${componentType}', ${component.ID})" title="Delete">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+    }
+
+    renderServerList(servers) {
+        const tbody = document.getElementById('componentsTableBody');
+        if (!tbody) return;
+
+        if (servers.length === 0) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="10" class="empty-state">
+                        <div style="text-align: center; padding: 40px;">
+                            <i class="fas fa-server" style="font-size: 48px; color: var(--text-muted); margin-bottom: 16px;"></i>
+                            <h3>No Servers Found</h3>
+                            <p>No servers match your search criteria.</p>
+                        </div>
+                    </td>
+                </tr>
+            `;
+            return;
+        }
+
+        tbody.innerHTML = servers.map(server => {
+            return `
+                <tr>
+                    <td>
+                        <input type="checkbox" class="component-checkbox" 
+                               value="${server.id}" 
+                               onchange="dashboard.handleItemSelection(this)">
+                    </td>
+                    <td>
+                        <strong>${utils.escapeHtml(server.server_name || 'Unnamed Server')}</strong>
+                        ${server.config_uuid ? `<br><small style="color: var(--text-muted); font-family: monospace;">${server.config_uuid}</small>` : ''}
+                    </td>
+                    <td>${utils.escapeHtml(server.cpu_uuid || '-')}</td>
+                    <td>${utils.escapeHtml(server.motherboard_uuid || '-')}</td>
+                    <td>${utils.escapeHtml(server.ram_configuration || '-')}</td>
+                    <td>${utils.escapeHtml(server.nic_configuration || '-')}</td>
+                    <td>${utils.escapeHtml(server.location || '-')}</td>
+                    <td>${utils.createStatusBadge(server.configuration_status_text)}</td>
+                    <td>${utils.escapeHtml(server.created_by_username || '-')}</td>
+                    <td>
+                        <div class="action-buttons">
+                            <button class="action-btn edit" onclick="dashboard.showEditForm('servers', ${server.id})" title="Edit">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button class="action-btn delete" onclick="dashboard.handleDeleteComponent('servers', ${server.id})" title="Delete">
                                 <i class="fas fa-trash"></i>
                             </button>
                         </div>
@@ -660,7 +802,7 @@ class Dashboard {
                 <div class="form-group">
                     <label class="form-label">IP Address</label>
                     <input type="text" id="editIPAddress" class="form-input" value="${utils.escapeHtml(component.IPAddress || '')}" 
-                           placeholder="192.168.1.1" pattern="^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$">
+                           placeholder="192.168.1.1" pattern="^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\. (25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\. (25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\. (25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$">
                 </div>
                 
                 <div class="form-group">
@@ -849,7 +991,7 @@ class Dashboard {
         }
 
         const confirmed = await utils.confirm(
-            `Are you sure you want to delete ${this.selectedItems.size} selected components? This action cannot be undone.`,
+            `Are you sure you want to delete ${this.selectedItems.size} selected components? This action cannot be undone.`, 
             'Delete Components'
         );
 
@@ -1020,6 +1162,8 @@ class Dashboard {
     async refresh() {
         if (this.currentComponent === 'dashboard') {
             await this.loadDashboard();
+        } else if (this.currentComponent === 'servers') {
+            await this.loadServerList();
         } else {
             await this.loadComponentList(this.currentComponent);
         }

@@ -273,8 +273,7 @@ class ServerBuilder {
             // Update configuration with calculated values
             $this->updateConfigurationCalculatedFields($configUuid, $totalPowerConsumptionWithOverhead, $compatibilityScore);
             
-            // Remove cost-related fields and fix configuration data
-            unset($configData['total_cost']);
+            // Fix configuration data
             $configData['power_consumption'] = round($totalPowerConsumptionWithOverhead, 2);
             $configData['compatibility_score'] = $compatibilityScore;
             

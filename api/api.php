@@ -1086,36 +1086,59 @@ function getDashboardData($pdo, $user) {
         // Get component counts
         $componentTypes = ['cpu', 'ram', 'storage', 'motherboard', 'nic', 'caddy'];
         $componentCounts = [];
+        $totalComponents = 0;
         
         foreach ($componentTypes as $type) {
             $tableName = getComponentTableName($type);
-            $stmt = $pdo->prepare("SELECT COUNT(*) as count FROM $tableName");
+            
+            // This query is more efficient as it gets all counts in one go.
+            $stmt = $pdo->prepare("
+                SELECT 
+                    COUNT(*) as total,
+                    SUM(CASE WHEN Status = 1 THEN 1 ELSE 0 END) as available,
+                    SUM(CASE WHEN Status = 2 THEN 1 ELSE 0 END) as in_use,
+                    SUM(CASE WHEN Status = 0 THEN 1 ELSE 0 END) as failed
+                FROM $tableName
+            ");
             $stmt->execute();
             $result = $stmt->fetch(PDO::FETCH_ASSOC);
-            $componentCounts[$type] = (int)$result['count'];
+
+            $stats = [
+                'total' => (int)($result['total'] ?? 0),
+                'available' => (int)($result['available'] ?? 0),
+                'in_use' => (int)($result['in_use'] ?? 0),
+                'failed' => (int)($result['failed'] ?? 0)
+            ];
+            
+            $componentCounts[$type] = $stats;
+            $totalComponents += $stats['total'];
         }
+
+        // Get server counts
+        $serverStmt = $pdo->prepare("
+            SELECT 
+                COUNT(*) as total,
+                SUM(CASE WHEN configuration_status = 0 THEN 1 ELSE 0 END) as draft,
+                SUM(CASE WHEN configuration_status = 1 THEN 1 ELSE 0 END) as validated,
+                SUM(CASE WHEN configuration_status = 2 THEN 1 ELSE 0 END) as built,
+                SUM(CASE WHEN configuration_status = 3 THEN 1 ELSE 0 END) as finalized
+            FROM server_configurations
+        ");
+        $serverStmt->execute();
+        $serverResult = $serverStmt->fetch(PDO::FETCH_ASSOC);
+
+        $serverStats = [
+            'total' => (int)($serverResult['total'] ?? 0),
+            'draft' => (int)($serverResult['draft'] ?? 0),
+            'validated' => (int)($serverResult['validated'] ?? 0),
+            'built' => (int)($serverResult['built'] ?? 0),
+            'finalized' => (int)($serverResult['finalized'] ?? 0)
+        ];
+        
+        $componentCounts['servers'] = $serverStats;
         
         $data['component_counts'] = $componentCounts;
-        $data['total_components'] = array_sum($componentCounts);
-        
-        // Get status breakdown
-        $statusCounts = [];
-        foreach ($componentTypes as $type) {
-            $tableName = getComponentTableName($type);
-            $stmt = $pdo->prepare("SELECT Status, COUNT(*) as count FROM $tableName GROUP BY Status");
-            $stmt->execute();
-            $results = $stmt->fetchAll(PDO::FETCH_ASSOC);
-            
-            foreach ($results as $result) {
-                $status = $result['Status'];
-                if (!isset($statusCounts[$status])) {
-                    $statusCounts[$status] = 0;
-                }
-                $statusCounts[$status] += (int)$result['count'];
-            }
-        }
-        
-        $data['status_counts'] = $statusCounts;
+        $data['total_components'] = $totalComponents + $serverStats['total'];
         
         // Recent activity (if you have activity logs)
         $data['recent_activity'] = [];

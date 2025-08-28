@@ -13,6 +13,10 @@
     --warning-color: #f59e0b;
     --danger-color: #ef4444;
     --info-color: #3b82f6;
+    --color-warning-light: rgba(245, 158, 11, 0.1);
+    --color-warning-dark: #d97706;
+    --color-success-light: rgba(16, 185, 129, 0.1);
+    --color-success-dark: #059669;
     
     --bg-color: #f8fafc;
     --surface-color: #ffffff;
@@ -763,6 +767,7 @@ body {
 .motherboard-card .stat-icon { background: linear-gradient(135deg, #43e97b, #38f9d7); }
 .nic-card .stat-icon { background: linear-gradient(135deg, #fa709a, #fee140); }
 .caddy-card .stat-icon { background: linear-gradient(135deg, #a8edea, #fed6e3); }
+.servers-card .stat-icon { background: linear-gradient(135deg, #868f96, #596164); }
 
 .stat-info {
     flex: 1;
@@ -796,6 +801,10 @@ body {
 .stat-breakdown .available { color: var(--success-color); }
 .stat-breakdown .in-use { color: var(--warning-color); }
 .stat-breakdown .failed { color: var(--danger-color); }
+.stat-breakdown .draft { color: var(--warning-color); }
+.stat-breakdown .validated { color: var(--info-color); }
+.stat-breakdown .built { color: var(--success-color); }
+.stat-breakdown .finalized { color: var(--primary-dark); }
 
 /* Recent Activity */
 .recent-activity {
@@ -954,6 +963,16 @@ body {
 .status-badge.failed {
     background: rgba(239, 68, 68, 0.1);
     color: var(--danger-color);
+}
+
+.status-badge.draft {
+    background-color: var(--color-warning-light);
+    color: var(--color-warning-dark);
+}
+
+.status-badge.finalized {
+    background-color: var(--color-success-light);
+    color: var(--color-success-dark);
 }
 
 .status-badge i {

@@ -159,9 +159,11 @@ window.utils = {
         const statusMap = {
             0: { text: 'Failed', class: 'failed', icon: 'fas fa-times-circle' },
             1: { text: 'Available', class: 'available', icon: 'fas fa-check-circle' },
-            2: { text: 'In Use', class: 'in-use', icon: 'fas fa-play-circle' }
+            2: { text: 'In Use', class: 'in-use', icon: 'fas fa-play-circle' },
+            'Draft': { text: 'Draft', class: 'draft', icon: 'fas fa-pencil-alt' },
+            'Finalized': { text: 'Finalized', class: 'finalized', icon: 'fas fa-check-double' },
         };
-        return statusMap[status] || { text: 'Unknown', class: 'unknown', icon: 'fas fa-question-circle' };
+        return statusMap[status] || { text: status, class: 'unknown', icon: 'fas fa-question-circle' };
     },
 
     // Create status badge HTML

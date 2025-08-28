@@ -400,7 +400,6 @@ function handleAnalyzeConfiguration() {
                 'overall_valid' => $validationResult['valid'],
                 'overall_score' => $validationResult['overall_score'],
                 'estimated_power' => $validationResult['estimated_power'],
-                'estimated_cost' => $validationResult['estimated_cost'],
                 'component_check_count' => count($validationResult['component_checks']),
                 'global_check_count' => count($validationResult['global_checks'])
             ]
@@ -981,20 +980,6 @@ function generateConfigurationRecommendations($validationResult) {
         }
     }
     
-    // Cost optimization recommendations
-    if (isset($validationResult['estimated_cost']) && $validationResult['estimated_cost'] > 10000) {
-        $recommendations[] = [
-            'type' => 'cost',
-            'priority' => 'low',
-            'message' => 'High configuration cost detected',
-            'details' => "Estimated cost: $" . number_format($validationResult['estimated_cost'], 2),
-            'suggested_actions' => [
-                'Review component pricing alternatives',
-                'Consider phased deployment approach',
-                'Evaluate cost vs. performance benefits'
-            ]
-        ];
-    }
     
     return $recommendations;
 }
