@@ -77,8 +77,218 @@ switch ($action) {
         handleGetCompatible($serverBuilder, $user);
         break;
     
+    // NEW: Update configuration endpoint
+    case 'update-config':
+    case 'server-update-config':
+        handleUpdateConfiguration($serverBuilder, $user);
+        break;
+    
     default:
         send_json_response(0, 1, 400, "Invalid action specified");
+}
+
+/**
+ * NEW: Update server configuration details
+ * Updates all editable fields in server_configurations table except compatibility_score and validation_results
+ */
+function handleUpdateConfiguration($serverBuilder, $user) {
+    global $pdo;
+    
+    $configUuid = $_POST['config_uuid'] ?? '';
+    
+    if (empty($configUuid)) {
+        send_json_response(0, 1, 400, "Configuration UUID is required");
+    }
+    
+    try {
+        // Load the configuration to verify it exists and check permissions
+        $config = ServerConfiguration::loadByUuid($pdo, $configUuid);
+        if (!$config) {
+            send_json_response(0, 1, 404, "Server configuration not found");
+        }
+        
+        // Check if user owns this configuration or has edit permissions
+        if ($config->get('created_by') != $user['id'] && !hasPermission($pdo, 'server.edit_all', $user['id'])) {
+            send_json_response(0, 1, 403, "Insufficient permissions to modify this configuration");
+        }
+        
+        // Get current configuration status to prevent updates on finalized configs
+        $currentStatus = $config->get('configuration_status');
+        $requestedStatus = isset($_POST['configuration_status']) ? (int)$_POST['configuration_status'] : null;
+        
+        // Prevent modification of finalized configurations (status 3) unless admin
+        if ($currentStatus == 3 && !hasPermission($pdo, 'server.edit_finalized', $user['id'])) {
+            send_json_response(0, 1, 403, "Cannot modify finalized configurations without proper permissions");
+        }
+        
+        // Prevent status change from finalized to lower status unless admin
+        if ($currentStatus == 3 && $requestedStatus !== null && $requestedStatus < 3 && !hasPermission($pdo, 'server.edit_finalized', $user['id'])) {
+            send_json_response(0, 1, 403, "Cannot change status of finalized configuration without proper permissions");
+        }
+        
+        // Define updatable fields (excluding calculated fields)
+        $updatableFields = [
+            'server_name',
+            'description', 
+            'cpu_uuid',
+            'cpu_id',
+            'motherboard_uuid', 
+            'motherboard_id',
+            'ram_configuration',
+            'storage_configuration',
+            'nic_configuration',
+            'caddy_configuration',
+            'additional_components',
+            'configuration_status',
+            'total_cost',
+            'power_consumption',
+            'location',
+            'rack_position',
+            'notes',
+            'built_date',
+            'deployed_date'
+        ];
+        
+        // Build update query dynamically based on provided fields
+        $updateFields = [];
+        $updateValues = [];
+        $changes = [];
+        
+        foreach ($updatableFields as $field) {
+            if (isset($_POST[$field])) {
+                $newValue = $_POST[$field];
+                $currentValue = $config->get($field);
+                
+                // Handle special field processing
+                switch ($field) {
+                    case 'server_name':
+                        $newValue = trim($newValue);
+                        if (empty($newValue)) {
+                            send_json_response(0, 1, 400, "Server name cannot be empty");
+                        }
+                        break;
+                        
+                    case 'cpu_id':
+                    case 'motherboard_id':
+                    case 'configuration_status':
+                        $newValue = $newValue !== '' ? (int)$newValue : null;
+                        break;
+                        
+                    case 'total_cost':
+                    case 'power_consumption':
+                        $newValue = $newValue !== '' ? (float)$newValue : null;
+                        break;
+                        
+                    case 'ram_configuration':
+                    case 'storage_configuration':
+                    case 'nic_configuration':
+                    case 'caddy_configuration':
+                    case 'additional_components':
+                        // Handle JSON fields - validate JSON if provided
+                        if (!empty($newValue) && is_string($newValue)) {
+                            $decoded = json_decode($newValue, true);
+                            if (json_last_error() !== JSON_ERROR_NONE) {
+                                send_json_response(0, 1, 400, "Invalid JSON format for field: $field");
+                            }
+                        } elseif (is_array($newValue)) {
+                            $newValue = json_encode($newValue);
+                        }
+                        break;
+                        
+                    case 'built_date':
+                    case 'deployed_date':
+                        // Validate date format if provided
+                        if (!empty($newValue) && !validateDateTime($newValue)) {
+                            send_json_response(0, 1, 400, "Invalid date format for $field. Expected: YYYY-MM-DD HH:MM:SS");
+                        }
+                        $newValue = !empty($newValue) ? $newValue : null;
+                        break;
+                        
+                    default:
+                        $newValue = trim($newValue);
+                        break;
+                }
+                
+                // Only add to update if value has changed
+                if ($newValue !== $currentValue) {
+                    $updateFields[] = "$field = ?";
+                    $updateValues[] = $newValue;
+                    $changes[$field] = [
+                        'old' => $currentValue,
+                        'new' => $newValue
+                    ];
+                }
+            }
+        }
+        
+        // If no changes, return success without database update
+        if (empty($updateFields)) {
+            send_json_response(1, 1, 200, "No changes detected - configuration is already up to date", [
+                'config_uuid' => $configUuid,
+                'changes_made' => []
+            ]);
+        }
+        
+        // Add updated_by and updated_at fields
+        $updateFields[] = "updated_by = ?";
+        $updateFields[] = "updated_at = NOW()";
+        $updateValues[] = $user['id'];
+        
+        // Execute the update
+        $sql = "UPDATE server_configurations SET " . implode(', ', $updateFields) . " WHERE config_uuid = ?";
+        $updateValues[] = $configUuid;
+        
+        $stmt = $pdo->prepare($sql);
+        $result = $stmt->execute($updateValues);
+        
+        if (!$result) {
+            send_json_response(0, 1, 500, "Failed to update configuration");
+        }
+        
+        // Log the update action
+        logConfigurationUpdate($pdo, $configUuid, $changes, $user['id']);
+        
+        // Get updated configuration details
+        $updatedConfig = ServerConfiguration::loadByUuid($pdo, $configUuid);
+        
+        // Prepare response data
+        $configData = [];
+        foreach ($updatableFields as $field) {
+            $configData[$field] = $updatedConfig->get($field);
+        }
+        
+        // Add metadata fields
+        $configData['config_uuid'] = $configUuid;
+        $configData['created_by'] = $updatedConfig->get('created_by');
+        $configData['updated_by'] = $updatedConfig->get('updated_by');
+        $configData['created_at'] = $updatedConfig->get('created_at');
+        $configData['updated_at'] = $updatedConfig->get('updated_at');
+        $configData['compatibility_score'] = $updatedConfig->get('compatibility_score');
+        $configData['validation_results'] = $updatedConfig->get('validation_results');
+        
+        // Parse JSON fields for response
+        $jsonFields = ['ram_configuration', 'storage_configuration', 'nic_configuration', 'caddy_configuration', 'additional_components'];
+        foreach ($jsonFields as $jsonField) {
+            $jsonValue = $configData[$jsonField];
+            if (!empty($jsonValue) && is_string($jsonValue)) {
+                $configData[$jsonField] = json_decode($jsonValue, true);
+            }
+        }
+        
+        send_json_response(1, 1, 200, "Configuration updated successfully", [
+            'config_uuid' => $configUuid,
+            'changes_made' => $changes,
+            'total_changes' => count($changes),
+            'configuration' => $configData,
+            'configuration_status_text' => getConfigurationStatusText($configData['configuration_status']),
+            'updated_by_user_id' => $user['id'],
+            'updated_at' => date('Y-m-d H:i:s')
+        ]);
+        
+    } catch (Exception $e) {
+        error_log("Error updating configuration: " . $e->getMessage());
+        send_json_response(0, 1, 500, "Failed to update configuration: " . $e->getMessage());
+    }
 }
 
 /**
@@ -184,6 +394,7 @@ function handleCreateStart($serverBuilder, $user) {
         send_json_response(0, 1, 500, "Failed to initialize server creation: " . $e->getMessage());
     }
 }
+
 
 /**
  * FIXED: Add component to server configuration with proper ServerUUID handling
@@ -828,8 +1039,76 @@ function handleGetCompatible($serverBuilder, $user) {
     }
 }
 
-
 // Helper Functions
+
+/**
+ * NEW: Helper function to validate DateTime format
+ */
+function validateDateTime($dateTime) {
+    $d = DateTime::createFromFormat('Y-m-d H:i:s', $dateTime);
+    return $d && $d->format('Y-m-d H:i:s') === $dateTime;
+}
+
+/**
+ * NEW: Helper function to log configuration updates
+ */
+function logConfigurationUpdate($pdo, $configUuid, $changes, $userId) {
+    try {
+        // Check if history table exists
+        $stmt = $pdo->prepare("SHOW TABLES LIKE 'server_configuration_history'");
+        $stmt->execute();
+        if (!$stmt->fetch()) {
+            createConfigurationHistoryTable($pdo);
+        }
+        
+        $stmt = $pdo->prepare("
+            INSERT INTO server_configuration_history 
+            (config_uuid, action, component_type, component_uuid, metadata, created_by, created_at) 
+            VALUES (?, 'configuration_updated', NULL, NULL, ?, ?, NOW())
+        ");
+        $stmt->execute([
+            $configUuid,
+            json_encode([
+                'changes' => $changes,
+                'total_fields_changed' => count($changes),
+                'updated_at' => date('Y-m-d H:i:s')
+            ]),
+            $userId
+        ]);
+    } catch (Exception $e) {
+        error_log("Error logging configuration update: " . $e->getMessage());
+        // Don't throw exception as this shouldn't break the main operation
+    }
+}
+
+/**
+ * NEW: Helper function to create configuration history table if it doesn't exist
+ */
+function createConfigurationHistoryTable($pdo) {
+    try {
+        $sql = "
+            CREATE TABLE IF NOT EXISTS server_configuration_history (
+                id int(11) NOT NULL AUTO_INCREMENT,
+                config_uuid varchar(36) NOT NULL,
+                action varchar(50) NOT NULL COMMENT 'created, updated, component_added, component_removed, validated, configuration_updated, etc.',
+                component_type varchar(20) DEFAULT NULL,
+                component_uuid varchar(36) DEFAULT NULL,
+                metadata text DEFAULT NULL COMMENT 'JSON metadata for the action',
+                created_by int(11) DEFAULT NULL,
+                created_at timestamp NOT NULL DEFAULT current_timestamp(),
+                PRIMARY KEY (id),
+                KEY idx_config_uuid (config_uuid),
+                KEY idx_component_uuid (component_uuid),
+                KEY idx_created_at (created_at),
+                KEY idx_action (action)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+        ";
+        $pdo->exec($sql);
+        error_log("Created server_configuration_history table");
+    } catch (Exception $e) {
+        error_log("Error creating history table: " . $e->getMessage());
+    }
+}
 
 /**
  * Helper function to get component details

@@ -262,7 +262,8 @@ class ServerBuilder {
             if (class_exists('CompatibilityEngine')) {
                 try {
                     $compatibilityEngine = new CompatibilityEngine($this->pdo);
-                    $compatibilityScore = $this->calculateHardwareCompatibilityScore($componentDetails);
+                    $compatibilityResult = $this->calculateHardwareCompatibilityScore($componentDetails);
+                    $compatibilityScore = $compatibilityResult['score'];
                 } catch (Exception $e) {
                     error_log("Error calculating compatibility: " . $e->getMessage());
                     $compatibilityScore = null;
@@ -554,7 +555,8 @@ class ServerBuilder {
             $compatibilityScore = null;
             if (class_exists('CompatibilityEngine')) {
                 try {
-                    $compatibilityScore = $this->calculateHardwareCompatibilityScore($details);
+                    $compatibilityResult = $this->calculateHardwareCompatibilityScore($details);
+                    $compatibilityScore = $compatibilityResult['score'];
                 } catch (Exception $e) {
                     error_log("Error calculating compatibility: " . $e->getMessage());
                 }
@@ -697,9 +699,17 @@ class ServerBuilder {
                 }
             }
             
-            // FIXED: Calculate compatibility score based on actual hardware compatibility (not component count)
-            $compatibilityScore = $this->calculateHardwareCompatibilityScore($summary);
+            // ENHANCED: Calculate compatibility score with detailed diagnostics
+            $compatibilityResult = $this->calculateHardwareCompatibilityScore($summary);
+            $compatibilityScore = $compatibilityResult['score'];
+            $compatibilityDiagnostics = $compatibilityResult['diagnostics'];
+            
             $validation['compatibility_score'] = $compatibilityScore;
+            
+            // Add detailed compatibility diagnostics to recommendations
+            if (!empty($compatibilityDiagnostics)) {
+                $validation['recommendations'] = array_merge($validation['recommendations'], $compatibilityDiagnostics);
+            }
             
             // Adjust overall validity based on compatibility
             if ($compatibilityScore < 70) {
@@ -707,11 +717,11 @@ class ServerBuilder {
                 $validation['issues'][] = "Hardware compatibility issues detected (score: $compatibilityScore%)";
             }
             
-            // Add recommendations
+            // Add general recommendations based on score
             if (!$validation['is_valid']) {
                 $validation['recommendations'][] = "Resolve all compatibility issues before finalizing";
             }
-            if ($compatibilityScore < 90) {
+            if ($compatibilityScore < 90 && empty($compatibilityDiagnostics)) {
                 $validation['recommendations'][] = "Review component compatibility for optimal performance";
             }
             
@@ -1098,16 +1108,17 @@ class ServerBuilder {
     }
     
     /**
-     * FIXED: Calculate hardware compatibility score based on actual component compatibility
+     * ENHANCED: Calculate hardware compatibility score with detailed diagnostics
      */
     private function calculateHardwareCompatibilityScore($summary) {
         $score = 100.0;
         $components = $summary['components'] ?? [];
+        $diagnostics = [];
         
         try {
             // If we don't have basic components, score is low
             if (empty($components)) {
-                return 0.0;
+                return ['score' => 0.0, 'diagnostics' => ['No components found in configuration']];
             }
             
             $motherboard = null;
@@ -1137,167 +1148,323 @@ class ServerBuilder {
             
             // Check motherboard-CPU compatibility
             if ($motherboard && !empty($cpus)) {
-                $compatibilityScore = $this->checkMotherboardCpuCompatibility($motherboard, $cpus);
-                $score = min($score, $compatibilityScore);
+                $cpuResult = $this->checkMotherboardCpuCompatibilityDetailed($motherboard, $cpus);
+                $score = min($score, $cpuResult['score']);
+                if (!empty($cpuResult['issues'])) {
+                    $diagnostics = array_merge($diagnostics, $cpuResult['issues']);
+                }
             }
             
             // Check motherboard-RAM compatibility
             if ($motherboard && !empty($rams)) {
-                $ramCompatibilityScore = $this->checkMotherboardRamCompatibility($motherboard, $rams);
-                $score = min($score, $ramCompatibilityScore);
+                $ramResult = $this->checkMotherboardRamCompatibilityDetailed($motherboard, $rams);
+                $score = min($score, $ramResult['score']);
+                if (!empty($ramResult['issues'])) {
+                    $diagnostics = array_merge($diagnostics, $ramResult['issues']);
+                }
             }
             
             // Check power requirements vs motherboard capacity
-            $powerScore = $this->checkPowerCompatibility($components);
-            $score = min($score, $powerScore);
+            $powerResult = $this->checkPowerCompatibilityDetailed($components);
+            $score = min($score, $powerResult['score']);
+            if (!empty($powerResult['issues'])) {
+                $diagnostics = array_merge($diagnostics, $powerResult['issues']);
+            }
             
             // Check form factor compatibility
-            $formFactorScore = $this->checkFormFactorCompatibility($components);
-            $score = min($score, $formFactorScore);
+            $formFactorResult = $this->checkFormFactorCompatibilityDetailed($components);
+            $score = min($score, $formFactorResult['score']);
+            if (!empty($formFactorResult['issues'])) {
+                $diagnostics = array_merge($diagnostics, $formFactorResult['issues']);
+            }
             
         } catch (Exception $e) {
             error_log("Error calculating hardware compatibility score: " . $e->getMessage());
-            $score = 50.0; // Default to medium compatibility on error
+            $score = 50.0;
+            $diagnostics[] = "Error during compatibility analysis: " . $e->getMessage();
         }
         
-        return round($score, 1);
+        return [
+            'score' => round($score, 1),
+            'diagnostics' => $diagnostics
+        ];
     }
     
     /**
-     * Check motherboard-CPU socket compatibility
+     * Check motherboard-CPU socket compatibility (legacy method)
      */
     private function checkMotherboardCpuCompatibility($motherboard, $cpus) {
+        $result = $this->checkMotherboardCpuCompatibilityDetailed($motherboard, $cpus);
+        return $result['score'];
+    }
+    
+    /**
+     * Check motherboard-CPU socket compatibility with detailed diagnostics
+     */
+    private function checkMotherboardCpuCompatibilityDetailed($motherboard, $cpus) {
         $score = 100.0;
+        $issues = [];
         
         try {
             $mbNotes = strtolower($motherboard['Notes'] ?? '');
+            $mbSerialNumber = $motherboard['SerialNumber'] ?? 'Unknown';
             
             // Extract motherboard socket type
             $mbSocket = $this->extractSocketType($mbNotes);
             
             foreach ($cpus as $cpu) {
                 $cpuNotes = strtolower($cpu['Notes'] ?? '');
+                $cpuSerialNumber = $cpu['SerialNumber'] ?? 'Unknown';
                 $cpuSocket = $this->extractSocketType($cpuNotes);
                 
                 if ($mbSocket && $cpuSocket) {
                     if ($mbSocket !== $cpuSocket) {
                         $score = 0.0; // Complete incompatibility
-                        error_log("CPU socket mismatch: Motherboard has $mbSocket, CPU requires $cpuSocket");
+                        $issues[] = "Critical: CPU socket mismatch - Motherboard ($mbSerialNumber) has $mbSocket socket, but CPU ($cpuSerialNumber) requires $cpuSocket socket";
                         break;
                     }
                 } else {
                     // If we can't determine socket types, reduce score but don't fail completely
                     $score = min($score, 70.0);
-                    error_log("Could not determine socket compatibility - MB socket: $mbSocket, CPU socket: $cpuSocket");
+                    if (!$mbSocket && !$cpuSocket) {
+                        $issues[] = "Warning: Cannot determine socket compatibility for Motherboard ($mbSerialNumber) and CPU ($cpuSerialNumber) - socket information missing from component specifications";
+                    } elseif (!$mbSocket) {
+                        $issues[] = "Warning: Cannot determine motherboard socket type for ($mbSerialNumber) - missing socket specification";
+                    } else {
+                        $issues[] = "Warning: Cannot determine CPU socket type for ($cpuSerialNumber) - missing socket specification";
+                    }
                 }
             }
             
         } catch (Exception $e) {
             error_log("Error checking motherboard-CPU compatibility: " . $e->getMessage());
             $score = 50.0;
+            $issues[] = "Error: Failed to analyze CPU-Motherboard compatibility - " . $e->getMessage();
         }
         
-        return $score;
+        return [
+            'score' => $score,
+            'issues' => $issues
+        ];
     }
     
     /**
-     * Check motherboard-RAM compatibility
+     * Check motherboard-RAM compatibility (legacy method)
      */
     private function checkMotherboardRamCompatibility($motherboard, $rams) {
+        $result = $this->checkMotherboardRamCompatibilityDetailed($motherboard, $rams);
+        return $result['score'];
+    }
+    
+    /**
+     * Check motherboard-RAM compatibility with detailed diagnostics
+     */
+    private function checkMotherboardRamCompatibilityDetailed($motherboard, $rams) {
         $score = 100.0;
+        $issues = [];
         
         try {
             $mbNotes = strtolower($motherboard['Notes'] ?? '');
+            $mbSerialNumber = $motherboard['SerialNumber'] ?? 'Unknown';
             
             // Extract motherboard supported RAM types
             $mbMemoryTypes = $this->extractMemoryTypes($mbNotes);
             
             foreach ($rams as $ram) {
                 $ramNotes = strtolower($ram['Notes'] ?? '');
+                $ramSerialNumber = $ram['SerialNumber'] ?? 'Unknown';
                 $ramType = $this->extractMemoryType($ramNotes);
                 
                 if (!empty($mbMemoryTypes) && $ramType) {
                     if (!in_array($ramType, $mbMemoryTypes)) {
                         $score = min($score, 10.0); // Major incompatibility
-                        error_log("RAM type mismatch: Motherboard supports " . implode(',', $mbMemoryTypes) . ", RAM is $ramType");
+                        $issues[] = "Critical: Memory type incompatibility - Motherboard ($mbSerialNumber) supports " . implode(', ', $mbMemoryTypes) . ", but RAM ($ramSerialNumber) is $ramType";
                     }
                 } else {
                     // If we can't determine memory types, reduce score slightly
                     $score = min($score, 80.0);
+                    if (empty($mbMemoryTypes) && !$ramType) {
+                        $issues[] = "Warning: Cannot determine memory compatibility for Motherboard ($mbSerialNumber) and RAM ($ramSerialNumber) - memory type specifications missing";
+                    } elseif (empty($mbMemoryTypes)) {
+                        $issues[] = "Warning: Cannot determine supported memory types for Motherboard ($mbSerialNumber) - specification missing";
+                    } else {
+                        $issues[] = "Warning: Cannot determine memory type for RAM ($ramSerialNumber) - specification missing";
+                    }
                 }
             }
             
         } catch (Exception $e) {
             error_log("Error checking motherboard-RAM compatibility: " . $e->getMessage());
             $score = 60.0;
+            $issues[] = "Error: Failed to analyze RAM-Motherboard compatibility - " . $e->getMessage();
         }
         
-        return $score;
+        return [
+            'score' => $score,
+            'issues' => $issues
+        ];
     }
     
     /**
-     * Check power compatibility
+     * Check power compatibility (legacy method)
      */
     private function checkPowerCompatibility($components) {
+        $result = $this->checkPowerCompatibilityDetailed($components);
+        return $result['score'];
+    }
+    
+    /**
+     * Check power compatibility with detailed diagnostics
+     */
+    private function checkPowerCompatibilityDetailed($components) {
         $score = 100.0;
+        $issues = [];
         
         try {
             $totalPower = 0;
+            $componentPowerBreakdown = [];
             
             foreach ($components as $type => $typeComponents) {
+                $typePower = 0;
                 foreach ($typeComponents as $component) {
                     $details = $component['details'] ?? [];
                     $power = $this->calculateComponentPower($type, $details);
                     $quantity = $component['quantity'] ?? 1;
+                    $typePower += $power * $quantity;
                     $totalPower += $power * $quantity;
+                }
+                if ($typePower > 0) {
+                    $componentPowerBreakdown[$type] = $typePower;
                 }
             }
             
             // Check if total power is reasonable (not too high for typical motherboard)
             if ($totalPower > 1000) { // Very high power consumption
                 $score = 30.0;
+                $issues[] = "Critical: Very high power consumption (${totalPower}W) - may exceed typical PSU capacity and cause system instability";
+                $issues[] = "Power breakdown: " . $this->formatPowerBreakdown($componentPowerBreakdown);
             } elseif ($totalPower > 750) {
                 $score = 60.0;
+                $issues[] = "Warning: High power consumption (${totalPower}W) - ensure adequate PSU capacity (recommended 850W+ PSU)";
+                $issues[] = "Power breakdown: " . $this->formatPowerBreakdown($componentPowerBreakdown);
             } elseif ($totalPower > 500) {
                 $score = 85.0;
+                $issues[] = "Note: Moderate power consumption (${totalPower}W) - ensure PSU capacity is at least 650W";
             }
             
         } catch (Exception $e) {
             error_log("Error checking power compatibility: " . $e->getMessage());
             $score = 75.0;
+            $issues[] = "Error: Failed to analyze power compatibility - " . $e->getMessage();
         }
         
-        return $score;
+        return [
+            'score' => $score,
+            'issues' => $issues
+        ];
     }
     
     /**
-     * Check form factor compatibility
+     * Check form factor compatibility (legacy method)
      */
     private function checkFormFactorCompatibility($components) {
+        $result = $this->checkFormFactorCompatibilityDetailed($components);
+        return $result['score'];
+    }
+    
+    /**
+     * Check form factor compatibility with detailed diagnostics
+     */
+    private function checkFormFactorCompatibilityDetailed($components) {
         $score = 100.0;
+        $issues = [];
         
         try {
-            // This is a placeholder for more advanced form factor checking
-            // Could check if components physically fit together
-            
-            // For now, just check basic constraints
+            // Check memory slot constraints
             if (isset($components['motherboard']) && isset($components['ram'])) {
+                $motherboard = $components['motherboard'][0]['details'] ?? null;
+                $mbSerialNumber = $motherboard['SerialNumber'] ?? 'Unknown';
                 $ramCount = count($components['ram']);
                 
-                // Rough check: most motherboards support 2-4 RAM modules
-                if ($ramCount > 8) {
+                // Estimate memory slots based on motherboard type or use default
+                $estimatedSlots = $this->estimateMemorySlots($motherboard);
+                
+                if ($ramCount > $estimatedSlots) {
+                    $score = 20.0;
+                    $issues[] = "Critical: Memory slot overflow - trying to install $ramCount RAM modules but motherboard ($mbSerialNumber) likely has only $estimatedSlots slots";
+                } elseif ($ramCount > 8) {
                     $score = 40.0;
+                    $issues[] = "Warning: Very high RAM module count ($ramCount) - verify motherboard ($mbSerialNumber) supports this many modules";
                 } elseif ($ramCount > 6) {
                     $score = 70.0;
+                    $issues[] = "Note: High RAM module count ($ramCount) - ensure motherboard ($mbSerialNumber) has sufficient slots";
+                }
+            }
+            
+            // Check storage interface constraints
+            if (isset($components['motherboard']) && isset($components['storage'])) {
+                $storageCount = count($components['storage']);
+                $motherboard = $components['motherboard'][0]['details'] ?? null;
+                $mbSerialNumber = $motherboard['SerialNumber'] ?? 'Unknown';
+                
+                if ($storageCount > 8) {
+                    $score = min($score, 60.0);
+                    $issues[] = "Warning: Very high storage device count ($storageCount) - ensure motherboard ($mbSerialNumber) has sufficient SATA/NVMe ports";
+                } elseif ($storageCount > 6) {
+                    $score = min($score, 80.0);
+                    $issues[] = "Note: High storage device count ($storageCount) - verify sufficient ports on motherboard ($mbSerialNumber)";
                 }
             }
             
         } catch (Exception $e) {
             error_log("Error checking form factor compatibility: " . $e->getMessage());
             $score = 85.0;
+            $issues[] = "Error: Failed to analyze form factor compatibility - " . $e->getMessage();
         }
         
-        return $score;
+        return [
+            'score' => $score,
+            'issues' => $issues
+        ];
+    }
+    
+    /**
+     * Format power breakdown for display
+     */
+    private function formatPowerBreakdown($powerBreakdown) {
+        $formatted = [];
+        foreach ($powerBreakdown as $type => $power) {
+            $formatted[] = ucfirst($type) . ": {$power}W";
+        }
+        return implode(', ', $formatted);
+    }
+    
+    /**
+     * Estimate memory slots based on motherboard specifications
+     */
+    private function estimateMemorySlots($motherboard) {
+        if (!$motherboard) {
+            return 4; // Default assumption
+        }
+        
+        $notes = strtolower($motherboard['Notes'] ?? '');
+        
+        // Try to extract memory slot count from notes
+        if (preg_match('/(\d+)\s*(dimm|memory)\s*slot/i', $notes, $matches)) {
+            return (int)$matches[1];
+        }
+        
+        // Check for server/workstation indicators that typically have more slots
+        if (strpos($notes, 'server') !== false || strpos($notes, 'workstation') !== false) {
+            return 8; // Server motherboards typically have 8+ slots
+        }
+        
+        // Check for high-end desktop indicators
+        if (strpos($notes, 'x99') !== false || strpos($notes, 'x299') !== false || strpos($notes, 'trx40') !== false) {
+            return 8; // HEDT platforms typically have 8 slots
+        }
+        
+        return 4; // Standard desktop assumption
     }
     
     /**
