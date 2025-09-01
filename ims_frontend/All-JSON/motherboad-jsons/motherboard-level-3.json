@@ -1,0 +1,805 @@
+[
+  {
+    "brand": "Supermicro",
+    "series": "X13",
+    "family": "X13DRG",
+    "models": [
+      {
+        "model": "X13DRG-H",
+        "uuid": "8c5f2b87-1e5b-4e8c-a1d2-0b1a5e3f4d6c",
+        "form_factor": "EATX",
+        "dimensions": {
+          "length_mm": 330,
+          "width_mm": 305,
+          "height_mm": 3.5
+        },
+        "socket": {
+          "type": "LGA 4189",
+          "count": 2,
+          "spacing_mm": 145
+        },
+        "chipset": "Intel C741",
+        "memory": {
+          "type": "DDR5",
+          "max_capacity_TB": 8,
+          "slots": 32,
+          "channels": 8,
+          "max_frequency_MHz": 4800,
+          "max_modules_per_channel": 2,
+          "ecc_support": true
+        },
+        "expansion_slots": {
+          "pcie_slots": [
+            {
+              "type": "PCIe 5.0 x16",
+              "count": 6,
+              "lanes": 16,
+              "bifurcation_support": true
+            },
+            {
+              "type": "PCIe 5.0 x8",
+              "count": 4,
+              "lanes": 8,
+              "bifurcation_support": true
+            },
+            {
+              "type": "PCIe 5.0 x4",
+              "count": 2,
+              "lanes": 4,
+              "bifurcation_support": false
+            }
+          ],
+          "specialty_slots": [
+            {
+              "type": "OCP 3.0",
+              "count": 1,
+              "pcie_lanes": 16,
+              "pcie_generation": 5
+            }
+          ]
+        },
+        "storage": {
+          "sata": {
+            "ports": 8,
+            "raid_support": [
+              0,
+              1,
+              5,
+              10
+            ],
+            "sata_controller": "Intel C741 Integrated"
+          },
+          "sas": {
+            "ports": 4,
+            "controller": "Broadcom 3908",
+            "raid_support": [
+              0,
+              1,
+              5,
+              6,
+              10,
+              50,
+              60
+            ]
+          },
+          "nvme": {
+            "m2_slots": [
+              {
+                "count": 4,
+                "form_factors": [
+                  "M.2 2280",
+                  "M.2 22110"
+                ],
+                "pcie_lanes": 4,
+                "pcie_generation": 5
+              }
+            ],
+            "u2_slots": {
+              "count": 2,
+              "connection": "PCIe 5.0 x4"
+            }
+          }
+        },
+        "networking": {
+          "onboard_nics": [
+            {
+              "controller": "Intel X710",
+              "ports": 2,
+              "speed": "10GbE",
+              "connector": "SFP+"
+            }
+          ],
+          "management": {
+            "type": "IPMI 2.0",
+            "controller": "AST2600",
+            "dedicated_port": true,
+            "kvm_support": true,
+            "remote_power": true
+          }
+        },
+        "power_management": {
+          "vrm_phases": 16,
+          "power_connectors": [
+            {
+              "type": "24-pin ATX",
+              "count": 1
+            },
+            {
+              "type": "8-pin CPU",
+              "count": 4
+            },
+            {
+              "type": "6-pin PCIe Aux",
+              "count": 2
+            }
+          ],
+          "recommended_psu": {
+            "wattage": 1600,
+            "redundancy": true
+          },
+          "energy_efficiency_features": [
+            "Dynamic Power Management",
+            "Advanced Power States",
+            "Power Capping"
+          ]
+        },
+        "cooling": {
+          "fan_headers": 8,
+          "fan_zones": 4,
+          "thermal_sensors": 12,
+          "heatsink_mounting": "Integrated Retention Mechanism"
+        },
+        "usb": {
+          "internal_headers": [
+            {
+              "type": "USB 3.2 Gen2",
+              "count": 2,
+              "ports_per_header": 2
+            },
+            {
+              "type": "USB 2.0",
+              "count": 2,
+              "ports_per_header": 2
+            }
+          ],
+          "external_ports": [
+            {
+              "type": "USB 3.2 Gen2 Type-A",
+              "count": 4
+            },
+            {
+              "type": "USB 3.2 Gen2 Type-C",
+              "count": 2
+            }
+          ]
+        },
+        "other_connectors": [
+          {
+            "type": "COM Port",
+            "count": 1
+          },
+          {
+            "type": "TPM Header",
+            "count": 1
+          },
+          {
+            "type": "System Fan Headers",
+            "count": 8
+          },
+          {
+            "type": "Front Panel Header",
+            "count": 1
+          }
+        ],
+        "bios": {
+          "type": "AMI UEFI",
+          "size_MB": 256,
+          "secure_boot": true,
+          "secure_erase": true,
+          "tpm_support": "2.0",
+          "backup_bios": true
+        },
+        "certification": [
+          "80 PLUS Platinum Certified",
+          "ENERGY STAR Compliant",
+          "RoHS Compliant",
+          "FCC Class A"
+        ],
+        "compatible_cpus": [
+          {
+            "brand": "Intel",
+            "series": "Xeon Scalable",
+            "generation": "4th Gen (Sapphire Rapids)",
+            "families": [
+              "Platinum 8400",
+              "Gold 6400"
+            ],
+            "specific_models": [
+              "Platinum 8480+",
+              "Platinum 8470",
+              "Gold 6442Y",
+              "Gold 6438Y"
+            ],
+            "tdp_support": {
+              "min_W": 240,
+              "max_W": 350
+            }
+          }
+        ],
+        "compatible_memory": [
+          {
+            "type": "DDR5 RDIMM",
+            "capacities_GB": [
+              8,
+              16,
+              32,
+              64,
+              128
+            ],
+            "frequencies_MHz": [
+              4000,
+              4400,
+              4800
+            ],
+            "recommended_configurations": [
+              {
+                "description": "Basic",
+                "modules": "16x 32GB DDR5-4800",
+                "total_capacity_GB": 512,
+                "performance_notes": "Good balance of capacity and performance"
+              },
+              {
+                "description": "High Performance",
+                "modules": "32x 64GB DDR5-4800",
+                "total_capacity_GB": 2048,
+                "performance_notes": "Optimal performance for memory-intensive workloads"
+              }
+            ]
+          },
+          {
+            "type": "DDR5 LRDIMM",
+            "capacities_GB": [
+              128,
+              256
+            ],
+            "frequencies_MHz": [
+              4000,
+              4400,
+              4800
+            ],
+            "recommended_configurations": [
+              {
+                "description": "Maximum Capacity",
+                "modules": "32x 256GB DDR5-4800 LRDIMM",
+                "total_capacity_GB": 8192,
+                "performance_notes": "Maximum memory capacity for high-end database workloads"
+              }
+            ]
+          }
+        ],
+        "compatible_storage": [
+          {
+            "type": "M.2 NVMe SSD",
+            "interface": "PCIe 5.0 x4",
+            "form_factors": [
+              "M.2 2280",
+              "M.2 22110"
+            ],
+            "recommended_models": [
+              "Samsung PM1743",
+              "Intel P5510",
+              "Micron 7450"
+            ]
+          },
+          {
+            "type": "U.2 SSD",
+            "interface": "PCIe 5.0 x4",
+            "recommended_models": [
+              "Samsung PM1733",
+              "Intel P5316",
+              "Micron 9400"
+            ]
+          },
+          {
+            "type": "SAS HDD",
+            "interface": "12Gb/s SAS",
+            "recommended_models": [
+              "Seagate Exos X20",
+              "Western Digital Ultrastar DC HC650"
+            ]
+          }
+        ],
+        "use_cases": [
+          "High-Performance Computing",
+          "AI/ML Workloads",
+          "Enterprise Virtualization",
+          "Mission-Critical Database Servers"
+        ],
+        "inventory": {
+          "quantity_available": 8,
+          "quantity_reserved": 2,
+          "location": "Rack B4, Storage Unit 5",
+          "status": "Available",
+          "condition": "New",
+          "purchase_date": "2023-10-15",
+          "warranty_expiration": "2026-10-15",
+          "serial_numbers": [],
+          "sys_score": ""
+        }
+      },
+      {
+        "model": "X13DRi-N",
+        "uuid": "7a3b9c8d-2f1a-4b7e-8c6d-5a9f2b3e8c7d",
+        "form_factor": "EATX",
+        "dimensions": {
+          "length_mm": 330,
+          "width_mm": 305,
+          "height_mm": 3.5
+        },
+        "socket": {
+          "type": "LGA 4189",
+          "count": 2,
+          "spacing_mm": 145
+        },
+        "chipset": "Intel C741",
+        "memory": {
+          "type": "DDR5",
+          "max_capacity_TB": 8,
+          "slots": 32,
+          "channels": 8,
+          "max_frequency_MHz": 4800,
+          "max_modules_per_channel": 2,
+          "ecc_support": true
+        },
+        "expansion_slots": {
+          "pcie_slots": [
+            {
+              "type": "PCIe 5.0 x16",
+              "count": 4,
+              "lanes": 16,
+              "bifurcation_support": true
+            },
+            {
+              "type": "PCIe 5.0 x8",
+              "count": 4,
+              "lanes": 8,
+              "bifurcation_support": true
+            },
+            {
+              "type": "PCIe 5.0 x4",
+              "count": 2,
+              "lanes": 4,
+              "bifurcation_support": false
+            }
+          ],
+          "specialty_slots": [
+            {
+              "type": "OCP 3.0",
+              "count": 1,
+              "pcie_lanes": 16,
+              "pcie_generation": 5
+            }
+          ]
+        },
+        "storage": {
+          "sata": {
+            "ports": 8,
+            "raid_support": [
+              0,
+              1,
+              5,
+              10
+            ],
+            "sata_controller": "Intel C741 Integrated"
+          },
+          "sas": {
+            "ports": 2,
+            "controller": "Broadcom 3516",
+            "raid_support": [
+              0,
+              1,
+              5,
+              10
+            ]
+          },
+          "nvme": {
+            "m2_slots": [
+              {
+                "count": 4,
+                "form_factors": [
+                  "M.2 2280",
+                  "M.2 22110"
+                ],
+                "pcie_lanes": 4,
+                "pcie_generation": 5
+              }
+            ],
+            "u2_slots": {
+              "count": 2,
+              "connection": "PCIe 5.0 x4"
+            }
+          }
+        },
+        "compatible_cpus": [
+          {
+            "brand": "Intel",
+            "series": "Xeon Scalable",
+            "generation": "4th Gen (Sapphire Rapids)",
+            "families": [
+              "Platinum 8400",
+              "Gold 6400",
+              "Silver 4400"
+            ],
+            "specific_models": [
+              "Platinum 8480+",
+              "Platinum 8470",
+              "Gold 6442Y",
+              "Gold 6438Y",
+              "Silver 4416+"
+            ],
+            "tdp_support": {
+              "min_W": 185,
+              "max_W": 350
+            }
+          }
+        ],
+        "inventory": {
+          "quantity_available": 10,
+          "quantity_reserved": 2,
+          "location": "Rack B4, Storage Unit 6",
+          "status": "Available",
+          "condition": "New",
+          "purchase_date": "2023-10-20",
+          "warranty_expiration": "2026-10-20",
+          "serial_numbers": [],
+          "sys_score": ""
+        }
+      }
+    ]
+  },
+  {
+    "brand": "GIGABYTE",
+    "series": "MZ",
+    "family": "MZ93",
+    "models": [
+      {
+        "model": "MZ93-FS0",
+        "uuid": "6e4c2a5b-3a8e-4f7d-8b2c-9d1a4e5b6f7c",
+        "form_factor": "EATX",
+        "dimensions": {
+          "length_mm": 330,
+          "width_mm": 305,
+          "height_mm": 3.5
+        },
+        "socket": {
+          "type": "LGA 4189",
+          "count": 2,
+          "spacing_mm": 148
+        },
+        "chipset": "Intel C741",
+        "memory": {
+          "type": "DDR5",
+          "max_capacity_TB": 8,
+          "slots": 32,
+          "channels": 8,
+          "max_frequency_MHz": 4800,
+          "max_modules_per_channel": 2,
+          "ecc_support": true
+        },
+        "expansion_slots": {
+          "pcie_slots": [
+            {
+              "type": "PCIe 5.0 x16",
+              "count": 6,
+              "lanes": 16,
+              "bifurcation_support": true
+            },
+            {
+              "type": "PCIe 5.0 x8",
+              "count": 3,
+              "lanes": 8,
+              "bifurcation_support": true
+            },
+            {
+              "type": "PCIe 5.0 x4",
+              "count": 2,
+              "lanes": 4,
+              "bifurcation_support": false
+            }
+          ],
+          "specialty_slots": [
+            {
+              "type": "OCP 3.0",
+              "count": 1,
+              "pcie_lanes": 16,
+              "pcie_generation": 5
+            }
+          ]
+        },
+        "storage": {
+          "sata": {
+            "ports": 8,
+            "raid_support": [
+              0,
+              1,
+              5,
+              10
+            ],
+            "sata_controller": "Intel C741 Integrated"
+          },
+          "sas": {
+            "ports": 4,
+            "controller": "Broadcom 3908",
+            "raid_support": [
+              0,
+              1,
+              5,
+              6,
+              10,
+              50,
+              60
+            ]
+          },
+          "nvme": {
+            "m2_slots": [
+              {
+                "count": 4,
+                "form_factors": [
+                  "M.2 2280",
+                  "M.2 22110"
+                ],
+                "pcie_lanes": 4,
+                "pcie_generation": 5
+              }
+            ],
+            "u2_slots": {
+              "count": 2,
+              "connection": "PCIe 5.0 x4"
+            }
+          }
+        },
+        "networking": {
+          "onboard_nics": [
+            {
+              "controller": "Intel X710",
+              "ports": 2,
+              "speed": "10GbE",
+              "connector": "SFP+"
+            }
+          ],
+          "management": {
+            "type": "IPMI 2.0",
+            "controller": "AST2600",
+            "dedicated_port": true,
+            "kvm_support": true,
+            "remote_power": true
+          }
+        },
+        "power_management": {
+          "vrm_phases": 16,
+          "power_connectors": [
+            {
+              "type": "24-pin ATX",
+              "count": 1
+            },
+            {
+              "type": "8-pin CPU",
+              "count": 4
+            },
+            {
+              "type": "6-pin PCIe Aux",
+              "count": 2
+            }
+          ],
+          "recommended_psu": {
+            "wattage": 1600,
+            "redundancy": true
+          }
+        },
+        "compatible_cpus": [
+          {
+            "brand": "Intel",
+            "series": "Xeon Scalable",
+            "generation": "4th Gen (Sapphire Rapids)",
+            "families": [
+              "Platinum 8400",
+              "Gold 6400"
+            ],
+            "specific_models": [
+              "Platinum 8480+",
+              "Platinum 8470",
+              "Gold 6442Y",
+              "Gold 6438Y"
+            ],
+            "tdp_support": {
+              "min_W": 240,
+              "max_W": 350
+            }
+          }
+        ],
+        "inventory": {
+          "quantity_available": 6,
+          "quantity_reserved": 2,
+          "location": "Rack C2, Storage Unit 3",
+          "status": "Available",
+          "condition": "New",
+          "purchase_date": "2023-09-25",
+          "warranty_expiration": "2026-09-25",
+          "serial_numbers": [],
+          "sys_score": ""
+        }
+      }
+    ]
+  },
+  {
+    "brand": "ASRock Rack",
+    "series": "ROMED",
+    "family": "ROMED8",
+    "models": [
+      {
+        "model": "ROMED8-9001",
+        "uuid": "4f8e6c3d-2b7a-4c9e-8d1b-5e6f7a3d9c8b",
+        "form_factor": "EATX",
+        "dimensions": {
+          "length_mm": 330,
+          "width_mm": 305,
+          "height_mm": 3.5
+        },
+        "socket": {
+          "type": "SP5",
+          "count": 2,
+          "spacing_mm": 150
+        },
+        "chipset": "AMD SP5 Integrated",
+        "memory": {
+          "type": "DDR5",
+          "max_capacity_TB": 6,
+          "slots": 24,
+          "channels": 12,
+          "max_frequency_MHz": 4800,
+          "max_modules_per_channel": 2,
+          "ecc_support": true
+        },
+        "expansion_slots": {
+          "pcie_slots": [
+            {
+              "type": "PCIe 5.0 x16",
+              "count": 5,
+              "lanes": 16,
+              "bifurcation_support": true
+            },
+            {
+              "type": "PCIe 5.0 x8",
+              "count": 2,
+              "lanes": 8,
+              "bifurcation_support": true
+            },
+            {
+              "type": "PCIe 5.0 x4",
+              "count": 1,
+              "lanes": 4,
+              "bifurcation_support": false
+            }
+          ],
+          "specialty_slots": [
+            {
+              "type": "OCP 3.0",
+              "count": 1,
+              "pcie_lanes": 16,
+              "pcie_generation": 5
+            }
+          ]
+        },
+        "storage": {
+          "sata": {
+            "ports": 8,
+            "raid_support": [
+              0,
+              1,
+              5,
+              10
+            ],
+            "sata_controller": "AMD Integrated"
+          },
+          "sas": {
+            "ports": 4,
+            "controller": "Broadcom 3908",
+            "raid_support": [
+              0,
+              1,
+              5,
+              6,
+              10,
+              50,
+              60
+            ]
+          },
+          "nvme": {
+            "m2_slots": [
+              {
+                "count": 4,
+                "form_factors": [
+                  "M.2 2280",
+                  "M.2 22110"
+                ],
+                "pcie_lanes": 4,
+                "pcie_generation": 5
+              }
+            ],
+            "u2_slots": {
+              "count": 2,
+              "connection": "PCIe 5.0 x4"
+            }
+          }
+        },
+        "networking": {
+          "onboard_nics": [
+            {
+              "controller": "Broadcom BCM57414",
+              "ports": 2,
+              "speed": "10GbE",
+              "connector": "SFP+"
+            }
+          ],
+          "management": {
+            "type": "IPMI 2.0",
+            "controller": "AST2600",
+            "dedicated_port": true,
+            "kvm_support": true,
+            "remote_power": true
+          }
+        },
+        "power_management": {
+          "vrm_phases": 16,
+          "power_connectors": [
+            {
+              "type": "24-pin ATX",
+              "count": 1
+            },
+            {
+              "type": "8-pin CPU",
+              "count": 4
+            },
+            {
+              "type": "6-pin PCIe Aux",
+              "count": 2
+            }
+          ],
+          "recommended_psu": {
+            "wattage": 1600,
+            "redundancy": true
+          }
+        },
+        "compatible_cpus": [
+          {
+            "brand": "AMD",
+            "series": "EPYC",
+            "generation": "4th Gen (Genoa)",
+            "families": [
+              "EPYC 9004"
+            ],
+            "specific_models": [
+              "EPYC 9534",
+              "EPYC 9374F"
+            ],
+            "tdp_support": {
+              "min_W": 200,
+              "max_W": 400
+            }
+          }
+        ],
+        "inventory": {
+          "quantity_available": 5,
+          "quantity_reserved": 1,
+          "location": "Rack C3, Storage Unit 4",
+          "status": "Available",
+          "condition": "New",
+          "purchase_date": "2023-08-10",
+          "warranty_expiration": "2026-08-10",
+          "serial_numbers": [],
+          "sys_score": ""
+        }
+      }
+    ]
+  }
+]

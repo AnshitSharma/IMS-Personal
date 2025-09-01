@@ -83,6 +83,12 @@ switch ($action) {
         handleUpdateConfiguration($serverBuilder, $user);
         break;
     
+    // NEW: Update server location and propagate to components
+    case 'update-location':
+    case 'server-update-location':
+        handleUpdateLocationAndPropagate($serverBuilder, $user);
+        break;
+    
     default:
         send_json_response(0, 1, 400, "Invalid action specified");
 }
@@ -1241,7 +1247,7 @@ function parseMotherboardSpecs($motherboardDetails) {
     try {
         // Try to find matching motherboard JSON data
         $jsonFiles = [
-            __DIR__ . '/../../All JSON/motherboad jsons/motherboard level 3.json'
+            __DIR__ . '/../../All-JSON/motherboad-jsons/motherboard-level-3.json'
         ];
         
         $serialNumber = $motherboardDetails['SerialNumber'];
@@ -1567,6 +1573,162 @@ function getNextRecommendations($summary, $componentLimits) {
     }
     
     return $recommendations;
+}
+
+/**
+ * NEW: Update server location and rack position, and propagate to all assigned components
+ * This function handles the specific case of updating deployment location information
+ */
+function handleUpdateLocationAndPropagate($serverBuilder, $user) {
+    global $pdo;
+    
+    $configUuid = $_POST['config_uuid'] ?? '';
+    $location = trim($_POST['location'] ?? '');
+    $rackPosition = trim($_POST['rack_position'] ?? '');
+    
+    if (empty($configUuid)) {
+        send_json_response(0, 1, 400, "Configuration UUID is required");
+    }
+    
+    try {
+        // Load the configuration to verify it exists and check permissions
+        $config = ServerConfiguration::loadByUuid($pdo, $configUuid);
+        if (!$config) {
+            send_json_response(0, 1, 404, "Server configuration not found");
+        }
+        
+        // Check if user owns this configuration or has edit permissions
+        if ($config->get('created_by') != $user['id'] && !hasPermission($pdo, 'server.edit_all', $user['id'])) {
+            send_json_response(0, 1, 403, "Insufficient permissions to modify this configuration");
+        }
+        
+        // Begin transaction to ensure all updates succeed or fail together
+        $pdo->beginTransaction();
+        
+        // Update the server configuration location and rack position
+        $updateFields = [];
+        $updateValues = [];
+        $changes = [];
+        
+        $currentLocation = $config->get('location');
+        $currentRackPosition = $config->get('rack_position');
+        
+        if ($location !== $currentLocation) {
+            $updateFields[] = "location = ?";
+            $updateValues[] = $location ?: null;
+            $changes['location'] = ['old' => $currentLocation, 'new' => $location ?: null];
+        }
+        
+        if ($rackPosition !== $currentRackPosition) {
+            $updateFields[] = "rack_position = ?";
+            $updateValues[] = $rackPosition ?: null;
+            $changes['rack_position'] = ['old' => $currentRackPosition, 'new' => $rackPosition ?: null];
+        }
+        
+        if (empty($updateFields)) {
+            $pdo->rollback();
+            send_json_response(1, 1, 200, "No location changes detected", [
+                'config_uuid' => $configUuid,
+                'current_location' => $currentLocation,
+                'current_rack_position' => $currentRackPosition
+            ]);
+        }
+        
+        // Update server configuration
+        $updateFields[] = "updated_by = ?";
+        $updateFields[] = "updated_at = NOW()";
+        $updateValues[] = $user['id'];
+        $updateValues[] = $configUuid;
+        
+        $sql = "UPDATE server_configurations SET " . implode(', ', $updateFields) . " WHERE config_uuid = ?";
+        $stmt = $pdo->prepare($sql);
+        $result = $stmt->execute($updateValues);
+        
+        if (!$result) {
+            $pdo->rollback();
+            send_json_response(0, 1, 500, "Failed to update server configuration location");
+        }
+        
+        // Get all components assigned to this configuration
+        $stmt = $pdo->prepare("
+            SELECT component_type, component_uuid 
+            FROM server_configuration_components 
+            WHERE config_uuid = ?
+        ");
+        $stmt->execute([$configUuid]);
+        $assignedComponents = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        
+        // Update all assigned components with new location and rack position
+        $componentUpdateCount = 0;
+        $componentTables = [
+            'cpu' => 'cpuinventory',
+            'ram' => 'raminventory',
+            'storage' => 'storageinventory',
+            'motherboard' => 'motherboardinventory',
+            'nic' => 'nicinventory',
+            'caddy' => 'caddyinventory'
+        ];
+        
+        foreach ($assignedComponents as $component) {
+            $componentType = $component['component_type'];
+            $componentUuid = $component['component_uuid'];
+            
+            if (!isset($componentTables[$componentType])) {
+                continue;
+            }
+            
+            $table = $componentTables[$componentType];
+            
+            // Build component update query
+            $compUpdateFields = [];
+            $compUpdateValues = [];
+            
+            if (isset($changes['location'])) {
+                $compUpdateFields[] = "Location = ?";
+                $compUpdateValues[] = $location ?: null;
+            }
+            
+            if (isset($changes['rack_position'])) {
+                $compUpdateFields[] = "RackPosition = ?";
+                $compUpdateValues[] = $rackPosition ?: null;
+            }
+            
+            if (!empty($compUpdateFields)) {
+                $compUpdateFields[] = "UpdatedAt = NOW()";
+                $compUpdateValues[] = $componentUuid;
+                
+                $compSql = "UPDATE $table SET " . implode(', ', $compUpdateFields) . " WHERE UUID = ?";
+                $compStmt = $pdo->prepare($compSql);
+                if ($compStmt->execute($compUpdateValues)) {
+                    $componentUpdateCount++;
+                    error_log("Updated location for component $componentUuid in $table");
+                } else {
+                    error_log("Failed to update location for component $componentUuid in $table");
+                }
+            }
+        }
+        
+        $pdo->commit();
+        
+        // Log the update action
+        logConfigurationUpdate($pdo, $configUuid, $changes, $user['id']);
+        
+        send_json_response(1, 1, 200, "Server location updated and propagated to components successfully", [
+            'config_uuid' => $configUuid,
+            'changes_made' => $changes,
+            'components_updated' => $componentUpdateCount,
+            'total_assigned_components' => count($assignedComponents),
+            'new_location' => $location ?: null,
+            'new_rack_position' => $rackPosition ?: null,
+            'updated_by_user_id' => $user['id'],
+            'updated_at' => date('Y-m-d H:i:s')
+        ]);
+        
+    } catch (Exception $e) {
+        $pdo->rollback();
+        error_log("Error updating server location: " . $e->getMessage());
+        send_json_response(0, 1, 500, "Failed to update server location: " . $e->getMessage());
+    }
 }
 
 /**

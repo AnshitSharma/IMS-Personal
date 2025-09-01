@@ -25,25 +25,25 @@ if (!in_array($componentType, $validTypes)) {
 function loadJSONData($type) {
     $jsonPaths = [
         'cpu' => [
-            'level1' => __DIR__ . '/../../All JSON/cpu jsons/Cpu base level 1.json',
-            'level2' => __DIR__ . '/../../All JSON/cpu jsons/Cpu family level 2.json',
-            'level3' => __DIR__ . '/../../All JSON/cpu jsons/Cpu details level 3.json'
+            'level1' => __DIR__ . '/../../All-JSON/cpu-jsons/Cpu base level 1.json',
+            'level2' => __DIR__ . '/../../All-JSON/cpu-jsons/Cpu family level 2.json',
+            'level3' => __DIR__ . '/../../All-JSON/cpu-jsons/Cpu-details-level-3.json'
         ],
         'motherboard' => [
-            'level1' => __DIR__ . '/../../All JSON/motherboad jsons/motherboard level 1.json',
-            'level3' => __DIR__ . '/../../All JSON/motherboad jsons/motherboard level 3.json'
+            'level1' => __DIR__ . '/../../All-JSON/motherboad-jsons/motherboard level 1.json',
+            'level3' => __DIR__ . '/../../All-JSON/motherboad-jsons/motherboard-level-3.json'
         ],
         'ram' => [
-            'level3' => __DIR__ . '/../../All JSON/Ram JSON/ram_detail.json'
+            'level3' => __DIR__ . '/../../All-JSON/Ram-jsons/ram_detail.json'
         ],
         'storage' => [
-            'level3' => __DIR__ . '/../../All JSON/storage jsons/storagedetail.json'
+            'level3' => __DIR__ . '/../../All-JSON/storage-jsons/storagedetail.json'
         ],
         'caddy' => [
-            'level3' => __DIR__ . '/../../All JSON/caddy json/caddy_details.json'
+            'level3' => __DIR__ . '/../../All-JSON/caddy-jsons/caddy_details.json'
         ],
         'nic' => [
-            'level3' => __DIR__ . '/../../All JSON/nic json/nic_details.json'
+            'level3' => __DIR__ . '/../../All-JSON/nic-jsons/nic-level-3.json'
         ]
     ];
     

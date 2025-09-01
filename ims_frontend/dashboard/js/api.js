@@ -71,8 +71,8 @@ window.api = {
                 data[key].forEach(item => {
                     formData.append(`${key}[]`, item);
                 });
-            } else if (data[key] !== null && data[key] !== undefined) {
-                formData.append(key, data[key]);
+            } else if (data[key] !== undefined) {
+                formData.append(key, data[key] === null ? 'null' : data[key]);
             }
         });
 

@@ -85,6 +85,16 @@ class ServerBuilder {
                 }
             }
             
+            // Get server configuration location and rack position for component assignment
+            $stmt = $this->pdo->prepare("SELECT location, rack_position FROM server_configurations WHERE config_uuid = ?");
+            $stmt->execute([$configUuid]);
+            $serverConfig = $stmt->fetch(PDO::FETCH_ASSOC);
+            $serverLocation = $serverConfig['location'] ?? null;
+            $serverRackPosition = $serverConfig['rack_position'] ?? null;
+            
+            // Log server configuration data for component assignment
+            error_log("Component assignment: Server $configUuid has Location='$serverLocation', RackPosition='$serverRackPosition'");
+            
             // Begin transaction
             $this->pdo->beginTransaction();
             
@@ -100,8 +110,8 @@ class ServerBuilder {
             ");
             $stmt->execute([$configUuid, $componentType, $componentUuid, $quantity, $slotPosition, $notes]);
             
-            // Update component status to "In Use" AND set ServerUUID to config_uuid
-            $this->updateComponentStatusAndServerUuid($componentType, $componentUuid, 2, $configUuid, "Added to configuration $configUuid");
+            // Update component status to "In Use" AND set ServerUUID, location, rack position, and installation date
+            $this->updateComponentStatusAndServerUuid($componentType, $componentUuid, 2, $configUuid, "Added to configuration $configUuid", $serverLocation, $serverRackPosition);
             
             // Update the main server_configurations table with component info
             $this->updateServerConfigurationTable($configUuid, $componentType, $componentUuid, $quantity, 'add');
@@ -152,7 +162,7 @@ class ServerBuilder {
                 ];
             }
             
-            // Update component status back to "Available" and clear ServerUUID
+            // Update component status back to "Available" and clear ServerUUID, installation date, and rack position
             $this->updateComponentStatusAndServerUuid($componentType, $componentUuid, 1, null, "Removed from configuration $configUuid");
             
             // Update the main server_configurations table
@@ -804,7 +814,7 @@ class ServerBuilder {
             $stmt->execute([$configUuid]);
             $components =$stmt->fetchAll(PDO::FETCH_ASSOC);
             
-            // Release components back to available status and clear ServerUUID
+            // Release components back to available status and clear ServerUUID, installation date, and rack position
             foreach ($components as $component) {
                 $this->updateComponentStatusAndServerUuid(
                     $component['component_type'], 
@@ -974,9 +984,9 @@ class ServerBuilder {
     }
     
     /**
-     * Update component status AND ServerUUID 
+     * Update component status, ServerUUID, location, rack position, and installation date
      */
-    private function updateComponentStatusAndServerUuid($componentType, $componentUuid, $newStatus, $serverUuid, $reason = '') {
+    private function updateComponentStatusAndServerUuid($componentType, $componentUuid, $newStatus, $serverUuid, $reason = '', $serverLocation = null, $serverRackPosition = null) {
         if (!isset($this->componentTables[$componentType])) {
             error_log("Cannot update status - invalid component type: $componentType");
             return false;
@@ -986,7 +996,7 @@ class ServerBuilder {
             $table = $this->componentTables[$componentType];
             
             // Get current status first for logging
-            $stmt = $this->pdo->prepare("SELECT Status, ServerUUID FROM $table WHERE UUID = ?");
+            $stmt = $this->pdo->prepare("SELECT Status, ServerUUID, Location, RackPosition, InstallationDate FROM $table WHERE UUID = ?");
             $stmt->execute([$componentUuid]);
             $current = $stmt->fetch(PDO::FETCH_ASSOC);
             
@@ -995,16 +1005,47 @@ class ServerBuilder {
                 return false;
             }
             
-            // Update both status and ServerUUID
-            $stmt = $this->pdo->prepare("
-                UPDATE $table 
-                SET Status = ?, ServerUUID = ?, UpdatedAt = NOW() 
-                WHERE UUID = ?
-            ");
-            $result = $stmt->execute([$newStatus, $serverUuid, $componentUuid]);
+            // Prepare update fields and values
+            $updateFields = ["Status = ?", "ServerUUID = ?", "UpdatedAt = NOW()"];
+            $updateValues = [$newStatus, $serverUuid];
+            
+            // Handle installation date
+            if ($newStatus == 2 && $serverUuid !== null) {
+                // Component is being assigned to a server - set installation date to current timestamp
+                $updateFields[] = "InstallationDate = CURDATE()";
+            } elseif ($newStatus == 1 && $serverUuid === null) {
+                // Component is being released from server - clear installation date
+                $updateFields[] = "InstallationDate = NULL";
+            }
+            
+            // Handle location and rack position updates
+            if ($newStatus == 2 && $serverUuid !== null) {
+                // Component is being assigned to a server - always update location and rack position
+                $updateFields[] = "Location = ?";
+                $updateValues[] = $serverLocation; // This can be null if server has no location
+                
+                $updateFields[] = "RackPosition = ?";
+                $updateValues[] = $serverRackPosition; // This can be null if server has no rack position
+                
+            } elseif ($newStatus == 1 && $serverUuid === null) {
+                // Component is being released from server - clear rack position but keep location
+                $updateFields[] = "RackPosition = NULL";
+                // We don't clear location as component still exists in physical location
+            }
+            
+            $updateValues[] = $componentUuid;
+            
+            // Execute update
+            $sql = "UPDATE $table SET " . implode(', ', $updateFields) . " WHERE UUID = ?";
+            $stmt = $this->pdo->prepare($sql);
+            $result = $stmt->execute($updateValues);
             
             if ($result) {
-                error_log("Updated component: $componentUuid in $table - Status: {$current['Status']} -> $newStatus, ServerUUID: '{$current['ServerUUID']}' -> '$serverUuid' - $reason");
+                $locationInfo = "";
+                if ($serverLocation !== null || $serverRackPosition !== null) {
+                    $locationInfo = " Location: '$serverLocation', RackPosition: '$serverRackPosition'";
+                }
+                error_log("Updated component: $componentUuid in $table - Status: {$current['Status']} -> $newStatus, ServerUUID: '{$current['ServerUUID']}' -> '$serverUuid'$locationInfo - $reason");
             } else {
                 error_log("Failed to update component: $componentUuid in $table");
             }
@@ -1012,7 +1053,7 @@ class ServerBuilder {
             return $result;
             
         } catch (Exception $e) {
-            error_log("Error updating component status and ServerUUID: " . $e->getMessage());
+            error_log("Error updating component assignment: " . $e->getMessage());
             return false;
         }
     }

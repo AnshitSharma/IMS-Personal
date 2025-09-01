@@ -9,7 +9,7 @@ if (ob_get_level()) {
     ob_end_clean();
 }
 
-// Error reporting settings
+// Error reporting settingsok 
 error_reporting(E_ALL);
 ini_set('display_errors', 0);
 ini_set('log_errors', 1);
@@ -976,13 +976,13 @@ function handleComponentOperations($module, $operation, $user) {
             }
             
             try {
-                $componentId = addComponent($pdo, $module, $componentData, $user['id']);
+                $result = addComponent($pdo, $module, $componentData, $user['id']);
                 
-                if ($componentId) {
-                    error_log("Successfully added $module component with ID: $componentId");
+                if ($result) {
+                    error_log("Successfully added $module component with ID: " . $result['id']);
                     send_json_response(1, 1, 201, ucfirst($module) . " component added successfully", [
-                        'component_id' => $componentId,
-                        'uuid' => $componentData['UUID'] ?? null
+                        'component_id' => $result['id'],
+                        'uuid' => $result['uuid']
                     ]);
                 } else {
                     send_json_response(0, 1, 400, "Failed to add " . $module . " component");
@@ -1207,6 +1207,48 @@ function getComponentTableName($type) {
 }
 
 /**
+ * Convert CamelCase to snake_case
+ */
+function convertCamelToSnake($input) {
+    return strtolower(preg_replace('/([a-z])([A-Z])/', '$1_$2', $input));
+}
+
+/**
+ * Get field mapping for component type (snake_case to CamelCase)
+ */
+function getComponentFieldMap($type) {
+    // Common fields for all components
+    $commonFields = [
+        'uuid' => 'UUID',
+        'serial_number' => 'SerialNumber',
+        'status' => 'Status',
+        'server_uuid' => 'ServerUUID',
+        'location' => 'Location',
+        'rack_position' => 'RackPosition',
+        'purchase_date' => 'PurchaseDate',
+        'installation_date' => 'InstallationDate',
+        'warranty_end_date' => 'WarrantyEndDate',
+        'flag' => 'Flag',
+        'notes' => 'Notes'
+    ];
+    
+    // Component-specific fields
+    $specificFields = [
+        'nic' => [
+            'mac_address' => 'MacAddress',
+            'ip_address' => 'IPAddress',
+            'network_name' => 'NetworkName'
+        ],
+        'pciecard' => [
+            'card_type' => 'CardType',
+            'attachables' => 'Attachables'
+        ]
+    ];
+    
+    return array_merge($commonFields, $specificFields[$type] ?? []);
+}
+
+/**
  * Get components by type
  */
 function getComponentsByType($pdo, $type) {
@@ -1243,25 +1285,41 @@ function getComponentById($pdo, $type, $id) {
  */
 function addComponent($pdo, $type, $data, $userId) {
     try {
+        // Get the correct table name
+        $tableName = getComponentTableName($type);
+        
+        // Get dynamic field mapping for this component type
+        $fieldMap = getComponentFieldMap($type);
+        
+        // Convert field names to match database columns
+        $convertedData = [];
+        foreach ($data as $key => $value) {
+            $dbColumn = $fieldMap[$key] ?? $key;
+            $convertedData[$dbColumn] = $value;
+        }
+        
         // Generate UUID if not provided
-        if (!isset($data['UUID']) || empty($data['UUID'])) {
-            $data['UUID'] = generateUUID();
+        if (!isset($convertedData['UUID']) || empty($convertedData['UUID'])) {
+            $convertedData['UUID'] = generateUUID();
         }
         
         // Prepare column names and values
-        $columns = array_keys($data);
+        $columns = array_keys($convertedData);
         $placeholders = array_fill(0, count($columns), '?');
-        $values = array_values($data);
+        $values = array_values($convertedData);
         
-        $sql = "INSERT INTO $type (" . implode(', ', $columns) . ") VALUES (" . implode(', ', $placeholders) . ")";
+        $sql = "INSERT INTO $tableName (" . implode(', ', $columns) . ") VALUES (" . implode(', ', $placeholders) . ")";
         
-        error_log("Inserting $type data: " . json_encode($data));
+        error_log("Inserting $type data into $tableName: " . json_encode($convertedData));
         
         $stmt = $pdo->prepare($sql);
         $result = $stmt->execute($values);
         
         if ($result) {
-            return $pdo->lastInsertId();
+            return [
+                'id' => $pdo->lastInsertId(),
+                'uuid' => $convertedData['UUID']
+            ];
         }
         
         return false;
@@ -1277,12 +1335,25 @@ function addComponent($pdo, $type, $data, $userId) {
  */
 function updateComponent($pdo, $type, $id, $data, $userId) {
     try {
-        $columns = array_keys($data);
+        // Get the correct table name
+        $tableName = getComponentTableName($type);
+        
+        // Get dynamic field mapping for this component type
+        $fieldMap = getComponentFieldMap($type);
+        
+        // Convert field names to match database columns
+        $convertedData = [];
+        foreach ($data as $key => $value) {
+            $dbColumn = $fieldMap[$key] ?? $key;
+            $convertedData[$dbColumn] = $value;
+        }
+        
+        $columns = array_keys($convertedData);
         $setClause = implode(' = ?, ', $columns) . ' = ?';
-        $values = array_values($data);
+        $values = array_values($convertedData);
         $values[] = $id; // Add ID for WHERE clause
         
-        $sql = "UPDATE $type SET $setClause WHERE id = ?";
+        $sql = "UPDATE $tableName SET $setClause WHERE ID = ?";
         
         $stmt = $pdo->prepare($sql);
         return $stmt->execute($values);

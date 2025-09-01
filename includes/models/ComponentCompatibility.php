@@ -449,12 +449,12 @@ class ComponentCompatibility {
      */
     private function loadJSONData($type, $uuid) {
         $jsonPaths = [
-            'cpu' => __DIR__ . '/../../All JSON/cpu jsons/Cpu details level 3.json',
-            'motherboard' => __DIR__ . '/../../All JSON/motherboad jsons/motherboard level 3.json',
-            'ram' => __DIR__ . '/../../All JSON/Ram JSON/ram_detail.json',
-            'storage' => __DIR__ . '/../../All JSON/storage jsons/storagedetail.json',
-            'nic' => __DIR__ . '/../../All JSON/nic json/nic_details.json',
-            'caddy' => __DIR__ . '/../../All JSON/caddy json/caddy_details.json'
+            'cpu' => __DIR__ . '/../../All-JSON/cpu-jsons/Cpu-details-level-3.json',
+            'motherboard' => __DIR__ . '/../../All-JSON/motherboad-jsons/motherboard-level-3.json',
+            'ram' => __DIR__ . '/../../All-JSON/Ram-jsons/ram_detail.json',
+            'storage' => __DIR__ . '/../../All-JSON/storage-jsons/storagedetail.json',
+            'nic' => __DIR__ . '/../../All-JSON/nic-jsons/nic-level-3.json',
+            'caddy' => __DIR__ . '/../../All-JSON/caddy-jsons/caddy_details.json'
         ];
         
         if (!isset($jsonPaths[$type]) || !file_exists($jsonPaths[$type])) {
