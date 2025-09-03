@@ -27,6 +27,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 }
 
 // Include required files
+require_once(__DIR__ . '/../includes/config.php');
 require_once(__DIR__ . '/../includes/db_config.php');
 require_once(__DIR__ . '/../includes/BaseFunctions.php');
 
@@ -295,7 +296,8 @@ function handleLogin() {
         error_log("Login successful for user: $username (ID: " . $user['id'] . ")");
         
         // Generate JWT tokens
-        $accessTokenExpiry = $rememberMe ? 86400 : 3600; // 24h or 1h
+        $jwtExpiryHours = defined('JWT_EXPIRY_HOURS') ? JWT_EXPIRY_HOURS : 24;
+        $accessTokenExpiry = $rememberMe ? 86400 : ($jwtExpiryHours * 3600); // 24h or configured hours
         $refreshTokenExpiry = $rememberMe ? 2592000 : 604800; // 30 days or 7 days
         
         $accessToken = JWTHelper::generateToken([
@@ -395,14 +397,16 @@ function handleTokenRefresh() {
         }
         
         // Generate new access token
+        $jwtExpiryHours = defined('JWT_EXPIRY_HOURS') ? JWT_EXPIRY_HOURS : 24;
+        $tokenExpiry = $jwtExpiryHours * 3600;
         $accessToken = JWTHelper::generateToken([
             'user_id' => $user['id'],
             'username' => $user['username']
-        ], 3600);
+        ], $tokenExpiry);
         
         send_json_response(1, 1, 200, "Token refreshed successfully", [
             'access_token' => $accessToken,
-            'expires_in' => 3600,
+            'expires_in' => $tokenExpiry,
             'user' => [
                 'id' => (int)$user['id'],
                 'username' => $user['username'],

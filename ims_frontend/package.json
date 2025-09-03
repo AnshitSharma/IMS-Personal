@@ -1,0 +1,17 @@
+{
+  "name": "ims-frontend",
+  "version": "1.0.0",
+  "description": "IMS Inventory Management System Frontend",
+  "main": "index.js",
+  "scripts": {
+    "dev": "npx http-server . -p 3000 -c-1",
+    "build": "echo 'Build process not configured yet'",
+    "start": "npm run dev"
+  },
+  "devDependencies": {
+    "http-server": "^14.1.1"
+  },
+  "dependencies": {
+    "axios": "^1.6.0"
+  }
+}

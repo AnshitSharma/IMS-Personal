@@ -399,7 +399,6 @@ function handleAnalyzeConfiguration() {
             'summary' => [
                 'overall_valid' => $validationResult['valid'],
                 'overall_score' => $validationResult['overall_score'],
-                'estimated_power' => $validationResult['estimated_power'],
                 'component_check_count' => count($validationResult['component_checks']),
                 'global_check_count' => count($validationResult['global_checks'])
             ]
@@ -906,32 +905,6 @@ function generateConfigurationRecommendations($validationResult) {
         ];
     }
     
-    // Power recommendations
-    if ($validationResult['estimated_power'] > 500) {
-        $recommendations[] = [
-            'type' => 'power',
-            'priority' => 'high',
-            'message' => 'High power consumption detected',
-            'details' => "Estimated power consumption: {$validationResult['estimated_power']}W - ensure adequate PSU capacity",
-            'suggested_actions' => [
-                'Verify PSU wattage and efficiency rating',
-                'Consider power management features',
-                'Review component TDP specifications'
-            ]
-        ];
-    } elseif ($validationResult['estimated_power'] > 300) {
-        $recommendations[] = [
-            'type' => 'power',
-            'priority' => 'medium',
-            'message' => 'Moderate power consumption',
-            'details' => "Estimated power consumption: {$validationResult['estimated_power']}W - consider energy efficiency",
-            'suggested_actions' => [
-                'Look for energy-efficient alternatives',
-                'Enable power-saving features',
-                'Consider workload-appropriate sizing'
-            ]
-        ];
-    }
     
     // Component-specific recommendations
     foreach ($validationResult['component_checks'] as $check) {

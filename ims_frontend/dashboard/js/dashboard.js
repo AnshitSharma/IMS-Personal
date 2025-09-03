@@ -53,6 +53,8 @@ class Dashboard {
         document.getElementById('selectAllComponents')?.addEventListener('change', (e) => this.toggleSelectAll(e.target.checked));
         document.getElementById('bulkUpdateStatus')?.addEventListener('click', () => this.showBulkUpdateModal());
         document.getElementById('bulkDelete')?.addEventListener('click', () => this.handleBulkDelete());
+        document.getElementById('addServerBtn')?.addEventListener('click', () => this.showAddServerForm());
+        document.getElementById('refreshServers')?.addEventListener('click', () => this.loadServerList());
         document.getElementById('modalClose')?.addEventListener('click', () => this.closeModal());
         document.getElementById('modalContainer')?.addEventListener('click', (e) => { if (e.target.id === 'modalContainer') this.closeModal(); });
         document.querySelector('.dropdown-btn')?.addEventListener('click', (e) => { e.stopPropagation(); e.target.closest('.dropdown').classList.toggle('active'); });
@@ -89,11 +91,7 @@ class Dashboard {
             document.getElementById('dashboardView').classList.add('active');
             await this.loadDashboard();
         } else if (component === 'servers') {
-            document.getElementById('componentView').classList.add('active');
-            document.getElementById('componentTitle').textContent = 'Servers';
-            const addBtn = document.getElementById('addComponentBtn');
-            if (addBtn) addBtn.innerHTML = `<i class="fas fa-plus"></i> Add Server`;
-            this.renderServerHeader();
+            document.getElementById('serverView').classList.add('active');
             await this.loadServerList();
         } else {
             document.getElementById('componentView').classList.add('active');
@@ -106,16 +104,7 @@ class Dashboard {
         utils.updateURLParams({ view: component });
     }
 
-    renderServerHeader() {
-        const thead = document.getElementById('componentsTableHeader');
-        if (!thead) return;
-        thead.innerHTML = `
-            <tr>
-                <th><input type="checkbox" id="selectAllComponents"></th>
-                <th>Server</th><th>CPU</th><th>Motherboard</th><th>RAM</th><th>NIC</th><th>Location</th><th>Status</th><th>Created By</th><th>Actions</th>
-            </tr>
-        `;
-    }
+    
 
     renderComponentHeader() {
         const thead = document.getElementById('componentsTableHeader');
@@ -229,7 +218,7 @@ class Dashboard {
         try {
             utils.showLoading(true, `Loading servers...`);
             const params = { limit: 20, offset: 0, status: 1 };
-            const result = await api.request('server-list-configs', params);
+            const result = await api.servers.listConfigs(params);
             if (result.success) {
                 this.renderServerList(result.data.configurations);
                 if (result.data.pagination) this.renderPagination(result.data.pagination);
@@ -268,31 +257,47 @@ class Dashboard {
     }
 
     renderServerList(servers) {
-        const tbody = document.getElementById('componentsTableBody');
-        if (!tbody) return;
+        const serverTableContainer = document.getElementById('serverTableContainer');
+        if (!serverTableContainer) return;
+
         if (servers.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="10" class="empty-state"><div style="text-align: center; padding: 40px;"><i class="fas fa-server" style="font-size: 48px; color: var(--text-muted); margin-bottom: 16px;"></i><h3>No Servers Found</h3><p>No servers match your search criteria.</p></div></td></tr>`;
+            serverTableContainer.innerHTML = `<div class="empty-state" style="text-align: center; padding: 40px;"><i class="fas fa-server" style="font-size: 48px; color: var(--text-muted); margin-bottom: 16px;"></i><h3>No Servers Found</h3><p>No servers match your search criteria.</p></div>`;
             return;
         }
-        tbody.innerHTML = servers.map(server => `
-            <tr>
-                <td><input type="checkbox" class="component-checkbox" value="${server.id}" onchange="dashboard.handleItemSelection(this)"></td>
-                <td><strong>${utils.escapeHtml(server.server_name || 'Unnamed Server')}</strong>${server.config_uuid ? `<br><small style="color: var(--text-muted); font-family: monospace;">${server.config_uuid}</small>` : ''}</td>
-                <td>${utils.escapeHtml(server.cpu_uuid || '-')}</td>
-                <td>${utils.escapeHtml(server.motherboard_uuid || '-')}</td>
-                <td>${utils.escapeHtml(server.ram_configuration || '-')}</td>
-                <td>${utils.escapeHtml(server.nic_configuration || '-')}</td>
-                <td>${utils.escapeHtml(server.location || '-')}</td>
-                <td>${utils.createStatusBadge(server.configuration_status_text)}</td>
-                <td>${utils.escapeHtml(server.created_by_username || '-')}</td>
-                <td>
-                    <div class="action-buttons">
-                        <button class="action-btn edit" onclick="dashboard.showEditForm('servers', ${server.id})" title="Edit"><i class="fas fa-edit"></i></button>
-                        <button class="action-btn delete" onclick="dashboard.handleDeleteComponent('servers', ${server.id})" title="Delete"><i class="fas fa-trash"></i></button>
-                    </div>
-                </td>
-            </tr>
-        `).join('');
+
+        const table = document.createElement('table');
+        table.className = 'components-table'; // reuse styles
+        table.innerHTML = `
+            <thead>
+                <tr>
+                    <th><input type="checkbox" id="selectAllServers"></th>
+                    <th>Server</th><th>CPU</th><th>Motherboard</th><th>RAM</th><th>NIC</th><th>Location</th><th>Status</th><th>Created By</th><th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${servers.map(server => `
+                    <tr>
+                        <td><input type="checkbox" class="server-checkbox" value="${server.id}"></td>
+                        <td><strong>${utils.escapeHtml(server.server_name || 'Unnamed Server')}</strong>${server.config_uuid ? `<br><small style="color: var(--text-muted); font-family: monospace;">${server.config_uuid}</small>` : ''}</td>
+                        <td>${utils.escapeHtml(server.cpu_uuid || '-')}</td>
+                        <td>${utils.escapeHtml(server.motherboard_uuid || '-')}</td>
+                        <td>${utils.escapeHtml(server.ram_configuration || '-')}</td>
+                        <td>${utils.escapeHtml(server.nic_configuration || '-')}</td>
+                        <td>${utils.escapeHtml(server.location || '-')}</td>
+                        <td>${utils.createStatusBadge(server.configuration_status_text)}</td>
+                        <td>${utils.escapeHtml(server.created_by_username || '-')}</td>
+                        <td>
+                            <div class="action-buttons">
+                                <button class="action-btn edit" onclick="dashboard.showEditForm('servers', ${server.id})" title="Edit"><i class="fas fa-edit"></i></button>
+                                <button class="action-btn delete" onclick="dashboard.handleDeleteComponent('servers', ${server.id})" title="Delete"><i class="fas fa-trash"></i></button>
+                            </div>
+                        </td>
+                    </tr>
+                `).join('')}
+            </tbody>
+        `;
+        serverTableContainer.innerHTML = '';
+        serverTableContainer.appendChild(table);
     }
 
     renderPagination(pagination) {
@@ -388,7 +393,7 @@ class Dashboard {
     }
 
     async showAddForm() {
-        if (this.currentComponent === 'dashboard' || this.currentComponent === 'servers') {
+        if (this.currentComponent === 'dashboard') {
             utils.showAlert('Please select a specific component type (CPU, RAM, etc.) to add.', 'warning');
             return;
         }
@@ -410,6 +415,42 @@ class Dashboard {
         } catch (error) {
             console.error('Error loading add form:', error);
             utils.showAlert('Failed to load the add component form.', 'error');
+        } finally {
+            utils.showLoading(false);
+        }
+    }
+
+    async showAddServerForm() {
+        try {
+            utils.showLoading(true, 'Loading form...');
+            const response = await fetch('../server/server-main.html');
+            if (!response.ok) throw new Error('Could not load form HTML.');
+            const html = await response.text();
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(html, 'text/html');
+            const formContent = doc.getElementById('createServerSection').innerHTML;
+
+            this.showModal('Create New Server', formContent);
+
+            const scriptSrc = 'js/add-server-form.js';
+            if (!document.querySelector(`script[src="${scriptSrc}"]`)) {
+                const script = document.createElement('script');
+                script.src = scriptSrc;
+                script.onload = () => {
+                    if (typeof initializeAddServerForm === 'function') {
+                        initializeAddServerForm();
+                    }
+                };
+                document.body.appendChild(script);
+            } else {
+                if (typeof initializeAddServerForm === 'function') {
+                    initializeAddServerForm();
+                }
+            }
+
+        } catch (error) {
+            console.error('Error loading add server form:', error);
+            utils.showAlert('Failed to load the add server form.', 'error');
         } finally {
             utils.showLoading(false);
         }

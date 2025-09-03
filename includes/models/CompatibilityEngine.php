@@ -6,16 +6,20 @@
  * Core compatibility checking and validation engine for server components
  */
 
+require_once __DIR__ . '/ComponentDataService.php';
+
 class CompatibilityEngine {
     private $pdo;
     private $componentRules;
     private $sessionId;
     private $debugMode;
+    private $dataService;
     
     public function __construct($pdo, $debugMode = false) {
         $this->pdo = $pdo;
         $this->debugMode = $debugMode;
         $this->sessionId = uniqid('compat_', true);
+        $this->dataService = ComponentDataService::getInstance();
         $this->loadCompatibilityRules();
     }
     
@@ -148,7 +152,6 @@ class CompatibilityEngine {
             'component_checks' => [],
             'global_checks' => [],
             'recommendations' => [],
-            'estimated_power' => 0,
         ];
         
         try {
@@ -186,8 +189,6 @@ class CompatibilityEngine {
             // Global validation checks
             $result['global_checks'] = $this->performGlobalChecks($components);
             
-            // Calculate estimates
-            $result['estimated_power'] = $this->calculatePowerConsumption($components);
             
         } catch (Exception $e) {
             error_log("Server configuration validation error: " . $e->getMessage());
@@ -234,10 +235,10 @@ class CompatibilityEngine {
     }
     
     /**
-     * Check CPU-Motherboard socket compatibility
+     * Check CPU-Motherboard socket compatibility using JSON specifications
      */
     private function checkSocketCompatibility($rule, $comp1Details, $comp2Details) {
-        $result = ['passed' => true, 'message' => ''];
+        $result = ['passed' => true, 'message' => '', 'recommendations' => []];
         
         // Determine which is CPU and which is motherboard
         $cpu = null;
@@ -252,12 +253,60 @@ class CompatibilityEngine {
         }
         
         if ($cpu && $motherboard) {
-            $cpuSocket = $cpu['socket_type'] ?? $this->extractSocketFromJSON($cpu);
-            $mbSocket = $motherboard['socket_type'] ?? $this->extractSocketFromJSON($motherboard);
+            // Get socket from JSON specifications (new enhanced format)
+            $cpuSocket = $cpu['socket'] ?? null;
+            $mbSocketType = $motherboard['socket_type'] ?? null;
             
-            if ($cpuSocket && $mbSocket && $cpuSocket !== $mbSocket) {
-                $result['passed'] = false;
-                $result['message'] = "Socket mismatch: CPU ({$cpuSocket}) does not match Motherboard ({$mbSocket})";
+            // Fallback to legacy format
+            if (!$mbSocketType && isset($motherboard['socket'])) {
+                if (is_array($motherboard['socket'])) {
+                    $mbSocketType = $motherboard['socket']['type'] ?? null;
+                } else {
+                    $mbSocketType = $motherboard['socket'];
+                }
+            }
+            
+            if ($cpuSocket && $mbSocketType) {
+                // Normalize socket types for comparison
+                $cpuSocketNormalized = $this->normalizeSocketType($cpuSocket);
+                $mbSocketNormalized = $this->normalizeSocketType($mbSocketType);
+                
+                if ($cpuSocketNormalized !== $mbSocketNormalized) {
+                    $result['passed'] = false;
+                    $result['message'] = "Socket mismatch: CPU socket ({$cpuSocket}) is not compatible with Motherboard socket ({$mbSocketType})";
+                    
+                    // Add recommendations for compatible components
+                    $result['recommendations'][] = "Look for CPUs with {$mbSocketType} socket or motherboards with {$cpuSocket} socket";
+                } else {
+                    $result['message'] = "Socket compatibility confirmed: {$cpuSocket}";
+                    
+                    // Check socket count for multi-socket motherboards
+                    $socketCount = $motherboard['socket_count'] ?? 1;
+                    if ($socketCount > 1) {
+                        $result['recommendations'][] = "This motherboard supports {$socketCount} CPUs - consider adding additional processors";
+                    }
+                }
+            } else {
+                // If socket information is missing, check fallback from Notes
+                $cpuSocketFallback = $this->extractSocketFromNotes($cpu);
+                $mbSocketFallback = $this->extractSocketFromNotes($motherboard);
+                
+                if ($cpuSocketFallback && $mbSocketFallback) {
+                    $cpuSocketNormalized = $this->normalizeSocketType($cpuSocketFallback);
+                    $mbSocketNormalized = $this->normalizeSocketType($mbSocketFallback);
+                    
+                    if ($cpuSocketNormalized !== $mbSocketNormalized) {
+                        $result['passed'] = false;
+                        $result['message'] = "Socket mismatch (parsed from notes): CPU ({$cpuSocketFallback}) does not match Motherboard ({$mbSocketFallback})";
+                    } else {
+                        $result['message'] = "Socket compatibility confirmed (parsed from notes): {$cpuSocketFallback}";
+                    }
+                } else {
+                    $result['recommendations'][] = "Unable to determine socket compatibility - verify component specifications manually";
+                    
+                    // Log for debugging
+                    error_log("Socket compatibility check: Missing socket information for CPU UUID {$cpu['UUID']} or Motherboard UUID {$motherboard['UUID']}");
+                }
             }
         }
         
@@ -270,7 +319,7 @@ class CompatibilityEngine {
     private function checkMemoryCompatibility($rule, $comp1Details, $comp2Details) {
         $result = ['passed' => true, 'message' => '', 'recommendations' => []];
         
-        // Memory type compatibility
+        // Determine memory component and system component (CPU or Motherboard)
         $memoryComponent = null;
         $systemComponent = null;
         
@@ -283,25 +332,77 @@ class CompatibilityEngine {
         }
         
         if ($memoryComponent && $systemComponent) {
-            $memoryType = $memoryComponent['memory_type'] ?? $this->extractMemoryTypeFromJSON($memoryComponent);
-            $supportedTypes = $systemComponent['memory_types'] ?? $this->extractSupportedMemoryTypes($systemComponent);
+            // Get memory specifications from JSON
+            $ramMemoryType = $memoryComponent['memory_type'] ?? null;
+            $ramFrequency = $memoryComponent['frequency_mhz'] ?? null;
+            $ramCapacity = $memoryComponent['capacity_gb'] ?? null;
             
-            if ($memoryType && $supportedTypes) {
-                $supportedTypesArray = explode(',', $supportedTypes);
-                $supportedTypesArray = array_map('trim', $supportedTypesArray);
-                
-                if (!in_array($memoryType, $supportedTypesArray)) {
-                    $result['passed'] = false;
-                    $result['message'] = "Memory type {$memoryType} not supported. Supported types: " . implode(', ', $supportedTypesArray);
-                }
+            // Get system memory support from JSON
+            $systemMemoryInfo = null;
+            if ($systemComponent['component_type'] === 'motherboard') {
+                $systemMemoryInfo = $systemComponent['memory'] ?? [];
+            } elseif ($systemComponent['component_type'] === 'cpu') {
+                $systemMemoryInfo = [
+                    'type' => $systemComponent['memory_types'][0] ?? null,
+                    'max_frequency_MHz' => $this->extractMaxMemoryFrequencyFromCPU($systemComponent),
+                    'max_capacity_TB' => $systemComponent['max_memory_capacity_tb'] ?? null
+                ];
             }
             
-            // Memory speed compatibility
-            $memorySpeed = $memoryComponent['memory_speed'] ?? $this->extractMemorySpeedFromJSON($memoryComponent);
-            $maxSpeed = $systemComponent['max_memory_speed'] ?? $this->extractMaxMemorySpeed($systemComponent);
-            
-            if ($memorySpeed && $maxSpeed && $memorySpeed > $maxSpeed) {
-                $result['recommendations'][] = "Memory speed ({$memorySpeed} MHz) exceeds system maximum ({$maxSpeed} MHz). Will run at reduced speed.";
+            if ($systemMemoryInfo) {
+                // Check memory type compatibility
+                $supportedType = $systemMemoryInfo['type'] ?? null;
+                if ($ramMemoryType && $supportedType) {
+                    if (strtoupper($ramMemoryType) !== strtoupper($supportedType)) {
+                        $result['passed'] = false;
+                        $result['message'] = "Memory type mismatch: RAM is {$ramMemoryType} but system supports {$supportedType}";
+                        return $result;
+                    } else {
+                        $result['message'] = "Memory type compatibility confirmed: {$ramMemoryType}";
+                    }
+                }
+                
+                // Check memory speed compatibility
+                $maxSupportedSpeed = $systemMemoryInfo['max_frequency_MHz'] ?? null;
+                if ($ramFrequency && $maxSupportedSpeed) {
+                    if ($ramFrequency > $maxSupportedSpeed) {
+                        $result['recommendations'][] = "RAM frequency ({$ramFrequency} MHz) exceeds maximum supported ({$maxSupportedSpeed} MHz). Memory will run at reduced speed.";
+                    } elseif ($ramFrequency < ($maxSupportedSpeed * 0.7)) {
+                        $result['recommendations'][] = "RAM frequency ({$ramFrequency} MHz) is significantly lower than maximum supported ({$maxSupportedSpeed} MHz). Consider higher speed memory for better performance.";
+                    }
+                }
+                
+                // Check capacity limits for motherboard
+                if ($systemComponent['component_type'] === 'motherboard') {
+                    $totalSlots = $systemMemoryInfo['slots'] ?? 4;
+                    $maxCapacityTB = $systemMemoryInfo['max_capacity_TB'] ?? null;
+                    
+                    if ($maxCapacityTB && $ramCapacity) {
+                        $maxCapacityGB = $maxCapacityTB * 1024;
+                        if ($ramCapacity > ($maxCapacityGB / $totalSlots)) {
+                            $result['recommendations'][] = "Single module capacity ({$ramCapacity}GB) may exceed per-slot limit for optimal configuration";
+                        }
+                    }
+                    
+                    $result['recommendations'][] = "Motherboard has {$totalSlots} memory slots available";
+                }
+                
+                // ECC support check
+                if (isset($systemMemoryInfo['ecc_support']) && $systemMemoryInfo['ecc_support']) {
+                    $ramFeatures = $memoryComponent['features'] ?? [];
+                    if (is_array($ramFeatures) && !in_array('ECC', $ramFeatures)) {
+                        $result['recommendations'][] = "System supports ECC memory - consider ECC modules for error correction";
+                    }
+                }
+            } else {
+                // Fallback to notes parsing
+                $ramTypeFromNotes = $this->extractMemoryTypeFromNotes($memoryComponent['Notes'] ?? '');
+                $systemTypeFromNotes = $this->extractMemoryTypeFromNotes($systemComponent['Notes'] ?? '');
+                
+                if ($ramTypeFromNotes && $systemTypeFromNotes && $ramTypeFromNotes !== $systemTypeFromNotes) {
+                    $result['passed'] = false;
+                    $result['message'] = "Memory type mismatch (parsed from notes): RAM is {$ramTypeFromNotes} but system supports {$systemTypeFromNotes}";
+                }
             }
         }
         
@@ -382,7 +483,7 @@ class CompatibilityEngine {
     }
     
     /**
-     * Get component details from database
+     * Get component details from database merged with JSON specifications
      */
     private function getComponentDetails($componentType, $uuid) {
         $tableMap = [
@@ -399,13 +500,27 @@ class CompatibilityEngine {
         }
         
         try {
+            // Get database record
             $stmt = $this->pdo->prepare("SELECT * FROM {$tableMap[$componentType]} WHERE UUID = ?");
             $stmt->execute([$uuid]);
-            $component = $stmt->fetch(PDO::FETCH_ASSOC);
+            $databaseRecord = $stmt->fetch(PDO::FETCH_ASSOC);
             
-            if ($component) {
-                $component['component_type'] = $componentType;
+            if (!$databaseRecord) {
+                return null;
             }
+            
+            // Get JSON specifications using enhanced method with database record
+            $jsonSpecs = $this->dataService->getComponentSpecifications($componentType, $uuid, $databaseRecord);
+            
+            // Start with database record as base
+            $component = $databaseRecord;
+            
+            // Merge with JSON specifications if available
+            if ($jsonSpecs) {
+                $component = array_merge($component, $jsonSpecs);
+            }
+            
+            $component['component_type'] = $componentType;
             
             return $component;
         } catch (PDOException $e) {
@@ -635,65 +750,85 @@ class CompatibilityEngine {
     
     
     /**
-     * Extract socket type from JSON data
+     * Extract socket type from notes field
      */
-    private function extractSocketFromJSON($component) {
-        if (!empty($component['Notes'])) {
-            // Try to extract socket from Notes field
-            if (preg_match('/socket[:\s]+([A-Z0-9]+)/i', $component['Notes'], $matches)) {
-                return $matches[1];
+    private function extractSocketFromNotes($component) {
+        $notes = $component['Notes'] ?? '';
+        if (!empty($notes)) {
+            // Try to extract socket from Notes field with various patterns
+            if (preg_match('/socket[:\s]*([A-Z0-9\s]+)/i', $notes, $matches)) {
+                return trim($matches[1]);
+            }
+            // Try LGA pattern
+            if (preg_match('/(LGA\s*\d+)/i', $notes, $matches)) {
+                return trim($matches[1]);
+            }
+            // Try AMD socket patterns
+            if (preg_match('/(AM[45]\+?|TR4|sTRX4)/i', $notes, $matches)) {
+                return trim($matches[1]);
             }
         }
         return null;
     }
     
     /**
-     * Extract memory type from JSON data
+     * Normalize socket types for comparison
      */
-    private function extractMemoryTypeFromJSON($component) {
-        if (!empty($component['Notes'])) {
-            if (preg_match('/DDR[345]/i', $component['Notes'], $matches)) {
-                return strtoupper($matches[0]);
+    private function normalizeSocketType($socket) {
+        if (!$socket) return null;
+        
+        // Remove spaces and convert to uppercase
+        $normalized = strtoupper(preg_replace('/\s+/', '', $socket));
+        
+        // Handle common variations
+        $replacements = [
+            'LGA4189' => 'LGA4189',
+            'LGA 4189' => 'LGA4189', 
+            'LGA-4189' => 'LGA4189',
+            'AM4+' => 'AM4PLUS',
+            'AM4 PLUS' => 'AM4PLUS'
+        ];
+        
+        return $replacements[$normalized] ?? $normalized;
+    }
+    
+    /**
+     * Extract maximum memory frequency from CPU specs
+     */
+    private function extractMaxMemoryFrequencyFromCPU($cpu) {
+        // Get from memory_types array if available
+        $memoryTypes = $cpu['memory_types'] ?? [];
+        if (is_array($memoryTypes) && !empty($memoryTypes)) {
+            foreach ($memoryTypes as $memType) {
+                // Extract frequency from strings like "DDR5-4800"
+                if (preg_match('/DDR[345]-(\d+)/i', $memType, $matches)) {
+                    return intval($matches[1]);
+                }
             }
         }
+        
+        // Fallback to notes parsing
+        $notes = $cpu['Notes'] ?? '';
+        if (preg_match('/DDR[345]-(\d+)/i', $notes, $matches)) {
+            return intval($matches[1]);
+        }
+        
         return null;
     }
     
     /**
-     * Extract supported memory types
+     * Extract memory type from notes with improved patterns
      */
-    private function extractSupportedMemoryTypes($component) {
-        if (!empty($component['Notes'])) {
-            if (preg_match_all('/DDR[345]/i', $component['Notes'], $matches)) {
-                return implode(',', array_unique($matches[0]));
-            }
+    private function extractMemoryTypeFromNotes($notes) {
+        if (preg_match('/DDR[345]/i', $notes, $matches)) {
+            return strtoupper($matches[0]);
         }
         return null;
     }
     
-    /**
-     * Extract memory speed from JSON data
-     */
-    private function extractMemorySpeedFromJSON($component) {
-        if (!empty($component['Notes'])) {
-            if (preg_match('/(\d{4,5})\s*MHz/i', $component['Notes'], $matches)) {
-                return intval($matches[1]);
-            }
-        }
-        return null;
-    }
     
-    /**
-     * Extract maximum memory speed
-     */
-    private function extractMaxMemorySpeed($component) {
-        if (!empty($component['Notes'])) {
-            if (preg_match('/max.*?(\d{4,5})\s*MHz/i', $component['Notes'], $matches)) {
-                return intval($matches[1]);
-            }
-        }
-        return null;
-    }
+    
+    
     
     /**
      * Extract storage interface from component data
@@ -894,6 +1029,208 @@ class CompatibilityEngine {
             error_log("Failed to get compatibility statistics: " . $e->getMessage());
             return null;
         }
+    }
+    
+    /**
+     * Get compatible components for a specific component using JSON specs
+     */
+    public function getCompatibleComponentsFor($componentType, $componentUuid) {
+        try {
+            $baseComponent = ['type' => $componentType, 'uuid' => $componentUuid];
+            
+            // Define which component types to check against
+            $targetTypes = $this->getTargetCompatibilityTypes($componentType);
+            
+            $result = [
+                'base_component' => $baseComponent,
+                'compatible_components' => [],
+                'compatibility_engine_available' => true
+            ];
+            
+            foreach ($targetTypes as $targetType) {
+                $compatibleComponents = $this->getCompatibleComponents($baseComponent, $targetType);
+                if (!empty($compatibleComponents)) {
+                    $result['compatible_components'][$targetType] = $compatibleComponents;
+                }
+            }
+            
+            return $result;
+            
+        } catch (Exception $e) {
+            error_log("Error getting compatible components for {$componentType} {$componentUuid}: " . $e->getMessage());
+            return [
+                'base_component' => $baseComponent ?? null,
+                'compatible_components' => [],
+                'compatibility_engine_available' => false,
+                'error' => $e->getMessage()
+            ];
+        }
+    }
+    
+    /**
+     * Get target component types for compatibility checking
+     */
+    private function getTargetCompatibilityTypes($componentType) {
+        $compatibilityMap = [
+            'cpu' => ['motherboard'],
+            'motherboard' => ['cpu', 'ram', 'storage'],
+            'ram' => ['motherboard', 'cpu'],
+            'storage' => ['motherboard'],
+            'nic' => ['motherboard'],
+            'caddy' => ['storage']
+        ];
+        
+        return $compatibilityMap[$componentType] ?? [];
+    }
+    
+    /**
+     * Enhanced component validation with JSON specs
+     */
+    public function validateComponentForConfiguration($configUuid, $componentType, $componentUuid) {
+        try {
+            // Get configuration components
+            $stmt = $this->pdo->prepare("
+                SELECT component_type, component_uuid 
+                FROM server_configuration_components 
+                WHERE config_uuid = ?
+            ");
+            $stmt->execute([$configUuid]);
+            $configComponents = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            
+            $targetComponent = ['type' => $componentType, 'uuid' => $componentUuid];
+            $validationResult = [
+                'valid' => true,
+                'compatibility_score' => 1.0,
+                'issues' => [],
+                'warnings' => [],
+                'recommendations' => [],
+                'component_checks' => []
+            ];
+            
+            // Check against each existing component
+            foreach ($configComponents as $existingComp) {
+                $existingComponent = ['type' => $existingComp['component_type'], 'uuid' => $existingComp['component_uuid']];
+                
+                $compatibility = $this->checkCompatibility($existingComponent, $targetComponent);
+                
+                $checkResult = [
+                    'existing_component' => $existingComponent,
+                    'compatible' => $compatibility['compatible'],
+                    'score' => $compatibility['compatibility_score'],
+                    'issues' => $compatibility['failures'],
+                    'warnings' => $compatibility['warnings']
+                ];
+                
+                $validationResult['component_checks'][] = $checkResult;
+                
+                if (!$compatibility['compatible']) {
+                    $validationResult['valid'] = false;
+                    $validationResult['issues'] = array_merge($validationResult['issues'], $compatibility['failures']);
+                }
+                
+                if (!empty($compatibility['warnings'])) {
+                    $validationResult['warnings'] = array_merge($validationResult['warnings'], $compatibility['warnings']);
+                }
+                
+                if (!empty($compatibility['recommendations'])) {
+                    $validationResult['recommendations'] = array_merge($validationResult['recommendations'], $compatibility['recommendations']);
+                }
+                
+                $validationResult['compatibility_score'] *= $compatibility['compatibility_score'];
+            }
+            
+            return $validationResult;
+            
+        } catch (Exception $e) {
+            error_log("Error validating component for configuration: " . $e->getMessage());
+            return [
+                'valid' => false,
+                'compatibility_score' => 0.0,
+                'issues' => ['Validation system error: ' . $e->getMessage()],
+                'warnings' => [],
+                'recommendations' => [],
+                'component_checks' => []
+            ];
+        }
+    }
+    
+    /**
+     * Get detailed component information with JSON specs
+     */
+    public function getDetailedComponentInfo($componentType, $componentUuid) {
+        try {
+            $componentDetails = $this->getComponentDetails($componentType, $componentUuid);
+            
+            if (!$componentDetails) {
+                return null;
+            }
+            
+            // Get JSON specifications
+            $jsonSpecs = $this->dataService->getComponentSpecifications($componentType, $componentUuid, $componentDetails);
+            
+            return [
+                'database_info' => $componentDetails,
+                'json_specifications' => $jsonSpecs,
+                'compatibility_ready' => !empty($jsonSpecs),
+                'match_confidence' => $jsonSpecs['match_confidence'] ?? 1.0,
+                'matched_by' => $jsonSpecs['matched_by'] ?? 'direct_match'
+            ];
+            
+        } catch (Exception $e) {
+            error_log("Error getting detailed component info: " . $e->getMessage());
+            return null;
+        }
+    }
+    
+    /**
+     * Enhanced power calculation with detailed breakdown
+     */
+    public function calculateDetailedPowerConsumption($components) {
+        $powerBreakdown = [
+            'components' => [],
+            'total_base_power' => 0,
+            'total_max_power' => 0,
+            'estimated_psu_requirement' => 0,
+            'efficiency_rating' => 'Unknown'
+        ];
+        
+        foreach ($components as $componentType => $componentList) {
+            if ($componentType === 'cpu' && $componentList) {
+                $cpuPower = $componentList['tdp_w'] ?? 0;
+                $powerBreakdown['components']['cpu'] = $cpuPower;
+                $powerBreakdown['total_base_power'] += $cpuPower;
+                $powerBreakdown['total_max_power'] += $cpuPower * 1.2; // Peak power
+            } elseif ($componentType === 'ram' && is_array($componentList)) {
+                $ramPower = count($componentList) * 8; // 8W per module
+                $powerBreakdown['components']['ram'] = $ramPower;
+                $powerBreakdown['total_base_power'] += $ramPower;
+                $powerBreakdown['total_max_power'] += $ramPower;
+            } elseif ($componentType === 'storage' && is_array($componentList)) {
+                $storagePower = count($componentList) * 10; // 10W per device
+                $powerBreakdown['components']['storage'] = $storagePower;
+                $powerBreakdown['total_base_power'] += $storagePower;
+                $powerBreakdown['total_max_power'] += $storagePower;
+            } elseif ($componentType === 'motherboard' && $componentList) {
+                $mbPower = 50; // Base motherboard power
+                $powerBreakdown['components']['motherboard'] = $mbPower;
+                $powerBreakdown['total_base_power'] += $mbPower;
+                $powerBreakdown['total_max_power'] += $mbPower;
+            }
+        }
+        
+        // Calculate PSU requirement (add 20% headroom)
+        $powerBreakdown['estimated_psu_requirement'] = $powerBreakdown['total_max_power'] * 1.2;
+        
+        // Recommend efficiency rating
+        if ($powerBreakdown['total_max_power'] > 600) {
+            $powerBreakdown['efficiency_rating'] = '80+ Gold or higher';
+        } elseif ($powerBreakdown['total_max_power'] > 400) {
+            $powerBreakdown['efficiency_rating'] = '80+ Bronze or higher';
+        } else {
+            $powerBreakdown['efficiency_rating'] = '80+ Standard or higher';
+        }
+        
+        return $powerBreakdown;
     }
 }
 ?>

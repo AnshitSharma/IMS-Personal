@@ -227,6 +227,7 @@ class ServerBuilder {
             $componentCounts = [];
             $totalComponents = 0;
             $totalPowerConsumption = 0;
+            $missingComponents = []; // Track components that don't exist in inventory
             
             foreach ($components as $component) {
                 $type = $component['component_type'];
@@ -249,11 +250,19 @@ class ServerBuilder {
                     $component['power_consumption_watts'] = $powerConsumption;
                     $component['total_power_watts'] = $powerConsumption * $component['quantity'];
                 } else {
+                    // Component UUID not found in inventory - this is an error
+                    $missingComponents[] = [
+                        'component_type' => $type,
+                        'component_uuid' => $component['component_uuid'],
+                        'quantity' => $component['quantity']
+                    ];
+                    
                     $component['details'] = [
                         'UUID' => $component['component_uuid'],
-                        'SerialNumber' => 'Unknown',
-                        'Status' => 2,
-                        'ServerUUID' => $configUuid
+                        'SerialNumber' => 'MISSING',
+                        'Status' => -1, // Use -1 to indicate missing component
+                        'ServerUUID' => $configUuid,
+                        'error' => 'Component not found in inventory'
                     ];
                     $component['power_consumption_watts'] = 0;
                     $component['total_power_watts'] = 0;
@@ -297,6 +306,7 @@ class ServerBuilder {
                 'components' => $componentDetails,
                 'component_counts' => $componentCounts,
                 'component_ids_uuids' => $this->getComponentIdsAndUuids($components),
+                'missing_components' => $missingComponents, // Add missing components info
                 'total_components' => $totalComponents,
                 'power_consumption' => [
                     'total_watts' => round($totalPowerConsumption, 2),
@@ -1508,15 +1518,61 @@ class ServerBuilder {
     }
     
     /**
-     * Extract socket type from component notes
+     * Extract socket type from component notes with enhanced component knowledge base
      */
     private function extractSocketType($notes) {
+        $notes = strtolower($notes);
+        
+        // Component knowledge base for common server components
+        $componentSocketMap = [
+            // Intel Xeon CPUs
+            'platinum 8480+' => 'lga4677',
+            'platinum 8480' => 'lga4677',
+            'platinum 8470' => 'lga4677',
+            'platinum 8460' => 'lga4677',
+            'platinum 8450' => 'lga4677',
+            'gold 6430' => 'lga4677',
+            'gold 6420' => 'lga4677',
+            'gold 6410' => 'lga4677',
+            'silver 4410' => 'lga4677',
+            'bronze 3408' => 'lga4677',
+            'xeon 8' => 'lga4677', // Generic 4th gen Xeon pattern
+            
+            // AMD EPYC CPUs
+            'epyc 9534' => 'sp5',
+            'epyc 9554' => 'sp5',
+            'epyc 9634' => 'sp5',
+            'epyc 9654' => 'sp5',
+            'epyc 64-core' => 'sp5', // Generic EPYC pattern
+            
+            // Motherboard models
+            'x13dri-n' => 'lga4677',
+            'x13dpi-n' => 'lga4677',
+            'x12dpi-nt6' => 'lga4189',
+            'x12dpi-n6' => 'lga4189',
+            'h12dsi-n6' => 'sp3',
+            'h12ssl-i' => 'sp3',
+            'mz93-fs0' => 'sp5',
+            'z790 godlike' => 'lga1700',
+            'z790' => 'lga1700',
+            'b650' => 'am5',
+        ];
+        
+        // Check component knowledge base first
+        foreach ($componentSocketMap as $component => $socket) {
+            if (strpos($notes, $component) !== false) {
+                return $socket;
+            }
+        }
+        
+        // Fallback to socket pattern matching
         $commonSockets = [
-            'lga1151', 'lga1150', 'lga1155', 'lga1156', 'lga1200', 'lga1700',
-            'lga2011', 'lga2066', 'lga3647',
-            'am4', 'am5', 'tr4', 'strx4',
-            'socket 1151', 'socket 1150', 'socket 1200', 'socket 1700',
-            'socket am4', 'socket am5'
+            'lga4677', 'lga4189', 'lga3647', 'lga2066', 'lga2011',
+            'lga1700', 'lga1200', 'lga1151', 'lga1150', 'lga1155', 'lga1156',
+            'sp5', 'sp3', 'sp4', 'am5', 'am4', 'tr4', 'strx4',
+            'socket 4677', 'socket 4189', 'socket 3647', 'socket 2066', 'socket 2011',
+            'socket 1700', 'socket 1200', 'socket 1151', 'socket 1150',
+            'socket am5', 'socket am4', 'socket sp5', 'socket sp3'
         ];
         
         foreach ($commonSockets as $socket) {
@@ -1620,6 +1676,85 @@ class ServerBuilder {
             error_log("Created server_configuration_history table");
         } catch (Exception $e) {
             error_log("Error creating history table: " . $e->getMessage());
+        }
+    }
+    
+    /**
+     * Add component to additional_components JSON field
+     */
+    private function addToAdditionalComponents($configUuid, $componentType, $componentUuid) {
+        try {
+            $stmt = $this->pdo->prepare("SELECT additional_components FROM server_configurations WHERE config_uuid = ?");
+            $stmt->execute([$configUuid]);
+            $currentComponents = $stmt->fetchColumn();
+            
+            $additionalComponents = $currentComponents ? json_decode($currentComponents, true) : [];
+            if (!is_array($additionalComponents)) {
+                $additionalComponents = [];
+            }
+            
+            // Initialize component type array if not exists
+            if (!isset($additionalComponents[$componentType])) {
+                $additionalComponents[$componentType] = [];
+            }
+            
+            // Add the component UUID
+            $additionalComponents[$componentType][] = [
+                'uuid' => $componentUuid,
+                'added_at' => date('Y-m-d H:i:s')
+            ];
+            
+            $stmt = $this->pdo->prepare("UPDATE server_configurations SET additional_components = ?, updated_at = NOW() WHERE config_uuid = ?");
+            $stmt->execute([json_encode($additionalComponents), $configUuid]);
+            
+            error_log("Added $componentType component $componentUuid to additional_components for config $configUuid");
+            
+        } catch (Exception $e) {
+            error_log("Error adding to additional components: " . $e->getMessage());
+            throw $e;
+        }
+    }
+    
+    /**
+     * Remove component from additional_components JSON field
+     */
+    private function removeFromAdditionalComponents($configUuid, $componentType, $componentUuid) {
+        try {
+            $stmt = $this->pdo->prepare("SELECT additional_components FROM server_configurations WHERE config_uuid = ?");
+            $stmt->execute([$configUuid]);
+            $currentComponents = $stmt->fetchColumn();
+            
+            $additionalComponents = $currentComponents ? json_decode($currentComponents, true) : [];
+            if (!is_array($additionalComponents)) {
+                $additionalComponents = [];
+            }
+            
+            // Remove the component UUID if it exists
+            if (isset($additionalComponents[$componentType])) {
+                $additionalComponents[$componentType] = array_filter(
+                    $additionalComponents[$componentType], 
+                    function($component) use ($componentUuid) {
+                        return $component['uuid'] !== $componentUuid;
+                    }
+                );
+                
+                // Reindex array
+                $additionalComponents[$componentType] = array_values($additionalComponents[$componentType]);
+                
+                // Remove empty component type arrays
+                if (empty($additionalComponents[$componentType])) {
+                    unset($additionalComponents[$componentType]);
+                }
+            }
+            
+            $stmt = $this->pdo->prepare("UPDATE server_configurations SET additional_components = ?, updated_at = NOW() WHERE config_uuid = ?");
+            $stmt->execute([json_encode($additionalComponents), $configUuid]);
+            
+            error_log("Removed $componentType component $componentUuid from additional_components for config $configUuid");
+            
+        } catch (Exception $e) {
+            error_log("Error removing from additional components: " . $e->getMessage());
+            throw $e;
         }
     }
 }

@@ -294,6 +294,74 @@ window.api = {
         }
     },
 
+    servers: {
+        async createConfig(serverName, description, startWith) {
+            return await api.request('server-create-start', {
+                server_name: serverName,
+                description: description,
+                start_with: startWith
+            });
+        },
+
+        async listConfigs(params = {}) {
+            return await api.request('server-list-configs', params);
+        },
+
+        async getConfig(configUuid) {
+            return await api.request('server-get-config', { config_uuid: configUuid });
+        },
+
+        async deleteConfig(configUuid) {
+            return await api.request('server-delete-config', { config_uuid: configUuid });
+        },
+
+        async finalizeConfig(configUuid, notes = '') {
+            return await api.request('server-finalize-config', {
+                config_uuid: configUuid,
+                notes: notes
+            });
+        },
+
+        async getCompatibleComponents(configUuid, componentType, availableOnly = true) {
+            return await api.request('server-get-compatible', {
+                config_uuid: configUuid,
+                component_type: componentType,
+                available_only: availableOnly.toString()
+            });
+        },
+
+        async addComponent(configUuid, componentType, componentUuid, quantity = 1, slotPosition = '', override = false) {
+            return await api.request('server-add-component', {
+                config_uuid: configUuid,
+                component_type: componentType,
+                component_uuid: componentUuid,
+                quantity: quantity.toString(),
+                slot_position: slotPosition,
+                override: override.toString()
+            });
+        },
+
+        async removeComponent(configUuid, componentType, componentUuid) {
+            return await api.request('server-remove-component', {
+                config_uuid: configUuid,
+                component_type: componentType,
+                component_uuid: componentUuid
+            });
+        },
+
+        async validateConfig(configUuid) {
+            return await api.request('server-validate-config', { config_uuid: configUuid });
+        },
+
+        async getAvailableComponents(componentType, includeInUse = false, limit = 50) {
+            return await api.request('server-get-available-components', {
+                component_type: componentType,
+                include_in_use: includeInUse.toString(),
+                limit: limit.toString()
+            });
+        }
+    },
+
     // Search endpoints
     search: {
         async global(query, params = {}) {

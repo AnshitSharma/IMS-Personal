@@ -32,9 +32,14 @@ class JWTHelper {
     /**
      * Generate JWT token
      */
-    public static function generateToken($payload, $expiresIn = 3600) {
+    public static function generateToken($payload, $expiresIn = null) {
         if (!self::$secret) {
             throw new Exception('JWT secret not initialized');
+        }
+        
+        // Use configured JWT expiry if not specified
+        if ($expiresIn === null) {
+            $expiresIn = JWT_EXPIRY_HOURS * 3600;
         }
         
         // Header

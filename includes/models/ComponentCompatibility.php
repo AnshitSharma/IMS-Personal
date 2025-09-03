@@ -945,8 +945,17 @@ class ComponentCompatibility {
             $cpuComponents = array_filter($components, function($c) { return $c['type'] === 'cpu'; });
             $motherboardComponents = array_filter($components, function($c) { return $c['type'] === 'motherboard'; });
             
-            if (count($cpuComponents) > 1) {
-                $issues[] = "Multiple CPUs selected - only one CPU is supported per configuration";
+            // Check CPU socket count vs motherboard socket capacity
+            if (count($cpuComponents) > 1 && !empty($motherboardComponents)) {
+                $motherboardData = $this->getComponentData('motherboard', $motherboardComponents[0]['uuid']);
+                $motherboardSocketCount = $this->getMotherboardSocketCount($motherboardData);
+                
+                if (count($cpuComponents) > $motherboardSocketCount) {
+                    $issues[] = "Too many CPUs selected - motherboard supports maximum $motherboardSocketCount CPU(s), but " . count($cpuComponents) . " CPU(s) selected";
+                }
+            } elseif (count($cpuComponents) > 1) {
+                // If no motherboard, assume single socket
+                $issues[] = "Multiple CPUs selected but no motherboard selected to verify socket count";
             }
             
             if (count($motherboardComponents) > 1) {
@@ -1041,6 +1050,44 @@ class ComponentCompatibility {
             'cached_components' => count($this->jsonDataCache),
             'cache_keys' => array_keys($this->jsonDataCache)
         ];
+    }
+    
+    /**
+     * Get motherboard socket count
+     */
+    private function getMotherboardSocketCount($motherboardData) {
+        if (!$motherboardData) {
+            return 1; // Default to single socket
+        }
+        
+        // Check if socket count is provided in specifications
+        if (isset($motherboardData['socket']['count'])) {
+            return (int)$motherboardData['socket']['count'];
+        }
+        
+        // Try to extract from Notes field
+        $notes = strtolower($motherboardData['Notes'] ?? '');
+        
+        // Look for socket count patterns
+        if (preg_match('/(\d+)[\s]*socket/i', $notes, $matches)) {
+            return (int)$matches[1];
+        }
+        
+        if (preg_match('/(\d+)[\s]*cpu/i', $notes, $matches)) {
+            return (int)$matches[1];
+        }
+        
+        // Look for dual/multi socket indicators
+        if (strpos($notes, 'dual socket') !== false || strpos($notes, 'dual-socket') !== false) {
+            return 2;
+        }
+        
+        if (strpos($notes, 'quad socket') !== false || strpos($notes, 'quad-socket') !== false) {
+            return 4;
+        }
+        
+        // Default to single socket for desktop motherboards
+        return 1;
     }
 }
 ?>
