@@ -585,29 +585,46 @@ function handleGetConfiguration($serverBuilder, $user) {
             send_json_response(0, 1, 500, "Failed to retrieve configuration: " . $details['error']);
         }
         
-        // Calculate compatibility score and validation results
+        // Calculate compatibility score and validation results using enhanced CompatibilityEngine
         $compatibilityScore = null;
         $validationResults = null;
-        $componentChecks = [];
+        $individualComponentChecks = [];
         
         try {
-            // Use CompatibilityEngine if available for detailed compatibility analysis
+            // Use enhanced CompatibilityEngine for detailed compatibility analysis
             if (class_exists('CompatibilityEngine')) {
-                $compatibilityEngine = new CompatibilityEngine($pdo);
+                $compatibilityEngine = new CompatibilityEngine($pdo, true); // Enable debug mode for detailed logging
+                
+                // Use the enhanced validateServerConfiguration method with multi-CPU support
                 $compatibilityValidation = $compatibilityEngine->validateServerConfiguration($details['configuration']);
                 $compatibilityScore = round($compatibilityValidation['overall_score'] * 100, 1);
                 $validationResults = $compatibilityValidation;
                 
-                // Extract component-level compatibility checks
-                $componentChecks = generateComprehensiveComponentChecks($details, $compatibilityEngine);
+                // Get individual component checks for better debugging
+                $individualComponentChecks = $compatibilityValidation['individual_component_checks'] ?? [];
+                
+                // Also get global checks for system-level validations
+                $globalChecks = $compatibilityValidation['global_checks'] ?? [];
+                
             } else {
-                // Fallback: Run comprehensive validation using ServerBuilder only
+                // Fallback: Run basic validation using ServerBuilder only
                 $validation = $serverBuilder->validateConfiguration($configUuid);
                 $validationResults = $validation;
-                $compatibilityScore = $validation['compatibility_score'] ?? null;
+                $compatibilityScore = round(($validation['overall_score'] ?? 1.0) * 100, 1);
                 
-                // Generate basic component checks without CompatibilityEngine
-                $componentChecks = generateBasicComponentChecks($details);
+                // Create individual component checks from validation results
+                $individualComponentChecks = [];
+                if (isset($validation['global_checks'])) {
+                    foreach ($validation['global_checks'] as $check) {
+                        $individualComponentChecks[] = [
+                            'component_type' => strtolower(explode(' ', $check['check'])[0]),
+                            'check_name' => $check['check'],
+                            'passed' => $check['passed'],
+                            'message' => $check['message'],
+                            'score' => $check['passed'] ? 1.0 : 0.0
+                        ];
+                    }
+                }
             }
             
             // Add missing component validation check
@@ -735,12 +752,6 @@ function handleGetConfiguration($serverBuilder, $user) {
         unset($configuration['motherboard_id']);
         
         // Set the properly built configurations in the correct positions
-        $configuration['cpu_configuration'] = $cpuConfig;
-        $configuration['ram_configuration'] = $ramConfig;
-        $configuration['storage_configuration'] = $storageConfig;
-        $configuration['nic_configuration'] = $nicConfig;
-        $configuration['caddy_configuration'] = $caddyConfig;
-        
         // Also add motherboard_configuration for consistency
         $motherboardConfig = [];
         if (isset($details['components']['motherboard'])) {
@@ -755,6 +766,11 @@ function handleGetConfiguration($serverBuilder, $user) {
             }
         }
         $configuration['motherboard_configuration'] = $motherboardConfig;
+        $configuration['cpu_configuration'] = $cpuConfig;
+        $configuration['ram_configuration'] = $ramConfig;
+        $configuration['storage_configuration'] = $storageConfig;
+        $configuration['nic_configuration'] = $nicConfig;
+        $configuration['caddy_configuration'] = $caddyConfig;
         
         send_json_response(1, 1, 200, "Configuration retrieved successfully", [
             'configuration' => $configuration,
@@ -765,7 +781,16 @@ function handleGetConfiguration($serverBuilder, $user) {
             'server_name' => $details['server_name'],
             'configuration_status' => $details['configuration_status'],
             'configuration_status_text' => getConfigurationStatusText($details['configuration_status']),
-            'validation_results' => $validationResults
+            'compatibility_score' => $compatibilityScore,
+            'validation_results' => $validationResults,
+            'individual_component_checks' => $individualComponentChecks,
+            'compatibility_engine' => [
+                'available' => class_exists('CompatibilityEngine'),
+                'json_based' => true,
+                'multi_cpu_support' => true,
+                'individual_checks' => count($individualComponentChecks),
+                'total_compatibility_score' => $compatibilityScore
+            ]
         ]);
         
     } catch (Exception $e) {
@@ -1861,656 +1886,5 @@ if (!function_exists('hasPermission')) {
     }
 }
 
-/**
- * Generate comprehensive component compatibility checks using CompatibilityEngine
- */
-function generateComprehensiveComponentChecks($details, $compatibilityEngine) {
-    $componentChecks = [];
-    $components = $details['components'] ?? [];
-    
-    try {
-        // Get motherboard for reference checks
-        $motherboard = null;
-        if (isset($components['motherboard'][0])) {
-            $motherboard = $components['motherboard'][0];
-        }
-        
-        // Check CPU compatibility (individual CPUs vs motherboard)
-        if (isset($components['cpu']) && $motherboard) {
-            $cpuIndex = 1;
-            foreach ($components['cpu'] as $cpu) {
-                $compatibilityResult = checkIndividualComponentCompatibility(
-                    $compatibilityEngine, 
-                    'cpu', 
-                    $cpu,
-                    'motherboard', 
-                    $motherboard,
-                    "CPU{$cpuIndex}"
-                );
-                $componentChecks[] = $compatibilityResult;
-                $cpuIndex++;
-            }
-        }
-        
-        // Check RAM compatibility
-        if (isset($components['ram']) && $motherboard) {
-            $ramIndex = 1;
-            foreach ($components['ram'] as $ram) {
-                $compatibilityResult = checkIndividualComponentCompatibility(
-                    $compatibilityEngine,
-                    'ram',
-                    $ram,
-                    'motherboard',
-                    $motherboard,
-                    "RAM{$ramIndex}"
-                );
-                $componentChecks[] = $compatibilityResult;
-                $ramIndex++;
-            }
-        }
-        
-        // Check Storage compatibility
-        if (isset($components['storage']) && $motherboard) {
-            $storageIndex = 1;
-            foreach ($components['storage'] as $storage) {
-                $compatibilityResult = checkIndividualComponentCompatibility(
-                    $compatibilityEngine,
-                    'storage',
-                    $storage,
-                    'motherboard',
-                    $motherboard,
-                    "Storage{$storageIndex}"
-                );
-                $componentChecks[] = $compatibilityResult;
-                $storageIndex++;
-            }
-        }
-        
-        // Check NIC compatibility
-        if (isset($components['nic']) && $motherboard) {
-            $nicIndex = 1;
-            foreach ($components['nic'] as $nic) {
-                $compatibilityResult = checkIndividualComponentCompatibility(
-                    $compatibilityEngine,
-                    'nic',
-                    $nic,
-                    'motherboard',
-                    $motherboard,
-                    "NIC{$nicIndex}"
-                );
-                $componentChecks[] = $compatibilityResult;
-                $nicIndex++;
-            }
-        }
-        
-        // CPU-to-CPU compatibility check removed as per requirement
-        
-    } catch (Exception $e) {
-        error_log("Error generating comprehensive component checks: " . $e->getMessage());
-        $componentChecks[] = [
-            'check_type' => 'system_error',
-            'component1' => 'system',
-            'component2' => 'system',
-            'compatible' => false,
-            'message' => 'Error during compatibility analysis: ' . $e->getMessage(),
-            'details' => []
-        ];
-    }
-    
-    return $componentChecks;
-}
-
-/**
- * Generate basic component compatibility checks without CompatibilityEngine
- */
-function generateBasicComponentChecks($details) {
-    $componentChecks = [];
-    $components = $details['components'] ?? [];
-    
-    try {
-        // Get motherboard for reference checks
-        $motherboard = null;
-        if (isset($components['motherboard'][0])) {
-            $motherboard = $components['motherboard'][0];
-        }
-        
-        // Basic CPU compatibility check with JSON validation
-        if (isset($components['cpu']) && $motherboard) {
-            $cpuIndex = 1;
-            foreach ($components['cpu'] as $cpu) {
-                // FIXED: Check if CPU exists in JSON specifications before compatibility check
-                $cpuExists = validateComponentExistsInJson('cpu', $cpu['component_uuid']);
-                $motherboardExists = validateComponentExistsInJson('motherboard', $motherboard['component_uuid']);
-                
-                if (!$cpuExists || !$motherboardExists) {
-                    $missingComponents = [];
-                    if (!$cpuExists) $missingComponents[] = "CPU{$cpuIndex}";
-                    if (!$motherboardExists) $missingComponents[] = "Motherboard";
-                    
-                    $componentChecks[] = [
-                        'check_type' => 'socket_compatibility',
-                        'component1' => "CPU{$cpuIndex}",
-                        'component1_uuid' => $cpu['component_uuid'],
-                        'component1_serial' => $cpu['details']['SerialNumber'] ?? 'Unknown',
-                        'component2' => 'Motherboard',
-                        'component2_uuid' => $motherboard['component_uuid'],
-                        'component2_serial' => $motherboard['details']['SerialNumber'] ?? 'Unknown',
-                        'compatible' => false,
-                        'message' => 'Component(s) not found in specification database: ' . implode(', ', $missingComponents),
-                        'details' => [
-                            'error' => 'missing_component_specs',
-                            'cpu_exists_in_json' => $cpuExists,
-                            'motherboard_exists_in_json' => $motherboardExists
-                        ]
-                    ];
-                } else {
-                    // Both components exist in JSON, proceed with compatibility check
-                    $compatible = checkBasicSocketCompatibility($motherboard, $cpu['details'] ?? []);
-                    $componentChecks[] = [
-                        'check_type' => 'socket_compatibility',
-                        'component1' => "CPU{$cpuIndex}",
-                        'component1_uuid' => $cpu['component_uuid'],
-                        'component1_serial' => $cpu['details']['SerialNumber'] ?? 'Unknown',
-                        'component2' => 'Motherboard',
-                        'component2_uuid' => $motherboard['component_uuid'],
-                        'component2_serial' => $motherboard['details']['SerialNumber'] ?? 'Unknown',
-                        'compatible' => $compatible['compatible'],
-                        'message' => $compatible['message'],
-                        'details' => $compatible['details']
-                    ];
-                }
-                $cpuIndex++;
-            }
-        }
-        
-        // Basic RAM compatibility check with JSON validation
-        if (isset($components['ram']) && $motherboard) {
-            $ramIndex = 1;
-            foreach ($components['ram'] as $ram) {
-                // FIXED: Check if RAM exists in JSON specifications before compatibility check
-                $ramExists = validateComponentExistsInJson('ram', $ram['component_uuid']);
-                $motherboardExists = validateComponentExistsInJson('motherboard', $motherboard['component_uuid']);
-                
-                if (!$ramExists || !$motherboardExists) {
-                    $missingComponents = [];
-                    if (!$ramExists) $missingComponents[] = "RAM{$ramIndex}";
-                    if (!$motherboardExists) $missingComponents[] = "Motherboard";
-                    
-                    $componentChecks[] = [
-                        'check_type' => 'memory_compatibility',
-                        'component1' => "RAM{$ramIndex}",
-                        'component1_uuid' => $ram['component_uuid'],
-                        'component1_serial' => $ram['details']['SerialNumber'] ?? 'Unknown',
-                        'component2' => 'Motherboard',
-                        'component2_uuid' => $motherboard['component_uuid'],
-                        'component2_serial' => $motherboard['details']['SerialNumber'] ?? 'Unknown',
-                        'compatible' => false,
-                        'message' => 'Component(s) not found in specification database: ' . implode(', ', $missingComponents),
-                        'details' => [
-                            'error' => 'missing_component_specs',
-                            'ram_exists_in_json' => $ramExists,
-                            'motherboard_exists_in_json' => $motherboardExists
-                        ]
-                    ];
-                } else {
-                    // Both components exist in JSON, proceed with compatibility check
-                    $compatible = checkBasicMemoryCompatibility($motherboard, $ram['details'] ?? []);
-                    $componentChecks[] = [
-                        'check_type' => 'memory_compatibility',
-                        'component1' => "RAM{$ramIndex}",
-                        'component1_uuid' => $ram['component_uuid'],
-                        'component1_serial' => $ram['details']['SerialNumber'] ?? 'Unknown',
-                        'component2' => 'Motherboard',
-                        'component2_uuid' => $motherboard['component_uuid'],
-                        'component2_serial' => $motherboard['details']['SerialNumber'] ?? 'Unknown',
-                        'compatible' => $compatible['compatible'],
-                        'message' => $compatible['message'],
-                        'details' => $compatible['details']
-                    ];
-                }
-                $ramIndex++;
-            }
-        }
-        
-        // Add message if no motherboard is present
-        if (!$motherboard) {
-            $componentChecks[] = [
-                'check_type' => 'missing_component',
-                'component1' => 'system',
-                'component2' => 'system',
-                'compatible' => false,
-                'message' => 'No motherboard found - cannot perform compatibility checks',
-                'details' => []
-            ];
-        }
-        
-    } catch (Exception $e) {
-        error_log("Error generating basic component checks: " . $e->getMessage());
-        $componentChecks[] = [
-            'check_type' => 'system_error',
-            'component1' => 'system',
-            'component2' => 'system',
-            'compatible' => false,
-            'message' => 'Error during basic compatibility analysis: ' . $e->getMessage(),
-            'details' => []
-        ];
-    }
-    
-    return $componentChecks;
-}
-
-/**
- * Check compatibility between individual components using CompatibilityEngine
- */
-function checkIndividualComponentCompatibility($compatibilityEngine, $type1, $component1, $type2, $component2, $displayName) {
-    try {
-        // FIXED: Check if components exist in JSON before doing compatibility check
-        $component1Exists = validateComponentExistsInJson($type1, $component1['component_uuid']);
-        $component2Exists = validateComponentExistsInJson($type2, $component2['component_uuid']);
-        
-        if (!$component1Exists || !$component2Exists) {
-            $missingComponents = [];
-            if (!$component1Exists) $missingComponents[] = $displayName;
-            if (!$component2Exists) $missingComponents[] = ucfirst($type2);
-            
-            return [
-                'check_type' => $type1 . '_' . $type2 . '_compatibility',
-                'component1' => $displayName,
-                'component1_uuid' => $component1['component_uuid'],
-                'component1_serial' => $component1['details']['SerialNumber'] ?? 'Unknown',
-                'component2' => ucfirst($type2),
-                'component2_uuid' => $component2['component_uuid'],
-                'component2_serial' => $component2['details']['SerialNumber'] ?? 'Unknown',
-                'compatible' => false,
-                'compatibility_score' => 0,
-                'message' => 'Component(s) not found in specification database: ' . implode(', ', $missingComponents),
-                'details' => [
-                    'error' => 'missing_component_specs',
-                    'component1_exists' => $component1Exists,
-                    'component2_exists' => $component2Exists
-                ]
-            ];
-        }
-        
-        $result = $compatibilityEngine->checkCompatibility(
-            ['type' => $type1, 'uuid' => $component1['component_uuid']],
-            ['type' => $type2, 'uuid' => $component2['component_uuid']]
-        );
-        
-        return [
-            'check_type' => $type1 . '_' . $type2 . '_compatibility',
-            'component1' => $displayName,
-            'component1_uuid' => $component1['component_uuid'],
-            'component1_serial' => $component1['details']['SerialNumber'] ?? 'Unknown',
-            'component2' => ucfirst($type2),
-            'component2_uuid' => $component2['component_uuid'],
-            'component2_serial' => $component2['details']['SerialNumber'] ?? 'Unknown',
-            'compatible' => $result['compatible'],
-            'compatibility_score' => $result['compatibility_score'] ?? 0,
-            'message' => !empty($result['failures']) ? implode('; ', $result['failures']) : 
-                        (!empty($result['warnings']) ? implode('; ', $result['warnings']) : 'Compatible'),
-            'details' => [
-                'applied_rules' => $result['applied_rules'] ?? [],
-                'failures' => $result['failures'] ?? [],
-                'warnings' => $result['warnings'] ?? [],
-                'recommendations' => $result['recommendations'] ?? []
-            ]
-        ];
-        
-    } catch (Exception $e) {
-        return [
-            'check_type' => $type1 . '_' . $type2 . '_compatibility',
-            'component1' => $displayName,
-            'component1_uuid' => $component1['component_uuid'],
-            'component1_serial' => $component1['details']['SerialNumber'] ?? 'Unknown',
-            'component2' => ucfirst($type2),
-            'component2_uuid' => $component2['component_uuid'],
-            'component2_serial' => $component2['details']['SerialNumber'] ?? 'Unknown',
-            'compatible' => false,
-            'compatibility_score' => 0,
-            'message' => 'Compatibility check failed: ' . $e->getMessage(),
-            'details' => ['error' => $e->getMessage()]
-        ];
-    }
-}
-
-/**
- * Basic socket compatibility check without CompatibilityEngine
- */
-function checkBasicSocketCompatibility($motherboard, $cpu) {
-    $mbDetails = $motherboard['details'] ?? [];
-    $mbNotes = strtolower($mbDetails['Notes'] ?? '');
-    $cpuNotes = strtolower($cpu['Notes'] ?? '');
-    
-    // Extract socket information
-    $mbSocket = extractBasicSocketType($mbNotes);
-    $cpuSocket = extractBasicSocketType($cpuNotes);
-    
-    if (!$mbSocket || !$cpuSocket) {
-        return [
-            'compatible' => null,
-            'message' => 'Cannot determine socket compatibility - missing socket information',
-            'details' => [
-                'motherboard_socket' => $mbSocket,
-                'cpu_socket' => $cpuSocket,
-                'motherboard_notes' => $mbNotes,
-                'cpu_notes' => $cpuNotes
-            ]
-        ];
-    }
-    
-    $compatible = ($mbSocket === $cpuSocket);
-    $message = $compatible ? 
-        "Compatible - Both use {$mbSocket} socket" : 
-        "Incompatible - Motherboard uses {$mbSocket}, CPU requires {$cpuSocket}";
-        
-    return [
-        'compatible' => $compatible,
-        'message' => $message,
-        'details' => [
-            'motherboard_socket' => $mbSocket,
-            'cpu_socket' => $cpuSocket
-        ]
-    ];
-}
-
-/**
- * Basic memory compatibility check without CompatibilityEngine
- */
-function checkBasicMemoryCompatibility($motherboard, $ram) {
-    $mbDetails = $motherboard['details'] ?? [];
-    $mbNotes = strtolower($mbDetails['Notes'] ?? '');
-    $ramNotes = strtolower($ram['Notes'] ?? '');
-    
-    // Extract memory type information
-    $mbMemoryTypes = extractBasicMemoryTypes($mbNotes);
-    $ramType = extractBasicMemoryType($ramNotes);
-    
-    if (empty($mbMemoryTypes) || !$ramType) {
-        return [
-            'compatible' => null,
-            'message' => 'Cannot determine memory compatibility - missing memory type information',
-            'details' => [
-                'motherboard_supported' => $mbMemoryTypes,
-                'ram_type' => $ramType,
-                'motherboard_notes' => $mbNotes,
-                'ram_notes' => $ramNotes
-            ]
-        ];
-    }
-    
-    $compatible = in_array($ramType, $mbMemoryTypes);
-    $message = $compatible ? 
-        "Compatible - {$ramType} supported" : 
-        "Incompatible - Motherboard supports " . implode(', ', $mbMemoryTypes) . ", RAM is {$ramType}";
-        
-    return [
-        'compatible' => $compatible,
-        'message' => $message,
-        'details' => [
-            'motherboard_supported' => $mbMemoryTypes,
-            'ram_type' => $ramType
-        ]
-    ];
-}
-
-/**
- * Extract basic socket type from component notes
- */
-function extractBasicSocketType($notes) {
-    $commonSockets = [
-        'lga4677', 'lga4189', 'lga3647', 'lga2066', 'lga2011',
-        'lga1700', 'lga1200', 'lga1151', 'lga1150', 'lga1155',
-        'sp5', 'sp3', 'sp4', 'am5', 'am4', 'tr4', 'strx4'
-    ];
-    
-    foreach ($commonSockets as $socket) {
-        if (strpos($notes, $socket) !== false || strpos($notes, str_replace('lga', 'socket ', $socket)) !== false) {
-            return $socket;
-        }
-    }
-    
-    return null;
-}
-
-/**
- * Extract basic memory types from motherboard notes
- */
-function extractBasicMemoryTypes($notes) {
-    $types = [];
-    
-    if (strpos($notes, 'ddr5') !== false) $types[] = 'ddr5';
-    if (strpos($notes, 'ddr4') !== false) $types[] = 'ddr4';
-    if (strpos($notes, 'ddr3') !== false) $types[] = 'ddr3';
-    
-    return $types;
-}
-
-/**
- * Extract basic memory type from RAM notes
- */
-function extractBasicMemoryType($notes) {
-    if (strpos($notes, 'ddr5') !== false) return 'ddr5';
-    if (strpos($notes, 'ddr4') !== false) return 'ddr4';
-    if (strpos($notes, 'ddr3') !== false) return 'ddr3';
-    
-    return null;
-}
-
-/**
- * FIXED: Validate if component exists in JSON specification files
- * This function gets the component details from database and checks if the component model exists in JSON specs
- */
-function validateComponentExistsInJson($componentType, $componentUuid) {
-    global $pdo;
-    
-    try {
-        // First get component details from database
-        $componentDetails = getComponentDetailsByUuid($pdo, $componentType, $componentUuid);
-        if (!$componentDetails) {
-            error_log("Component not found in database: $componentUuid");
-            return false;
-        }
-        
-        // Extract component model/specification info from Notes field
-        $componentNotes = $componentDetails['Notes'] ?? '';
-        $serialNumber = $componentDetails['SerialNumber'] ?? '';
-        
-        // Map component types to their JSON files
-        $jsonFiles = [
-            'cpu' => __DIR__ . '/../../All-JSON/cpu-jsons/Cpu-details-level-3.json',
-            'motherboard' => __DIR__ . '/../../All-JSON/motherboad-jsons/motherboard-level-3.json',
-            'ram' => __DIR__ . '/../../All-JSON/ram-jsons/Ram-details-level-3.json',
-            'storage' => __DIR__ . '/../../All-JSON/storage-jsons/Storage-details-level-3.json',
-            'nic' => __DIR__ . '/../../All-JSON/nic-jsons/Nic-details-level-3.json'
-        ];
-        
-        if (!isset($jsonFiles[$componentType])) {
-            error_log("No JSON file defined for component type: $componentType");
-            return false;
-        }
-        
-        $jsonFile = $jsonFiles[$componentType];
-        
-        if (!file_exists($jsonFile)) {
-            error_log("JSON file not found: $jsonFile");
-            return false;
-        }
-        
-        $jsonContent = file_get_contents($jsonFile);
-        if ($jsonContent === false) {
-            error_log("Failed to read JSON file: $jsonFile");
-            return false;
-        }
-        
-        $jsonData = json_decode($jsonContent, true);
-        if ($jsonData === null) {
-            error_log("Failed to parse JSON file: $jsonFile");
-            return false;
-        }
-        
-        // Search for component model in the JSON structure based on component specifications
-        return searchComponentSpecInJsonData($jsonData, $componentNotes, $serialNumber, $componentType, $componentUuid);
-        
-    } catch (Exception $e) {
-        error_log("Error validating component existence in JSON: " . $e->getMessage());
-        return false;
-    }
-}
-
-/**
- * Get component details by UUID from database
- */
-function getComponentDetailsByUuid($pdo, $componentType, $componentUuid) {
-    $tableMap = [
-        'cpu' => 'cpuinventory',
-        'ram' => 'raminventory', 
-        'storage' => 'storageinventory',
-        'motherboard' => 'motherboardinventory',
-        'nic' => 'nicinventory',
-        'caddy' => 'caddyinventory'
-    ];
-    
-    if (!isset($tableMap[$componentType])) {
-        return null;
-    }
-    
-    $table = $tableMap[$componentType];
-    
-    try {
-        $stmt = $pdo->prepare("SELECT * FROM $table WHERE UUID = ?");
-        $stmt->execute([$componentUuid]);
-        return $stmt->fetch(PDO::FETCH_ASSOC);
-    } catch (Exception $e) {
-        error_log("Error getting component details by UUID: " . $e->getMessage());
-        return null;
-    }
-}
-
-/**
- * Search for component specifications in JSON data structure
- * FIXED: This searches by UUID first, then falls back to model matching
- */
-function searchComponentSpecInJsonData($jsonData, $componentNotes, $serialNumber, $componentType, $componentUuid = null) {
-    try {
-        $componentNotes = strtolower($componentNotes);
-        
-        if ($componentType === 'cpu') {
-            // Search CPU JSON structure
-            foreach ($jsonData as $brand) {
-                if (isset($brand['models'])) {
-                    foreach ($brand['models'] as $model) {
-                        // FIXED: First check for exact UUID match
-                        if (isset($model['UUID']) && $model['UUID'] === $componentUuid) {
-                            return true;
-                        }
-                        
-                        $modelName = strtolower($model['model'] ?? '');
-                        
-                        // Check if component notes contain this model name
-                        if (!empty($modelName) && strpos($componentNotes, $modelName) !== false) {
-                            return true;
-                        }
-                        
-                        // Also check against serial number pattern matching
-                        if (!empty($serialNumber) && isset($model['inventory']['serial_numbers'])) {
-                            if (in_array($serialNumber, $model['inventory']['serial_numbers'])) {
-                                return true;
-                            }
-                        }
-                    }
-                }
-                
-                // Check family level models if exists
-                if (isset($brand['family']) && is_array($brand['family'])) {
-                    foreach ($brand['family'] as $family) {
-                        if (isset($family['models'])) {
-                            foreach ($family['models'] as $model) {
-                                // Check UUID at family level too
-                                if (isset($model['UUID']) && $model['UUID'] === $componentUuid) {
-                                    return true;
-                                }
-                                
-                                $modelName = strtolower($model['model'] ?? '');
-                                if (!empty($modelName) && strpos($componentNotes, $modelName) !== false) {
-                                    return true;
-                                }
-                            }
-                        }
-                    }
-                }
-                
-                // Check series level
-                if (isset($brand['series'])) {
-                    $seriesName = strtolower($brand['series']);
-                    if (!empty($seriesName) && strpos($componentNotes, $seriesName) !== false) {
-                        return true;
-                    }
-                }
-            }
-        } elseif ($componentType === 'motherboard') {
-            // Search motherboard JSON structure
-            foreach ($jsonData as $brand) {
-                if (isset($brand['models'])) {
-                    foreach ($brand['models'] as $model) {
-                        // Check for UUID match in motherboard
-                        if (isset($model['UUID']) && $model['UUID'] === $componentUuid) {
-                            return true;
-                        }
-                        
-                        $modelName = strtolower($model['model'] ?? '');
-                        if (!empty($modelName) && strpos($componentNotes, $modelName) !== false) {
-                            return true;
-                        }
-                    }
-                }
-                
-                // Check family level
-                if (isset($brand['family']) && is_array($brand['family'])) {
-                    foreach ($brand['family'] as $family) {
-                        if (isset($family['models'])) {
-                            foreach ($family['models'] as $model) {
-                                if (isset($model['UUID']) && $model['UUID'] === $componentUuid) {
-                                    return true;
-                                }
-                                
-                                $modelName = strtolower($model['model'] ?? '');
-                                if (!empty($modelName) && strpos($componentNotes, $modelName) !== false) {
-                                    return true;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        } elseif ($componentType === 'ram') {
-            // Search RAM JSON structure
-            foreach ($jsonData as $brand) {
-                if (isset($brand['models'])) {
-                    foreach ($brand['models'] as $model) {
-                        // Check for UUID match in RAM
-                        if (isset($model['UUID']) && $model['UUID'] === $componentUuid) {
-                            return true;
-                        }
-                        
-                        $modelName = strtolower($model['model'] ?? '');
-                        if (!empty($modelName) && strpos($componentNotes, $modelName) !== false) {
-                            return true;
-                        }
-                    }
-                }
-            }
-        }
-        
-        // FIXED: If we reach here, component was NOT found in JSON specifications
-        // Return false to properly indicate component doesn't exist in specs
-        return false;
-        
-    } catch (Exception $e) {
-        error_log("Error searching component specification in JSON data: " . $e->getMessage());
-        // Return false when there's an error to be safe
-        return false;
-    }
-}
 
 ?>

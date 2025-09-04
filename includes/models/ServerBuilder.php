@@ -222,6 +222,51 @@ class ServerBuilder {
             $stmt->execute([$configUuid]);
             $components = $stmt->fetchAll(PDO::FETCH_ASSOC);
             
+            // FIXED: Also add components from individual UUID columns for backward compatibility
+            if (!empty($configData['cpu_uuid'])) {
+                $components[] = [
+                    'config_uuid' => $configUuid,
+                    'component_type' => 'cpu',
+                    'component_uuid' => $configData['cpu_uuid'],
+                    'quantity' => 1,
+                    'slot_position' => 'main',
+                    'notes' => '',
+                    'added_at' => $configData['created_at']
+                ];
+            }
+            
+            if (!empty($configData['motherboard_uuid'])) {
+                $components[] = [
+                    'config_uuid' => $configUuid,
+                    'component_type' => 'motherboard',
+                    'component_uuid' => $configData['motherboard_uuid'],
+                    'quantity' => 1,
+                    'slot_position' => 'main',
+                    'notes' => '',
+                    'added_at' => $configData['created_at']
+                ];
+            }
+            
+            // Also parse JSON configurations and add them as components
+            foreach (['ram_configuration', 'storage_configuration', 'nic_configuration', 'caddy_configuration'] as $jsonField) {
+                if (!empty($configData[$jsonField])) {
+                    $jsonComponents = json_decode($configData[$jsonField], true);
+                    if (is_array($jsonComponents)) {
+                        foreach ($jsonComponents as $jsonComponent) {
+                            $components[] = [
+                                'config_uuid' => $configUuid,
+                                'component_type' => str_replace('_configuration', '', $jsonField),
+                                'component_uuid' => $jsonComponent['uuid'] ?? '',
+                                'quantity' => $jsonComponent['quantity'] ?? 1,
+                                'slot_position' => 'auto',
+                                'notes' => '',
+                                'added_at' => $jsonComponent['added_at'] ?? $configData['created_at']
+                            ];
+                        }
+                    }
+                }
+            }
+            
             // Build detailed component information
             $componentDetails = [];
             $componentCounts = [];
@@ -338,32 +383,7 @@ class ServerBuilder {
             
             switch ($componentType) {
                 case 'cpu':
-                    if ($action === 'add') {
-                        // For multiple CPUs, we store the primary one in cpu_uuid, others in additional_components
-                        $stmt = $this->pdo->prepare("SELECT cpu_uuid FROM server_configurations WHERE config_uuid = ?");
-                        $stmt->execute([$configUuid]);
-                        $currentCpuUuid = $stmt->fetchColumn();
-                        
-                        if (!$currentCpuUuid) {
-                            // First CPU
-                            $updateFields[] = "cpu_uuid = ?";
-                            $updateValues[] = $componentUuid;
-                        } else {
-                            // Additional CPU - store in additional_components JSON
-                            $this->addToAdditionalComponents($configUuid, 'cpu', $componentUuid);
-                        }
-                    } elseif ($action === 'remove') {
-                        // Check if this is the main CPU or additional
-                        $stmt = $this->pdo->prepare("SELECT cpu_uuid FROM server_configurations WHERE config_uuid = ?");
-                        $stmt->execute([$configUuid]);
-                        $currentCpuUuid = $stmt->fetchColumn();
-                        
-                        if ($currentCpuUuid === $componentUuid) {
-                            $updateFields[] = "cpu_uuid = NULL";
-                        } else {
-                            $this->removeFromAdditionalComponents($configUuid, 'cpu', $componentUuid);
-                        }
-                    }
+                    $this->updateCpuConfiguration($configUuid, $componentUuid, $quantity, $action);
                     break;
                     
                 case 'motherboard':
@@ -402,6 +422,33 @@ class ServerBuilder {
             
         } catch (Exception $e) {
             error_log("Error updating server configuration table: " . $e->getMessage());
+            throw $e;
+        }
+    }
+
+    /**
+     * Update CPU configuration in JSON format
+     */
+    private function updateCpuConfiguration($configUuid, $componentUuid, $quantity, $action) {
+        try {
+            if ($action === 'add') {
+                // For add, set the cpu_uuid (assuming single CPU support for now)
+                $stmt = $this->pdo->prepare("UPDATE server_configurations SET cpu_uuid = ?, updated_at = NOW() WHERE config_uuid = ?");
+                $stmt->execute([$componentUuid, $configUuid]);
+            } elseif ($action === 'remove') {
+                // For remove, check if this is the CPU being removed and clear it
+                $stmt = $this->pdo->prepare("SELECT cpu_uuid FROM server_configurations WHERE config_uuid = ?");
+                $stmt->execute([$configUuid]);
+                $currentCpuUuid = $stmt->fetchColumn();
+                
+                if ($currentCpuUuid === $componentUuid) {
+                    $stmt = $this->pdo->prepare("UPDATE server_configurations SET cpu_uuid = NULL, updated_at = NOW() WHERE config_uuid = ?");
+                    $stmt->execute([$configUuid]);
+                }
+            }
+            
+        } catch (Exception $e) {
+            error_log("Error updating CPU configuration: " . $e->getMessage());
             throw $e;
         }
     }
@@ -669,10 +716,11 @@ class ServerBuilder {
             
             $validation = [
                 'is_valid' => true,
-                'compatibility_score' => 100.0,
+                'overall_score' => 1.0, // Start with perfect score and deduct for issues
                 'issues' => [],
                 'warnings' => [],
                 'recommendations' => [],
+                'global_checks' => [],
                 'component_summary' => [
                     'total_components' => $summary['total_components'] ?? 0,
                     'component_counts' => $summary['component_counts'] ?? []
@@ -684,17 +732,33 @@ class ServerBuilder {
             $presentComponents = array_keys($summary['components'] ?? []);
             
             foreach ($requiredComponents as $required) {
-                if (!in_array($required, $presentComponents)) {
+                $isPresent = in_array($required, $presentComponents);
+                $validation['global_checks'][] = [
+                    'check' => ucfirst($required) . ' Required',
+                    'passed' => $isPresent,
+                    'message' => $isPresent ? ucfirst($required) . ' component is present' : ucfirst($required) . ' is required for server configuration'
+                ];
+                
+                if (!$isPresent) {
                     $validation['is_valid'] = false;
                     $validation['issues'][] = "Missing required component: " . ucfirst($required);
+                    $validation['overall_score'] -= 0.3; // Deduct 30% for each missing required component
                 }
             }
             
             // Check recommended components
             $recommendedComponents = ['storage'];
             foreach ($recommendedComponents as $recommended) {
-                if (!in_array($recommended, $presentComponents)) {
+                $isPresent = in_array($recommended, $presentComponents);
+                $validation['global_checks'][] = [
+                    'check' => ucfirst($recommended) . ' Recommended',
+                    'passed' => $isPresent,
+                    'message' => $isPresent ? ucfirst($recommended) . ' component is present' : "At least one " . $recommended . " device is recommended"
+                ];
+                
+                if (!$isPresent) {
                     $validation['warnings'][] = "Missing recommended component: " . ucfirst($recommended);
+                    $validation['overall_score'] -= 0.1; // Deduct 10% for each missing recommended component
                 }
             }
             
@@ -744,7 +808,10 @@ class ServerBuilder {
                 $validation['recommendations'][] = "Review component compatibility for optimal performance";
             }
             
-            error_log("Validation complete. Is valid: " . ($validation['is_valid'] ? 'yes' : 'no') . ", Compatibility Score: " . $validation['compatibility_score']);
+            // Ensure overall_score is within bounds
+            $validation['overall_score'] = max(0.0, min(1.0, $validation['overall_score']));
+            
+            error_log("Validation complete. Is valid: " . ($validation['is_valid'] ? 'yes' : 'no') . ", Overall Score: " . $validation['overall_score'] . ", Compatibility Score: " . ($validation['compatibility_score'] ?? 'N/A'));
             
             return $validation;
             
