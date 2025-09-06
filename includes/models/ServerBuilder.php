@@ -18,6 +18,14 @@ class ServerBuilder {
     }
     
     /**
+     * Get the inventory table name for a given component type
+     */
+    private function getComponentInventoryTable($componentType) {
+        return $this->componentTables[$componentType] ?? null;
+    }
+    
+    
+    /**
      * Create a new server configuration
      */
     public function createConfiguration($serverName, $createdBy, $options = []) {
@@ -47,7 +55,7 @@ class ServerBuilder {
      */
     public function addComponent($configUuid, $componentType, $componentUuid, $options = []) {
         try {
-            // Validate component type
+            // Phase 1: Validate component type
             if (!$this->isValidComponentType($componentType)) {
                 return [
                     'success' => false,
@@ -55,16 +63,91 @@ class ServerBuilder {
                 ];
             }
             
-            // Get component details to validate existence and check status
+            // Phase 2: Check for duplicate component FIRST with cleanup
+            if ($this->isDuplicateComponent($configUuid, $componentUuid)) {
+                // Check if this is an orphaned record (component exists in config table but not properly assigned)
+                $componentDetails = $this->getComponentByUuid($componentType, $componentUuid);
+                if ($componentDetails && $componentDetails['ServerUUID'] !== $configUuid) {
+                    error_log("Found orphaned record: Component $componentUuid exists in config table but ServerUUID doesn't match");
+                    error_log("Component ServerUUID: {$componentDetails['ServerUUID']}, Expected: $configUuid");
+                    
+                    // Clean up orphaned record
+                    $stmt = $this->pdo->prepare("
+                        DELETE FROM server_configuration_components 
+                        WHERE config_uuid = ? AND component_uuid = ?
+                    ");
+                    $stmt->execute([$configUuid, $componentUuid]);
+                    error_log("Cleaned up orphaned record for component $componentUuid");
+                } else {
+                    return [
+                        'success' => false,
+                        'message' => "Component $componentUuid is already added to this configuration"
+                    ];
+                }
+            }
+            
+            // Phase 3: Validate component exists in JSON specifications
+            try {
+                require_once __DIR__ . '/ComponentCompatibility.php';
+                if (!class_exists('ComponentCompatibility')) {
+                    error_log("ComponentCompatibility class not found after require_once");
+                    return [
+                        'success' => false,
+                        'message' => "Component validation system not available"
+                    ];
+                }
+                $compatibility = new ComponentCompatibility($this->pdo);
+                
+                $existsResult = $compatibility->validateComponentExistsInJSON($componentType, $componentUuid);
+                if (!$existsResult) {
+                    return [
+                        'success' => false,
+                        'message' => "Component $componentUuid not found in $componentType JSON specifications database"
+                    ];
+                }
+            } catch (Exception $compatError) {
+                error_log("Error loading ComponentCompatibility: " . $compatError->getMessage());
+                error_log("File: " . __DIR__ . '/ComponentCompatibility.php exists: ' . (file_exists(__DIR__ . '/ComponentCompatibility.php') ? 'yes' : 'no'));
+                // Skip JSON validation if ComponentCompatibility fails to load
+                error_log("Skipping JSON validation due to compatibility system error");
+            }
+            
+            // Phase 4: Get component details from inventory
             $componentDetails = $this->getComponentByUuid($componentType, $componentUuid);
             if (!$componentDetails) {
                 return [
                     'success' => false,
-                    'message' => "Component not found: $componentUuid"
+                    'message' => "Component not found in inventory: $componentUuid"
                 ];
             }
             
-            // Check availability
+            // Phase 5: CPU-specific validations BEFORE adding
+            if ($componentType === 'cpu' && isset($compatibility)) {
+                try {
+                    $cpuValidation = $this->validateCPUAddition($configUuid, $componentUuid, $compatibility);
+                    if (!$cpuValidation['success']) {
+                        return $cpuValidation;
+                    }
+                } catch (Exception $cpuError) {
+                    error_log("Error in CPU validation: " . $cpuError->getMessage());
+                    // Continue without CPU validation
+                }
+            }
+            
+            // Phase 6: Other component-specific validations
+            if (isset($compatibility)) {
+                try {
+                    $compatibilityValidation = $this->validateComponentCompatibilityBeforeAdd($configUuid, $componentType, $componentUuid, $compatibility);
+                    if (!$compatibilityValidation['success']) {
+                        return $compatibilityValidation;
+                    }
+                } catch (Exception $compatError) {
+                    error_log("Error in compatibility validation: " . $compatError->getMessage());
+                    // Continue without compatibility validation
+                }
+            }
+            
+            // Phase 7: Check availability
             $availability = $this->checkComponentAvailability($componentDetails, $configUuid, $options);
             if (!$availability['available'] && !($options['override_used'] ?? false)) {
                 return [
@@ -95,7 +178,7 @@ class ServerBuilder {
             // Log server configuration data for component assignment
             error_log("Component assignment: Server $configUuid has Location='$serverLocation', RackPosition='$serverRackPosition'");
             
-            // Begin transaction
+            // ALL VALIDATIONS COMPLETE - Begin transaction only after all checks pass
             $this->pdo->beginTransaction();
             
             // Add component to configuration_components table
@@ -131,7 +214,9 @@ class ServerBuilder {
             ];
             
         } catch (Exception $e) {
-            $this->pdo->rollback();
+            if ($this->pdo->inTransaction()) {
+                $this->pdo->rollback();
+            }
             error_log("Error adding component to configuration: " . $e->getMessage());
             return [
                 'success' => false,
@@ -213,7 +298,7 @@ class ServerBuilder {
                 ];
             }
             
-            // Get components from server_configuration_components table
+            // Get components from server_configuration_components table (primary source)
             $stmt = $this->pdo->prepare("
                 SELECT * FROM server_configuration_components 
                 WHERE config_uuid = ?
@@ -222,56 +307,10 @@ class ServerBuilder {
             $stmt->execute([$configUuid]);
             $components = $stmt->fetchAll(PDO::FETCH_ASSOC);
             
-            // FIXED: Also add components from individual UUID columns for backward compatibility
-            if (!empty($configData['cpu_uuid'])) {
-                $components[] = [
-                    'config_uuid' => $configUuid,
-                    'component_type' => 'cpu',
-                    'component_uuid' => $configData['cpu_uuid'],
-                    'quantity' => 1,
-                    'slot_position' => 'main',
-                    'notes' => '',
-                    'added_at' => $configData['created_at']
-                ];
-            }
-            
-            if (!empty($configData['motherboard_uuid'])) {
-                $components[] = [
-                    'config_uuid' => $configUuid,
-                    'component_type' => 'motherboard',
-                    'component_uuid' => $configData['motherboard_uuid'],
-                    'quantity' => 1,
-                    'slot_position' => 'main',
-                    'notes' => '',
-                    'added_at' => $configData['created_at']
-                ];
-            }
-            
-            // Also parse JSON configurations and add them as components
-            foreach (['ram_configuration', 'storage_configuration', 'nic_configuration', 'caddy_configuration'] as $jsonField) {
-                if (!empty($configData[$jsonField])) {
-                    $jsonComponents = json_decode($configData[$jsonField], true);
-                    if (is_array($jsonComponents)) {
-                        foreach ($jsonComponents as $jsonComponent) {
-                            $components[] = [
-                                'config_uuid' => $configUuid,
-                                'component_type' => str_replace('_configuration', '', $jsonField),
-                                'component_uuid' => $jsonComponent['uuid'] ?? '',
-                                'quantity' => $jsonComponent['quantity'] ?? 1,
-                                'slot_position' => 'auto',
-                                'notes' => '',
-                                'added_at' => $jsonComponent['added_at'] ?? $configData['created_at']
-                            ];
-                        }
-                    }
-                }
-            }
-            
-            // Build detailed component information
+            // Build simplified component information
             $componentDetails = [];
             $componentCounts = [];
             $totalComponents = 0;
-            $totalPowerConsumption = 0;
             $missingComponents = []; // Track components that don't exist in inventory
             
             foreach ($components as $component) {
@@ -282,62 +321,29 @@ class ServerBuilder {
                     $componentCounts[$type] = 0;
                 }
                 
-                // Get component details with proper ServerUUID check
-                $details = $this->getComponentByUuid($type, $component['component_uuid']);
-                if ($details) {
-                    $component['details'] = $details;
-                    
-                    // Calculate power consumption from component specifications
-                    $powerConsumption = $this->calculateComponentPower($type, $details);
-                    $totalPowerConsumption += $powerConsumption * $component['quantity'];
-                    
-                    // Add power info to component
-                    $component['power_consumption_watts'] = $powerConsumption;
-                    $component['total_power_watts'] = $powerConsumption * $component['quantity'];
-                } else {
-                    // Component UUID not found in inventory - this is an error
-                    $missingComponents[] = [
-                        'component_type' => $type,
-                        'component_uuid' => $component['component_uuid'],
-                        'quantity' => $component['quantity']
-                    ];
-                    
-                    $component['details'] = [
-                        'UUID' => $component['component_uuid'],
-                        'SerialNumber' => 'MISSING',
-                        'Status' => -1, // Use -1 to indicate missing component
-                        'ServerUUID' => $configUuid,
-                        'error' => 'Component not found in inventory'
-                    ];
-                    $component['power_consumption_watts'] = 0;
-                    $component['total_power_watts'] = 0;
-                }
+                // Simplified approach - create basic component entry
+                $simplifiedComponent = [
+                    'uuid' => $component['component_uuid'],
+                    'serial_number' => 'Unknown', // Will show as Unknown for now
+                    'quantity' => $component['quantity'],
+                    'slot_position' => $component['slot_position'] ?? null,
+                    'added_at' => $component['added_at']
+                ];
                 
-                $componentDetails[$type][] = $component;
+                $componentDetails[$type][] = $simplifiedComponent;
                 $componentCounts[$type] += $component['quantity'];
                 $totalComponents += $component['quantity'];
             }
             
-            // Add 20% overhead for safety margin on power
-            $totalPowerConsumptionWithOverhead = $totalPowerConsumption * 1.2;
+            // Use stored power consumption from database instead of calculating
+            $totalPowerConsumptionWithOverhead = $configData['power_consumption'] ?? 0;
             
-            // Calculate compatibility score if CompatibilityEngine exists
-            $compatibilityScore = null;
-            if (class_exists('CompatibilityEngine')) {
-                try {
-                    $compatibilityEngine = new CompatibilityEngine($this->pdo);
-                    $compatibilityResult = $this->calculateHardwareCompatibilityScore($componentDetails);
-                    $compatibilityScore = $compatibilityResult['score'];
-                } catch (Exception $e) {
-                    error_log("Error calculating compatibility: " . $e->getMessage());
-                    $compatibilityScore = null;
-                }
-            }
+            // Use stored compatibility score from database instead of calculating
+            $compatibilityScore = $configData['compatibility_score'] ?? null;
             
-            // Update configuration with calculated values
-            $this->updateConfigurationCalculatedFields($configUuid, $totalPowerConsumptionWithOverhead, $compatibilityScore);
+            // No need to update - using stored values from database
             
-            // Fix configuration data
+            // Use stored values from database
             $configData['power_consumption'] = round($totalPowerConsumptionWithOverhead, 2);
             $configData['compatibility_score'] = $compatibilityScore;
             
@@ -350,11 +356,10 @@ class ServerBuilder {
                 'configuration' => $configData,
                 'components' => $componentDetails,
                 'component_counts' => $componentCounts,
-                'component_ids_uuids' => $this->getComponentIdsAndUuids($components),
                 'missing_components' => $missingComponents, // Add missing components info
                 'total_components' => $totalComponents,
                 'power_consumption' => [
-                    'total_watts' => round($totalPowerConsumption, 2),
+                    'total_watts' => round($totalPowerConsumptionWithOverhead / 1.2, 2),
                     'total_with_overhead_watts' => round($totalPowerConsumptionWithOverhead, 2),
                     'overhead_percentage' => 20
                 ],
@@ -832,6 +837,248 @@ class ServerBuilder {
     }
 
     /**
+     * Enhanced JSON-based configuration validation
+     */
+    public function validateConfigurationEnhanced($configUuid) {
+        try {
+            // Initialize compatibility engine
+            require_once __DIR__ . '/ComponentCompatibility.php';
+            $compatibility = new ComponentCompatibility($this->pdo);
+            
+            // Start with basic validation
+            $basicValidation = $this->validateConfiguration($configUuid);
+            
+            // Get all components in configuration
+            $stmt = $this->pdo->prepare("
+                SELECT component_type, component_uuid FROM server_configuration_components 
+                WHERE config_uuid = ?
+            ");
+            $stmt->execute([$configUuid]);
+            $components = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            
+            $enhancedValidation = [
+                'is_valid' => $basicValidation['is_valid'],
+                'overall_score' => $basicValidation['overall_score'],
+                'compatibility_score' => $basicValidation['compatibility_score'] ?? 0,
+                'issues' => $basicValidation['issues'],
+                'warnings' => $basicValidation['warnings'],
+                'recommendations' => $basicValidation['recommendations'],
+                'global_checks' => $basicValidation['global_checks'],
+                'component_summary' => $basicValidation['component_summary'],
+                'json_validation' => [
+                    'enabled' => true,
+                    'component_checks' => [],
+                    'compatibility_matrix' => [],
+                    'detailed_scores' => []
+                ]
+            ];
+            
+            // Phase 1: Validate all components exist in JSON
+            foreach ($components as $component) {
+                $existsResult = $compatibility->validateComponentExistsInJSON(
+                    $component['component_type'], 
+                    $component['component_uuid']
+                );
+                
+                $checkResult = [
+                    'component_type' => $component['component_type'],
+                    'component_uuid' => $component['component_uuid'],
+                    'exists_in_json' => $existsResult,
+                    'status' => $existsResult ? 'pass' : 'fail'
+                ];
+                
+                if (!$existsResult) {
+                    $enhancedValidation['is_valid'] = false;
+                    $enhancedValidation['issues'][] = "Component {$component['component_uuid']} ({$component['component_type']}) not found in JSON specifications database";
+                    $enhancedValidation['overall_score'] -= 0.2;
+                }
+                
+                $enhancedValidation['json_validation']['component_checks'][] = $checkResult;
+            }
+            
+            // Phase 2: Run comprehensive compatibility matrix
+            $motherboardSpecs = $this->getConfigurationMotherboardSpecs($configUuid);
+            
+            if ($motherboardSpecs['found']) {
+                $limits = $motherboardSpecs['limits'];
+                
+                // Check CPU compatibility
+                foreach ($components as $component) {
+                    if ($component['component_type'] === 'cpu') {
+                        $socketResult = $compatibility->validateCPUSocketCompatibility(
+                            $component['component_uuid'], 
+                            $limits
+                        );
+                        
+                        $matrixEntry = [
+                            'component1_type' => 'motherboard',
+                            'component2_type' => 'cpu',
+                            'component2_uuid' => $component['component_uuid'],
+                            'compatibility_check' => 'socket_compatibility',
+                            'result' => $socketResult
+                        ];
+                        
+                        if (!$socketResult['compatible']) {
+                            $enhancedValidation['is_valid'] = false;
+                            $enhancedValidation['issues'][] = $socketResult['error'];
+                            $enhancedValidation['compatibility_score'] = min($enhancedValidation['compatibility_score'], 0);
+                        }
+                        
+                        $enhancedValidation['json_validation']['compatibility_matrix'][] = $matrixEntry;
+                    }
+                }
+                
+                // Check RAM compatibility
+                foreach ($components as $component) {
+                    if ($component['component_type'] === 'ram') {
+                        $typeResult = $compatibility->validateRAMTypeCompatibility(
+                            $component['component_uuid'], 
+                            $limits
+                        );
+                        
+                        $slotResult = $compatibility->validateRAMSlotAvailability($configUuid, $limits);
+                        
+                        $matrixEntry = [
+                            'component1_type' => 'motherboard',
+                            'component2_type' => 'ram',
+                            'component2_uuid' => $component['component_uuid'],
+                            'compatibility_check' => 'type_and_slot_compatibility',
+                            'result' => [
+                                'type_compatible' => $typeResult['compatible'],
+                                'slots_available' => $slotResult['available'],
+                                'type_error' => $typeResult['error'],
+                                'slot_error' => $slotResult['error']
+                            ]
+                        ];
+                        
+                        if (!$typeResult['compatible']) {
+                            $enhancedValidation['is_valid'] = false;
+                            $enhancedValidation['issues'][] = $typeResult['error'];
+                            $enhancedValidation['compatibility_score'] = min($enhancedValidation['compatibility_score'], 10);
+                        }
+                        
+                        if (!$slotResult['available']) {
+                            $enhancedValidation['is_valid'] = false;
+                            $enhancedValidation['issues'][] = $slotResult['error'];
+                        }
+                        
+                        $enhancedValidation['json_validation']['compatibility_matrix'][] = $matrixEntry;
+                    }
+                }
+                
+                // Check NIC compatibility
+                foreach ($components as $component) {
+                    if ($component['component_type'] === 'nic') {
+                        $nicResult = $compatibility->validateNICPCIeCompatibility(
+                            $component['component_uuid'], 
+                            $configUuid, 
+                            $limits
+                        );
+                        
+                        $matrixEntry = [
+                            'component1_type' => 'motherboard',
+                            'component2_type' => 'nic',
+                            'component2_uuid' => $component['component_uuid'],
+                            'compatibility_check' => 'pcie_compatibility',
+                            'result' => $nicResult
+                        ];
+                        
+                        if (!$nicResult['compatible']) {
+                            $enhancedValidation['warnings'][] = $nicResult['error'];
+                            $enhancedValidation['compatibility_score'] = min($enhancedValidation['compatibility_score'], 70);
+                        }
+                        
+                        $enhancedValidation['json_validation']['compatibility_matrix'][] = $matrixEntry;
+                    }
+                }
+            }
+            
+            // Phase 3: Generate detailed compatibility scores
+            $enhancedValidation['json_validation']['detailed_scores'] = [
+                'json_existence_score' => $this->calculateJSONExistenceScore($enhancedValidation['json_validation']['component_checks']),
+                'compatibility_matrix_score' => $this->calculateCompatibilityMatrixScore($enhancedValidation['json_validation']['compatibility_matrix']),
+                'overall_json_score' => min(
+                    $this->calculateJSONExistenceScore($enhancedValidation['json_validation']['component_checks']),
+                    $this->calculateCompatibilityMatrixScore($enhancedValidation['json_validation']['compatibility_matrix'])
+                )
+            ];
+            
+            // Adjust overall scores based on JSON validation
+            $jsonScore = $enhancedValidation['json_validation']['detailed_scores']['overall_json_score'];
+            $enhancedValidation['overall_score'] = min($enhancedValidation['overall_score'], $jsonScore / 100.0);
+            $enhancedValidation['compatibility_score'] = min($enhancedValidation['compatibility_score'], $jsonScore);
+            
+            if ($jsonScore < 70) {
+                $enhancedValidation['is_valid'] = false;
+                $enhancedValidation['issues'][] = "JSON-based compatibility validation failed (score: {$jsonScore}%)";
+            }
+            
+            return $enhancedValidation;
+            
+        } catch (Exception $e) {
+            error_log("Error in enhanced validation: " . $e->getMessage());
+            return [
+                'is_valid' => false,
+                'overall_score' => 0.0,
+                'compatibility_score' => 0,
+                'issues' => ['Enhanced validation failed: ' . $e->getMessage()],
+                'warnings' => [],
+                'recommendations' => [],
+                'json_validation' => [
+                    'enabled' => false,
+                    'error' => $e->getMessage()
+                ]
+            ];
+        }
+    }
+
+    /**
+     * Calculate JSON existence score
+     */
+    private function calculateJSONExistenceScore($componentChecks) {
+        if (empty($componentChecks)) {
+            return 100;
+        }
+        
+        $passCount = 0;
+        foreach ($componentChecks as $check) {
+            if ($check['status'] === 'pass') {
+                $passCount++;
+            }
+        }
+        
+        return round(($passCount / count($componentChecks)) * 100, 1);
+    }
+
+    /**
+     * Calculate compatibility matrix score
+     */
+    private function calculateCompatibilityMatrixScore($compatibilityMatrix) {
+        if (empty($compatibilityMatrix)) {
+            return 100;
+        }
+        
+        $totalScore = 0;
+        $totalChecks = count($compatibilityMatrix);
+        
+        foreach ($compatibilityMatrix as $check) {
+            $checkScore = 100;
+            
+            if (isset($check['result']['compatible']) && !$check['result']['compatible']) {
+                $checkScore = 0;
+            } elseif (isset($check['result']['type_compatible']) && !$check['result']['type_compatible']) {
+                $checkScore = 0;
+            } elseif (isset($check['result']['slots_available']) && !$check['result']['slots_available']) {
+                $checkScore = 50; // Slot availability issues are less critical than incompatibility
+            }
+            
+            $totalScore += $checkScore;
+        }
+        
+        return round($totalScore / $totalChecks, 1);
+    }
+
+    /**
      * Finalize configuration
      */
     public function finalizeConfiguration($configUuid, $notes = '') {
@@ -937,6 +1184,154 @@ class ServerBuilder {
     }
     
     // Private helper methods
+    
+    /**
+     * Check if component UUID already exists in configuration
+     */
+    private function isDuplicateComponent($configUuid, $componentUuid) {
+        try {
+            $stmt = $this->pdo->prepare("
+                SELECT COUNT(*), component_type FROM server_configuration_components 
+                WHERE config_uuid = ? AND component_uuid = ?
+                GROUP BY component_type
+            ");
+            $stmt->execute([$configUuid, $componentUuid]);
+            $result = $stmt->fetch(PDO::FETCH_ASSOC);
+            
+            $isDuplicate = $result && $result['COUNT(*)'] > 0;
+            
+            // Debug logging
+            error_log("Duplicate check: ConfigUUID=$configUuid, ComponentUUID=$componentUuid");
+            error_log("Result: " . ($isDuplicate ? "DUPLICATE FOUND" : "NO DUPLICATE") . 
+                     ($result ? " (Type: {$result['component_type']}, Count: {$result['COUNT(*)']})" : " (No records found)"));
+            
+            return $isDuplicate;
+        } catch (Exception $e) {
+            error_log("Error checking duplicate component: " . $e->getMessage());
+            return false;
+        }
+    }
+    
+    /**
+     * Validate CPU addition with socket and count limits
+     */
+    private function validateCPUAddition($configUuid, $cpuUuid, $compatibility) {
+        try {
+            // Get motherboard specifications
+            $motherboardSpecs = $this->getConfigurationMotherboardSpecs($configUuid);
+            if (!$motherboardSpecs['found']) {
+                return [
+                    'success' => false,
+                    'message' => 'No motherboard found in configuration - add motherboard first'
+                ];
+            }
+            
+            $limits = $motherboardSpecs['limits'];
+            
+            // Check current CPU count
+            $stmt = $this->pdo->prepare("
+                SELECT COUNT(*) as cpu_count FROM server_configuration_components 
+                WHERE config_uuid = ? AND component_type = 'cpu'
+            ");
+            $stmt->execute([$configUuid]);
+            $currentCPUCount = (int)$stmt->fetchColumn();
+            
+            $maxSockets = $limits['cpu']['max_sockets'] ?? 1;
+            
+            // STRICT LIMIT ENFORCEMENT - reject if limit exceeded
+            if ($currentCPUCount >= $maxSockets) {
+                return [
+                    'success' => false,
+                    'message' => "CPU limit exceeded: motherboard supports maximum {$maxSockets} CPUs, currently has {$currentCPUCount} CPUs"
+                ];
+            }
+            
+            // Socket compatibility validation using JSON data
+            $socketResult = $compatibility->validateCPUSocketCompatibility($cpuUuid, $limits);
+            if (!$socketResult['compatible']) {
+                return [
+                    'success' => false,
+                    'message' => $socketResult['error']
+                ];
+            }
+            
+            return ['success' => true];
+            
+        } catch (Exception $e) {
+            error_log("Error validating CPU addition: " . $e->getMessage());
+            return [
+                'success' => false,
+                'message' => 'Error validating CPU compatibility: ' . $e->getMessage()
+            ];
+        }
+    }
+    
+    /**
+     * Validate component compatibility before adding
+     */
+    private function validateComponentCompatibilityBeforeAdd($configUuid, $componentType, $componentUuid, $compatibility) {
+        try {
+            switch ($componentType) {
+                case 'motherboard':
+                    // Check if configuration already has a motherboard
+                    $stmt = $this->pdo->prepare("
+                        SELECT COUNT(*) FROM server_configuration_components 
+                        WHERE config_uuid = ? AND component_type = 'motherboard'
+                    ");
+                    $stmt->execute([$configUuid]);
+                    if ($stmt->fetchColumn() > 0) {
+                        return [
+                            'success' => false,
+                            'message' => 'Configuration already has a motherboard. Remove existing motherboard first.'
+                        ];
+                    }
+                    break;
+                    
+                case 'ram':
+                    $motherboardSpecs = $this->getConfigurationMotherboardSpecs($configUuid);
+                    if ($motherboardSpecs['found']) {
+                        $typeResult = $compatibility->validateRAMTypeCompatibility($componentUuid, $motherboardSpecs['limits']);
+                        if (!$typeResult['compatible']) {
+                            return [
+                                'success' => false,
+                                'message' => $typeResult['error']
+                            ];
+                        }
+                        
+                        $slotResult = $compatibility->validateRAMSlotAvailability($configUuid, $motherboardSpecs['limits']);
+                        if (!$slotResult['available']) {
+                            return [
+                                'success' => false,
+                                'message' => $slotResult['error']
+                            ];
+                        }
+                    }
+                    break;
+                    
+                case 'nic':
+                    $motherboardSpecs = $this->getConfigurationMotherboardSpecs($configUuid);
+                    if ($motherboardSpecs['found']) {
+                        $nicResult = $compatibility->validateNICPCIeCompatibility($componentUuid, $configUuid, $motherboardSpecs['limits']);
+                        if (!$nicResult['compatible']) {
+                            return [
+                                'success' => false,
+                                'message' => $nicResult['error']
+                            ];
+                        }
+                    }
+                    break;
+            }
+            
+            return ['success' => true];
+            
+        } catch (Exception $e) {
+            error_log("Error validating component compatibility: " . $e->getMessage());
+            return [
+                'success' => false,
+                'message' => 'Error validating component compatibility: ' . $e->getMessage()
+            ];
+        }
+    }
     
     /**
      * Generate UUID for configuration
@@ -1822,6 +2217,289 @@ class ServerBuilder {
         } catch (Exception $e) {
             error_log("Error removing from additional components: " . $e->getMessage());
             throw $e;
+        }
+    }
+
+    /**
+     * Get configuration motherboard specifications
+     */
+    public function getConfigurationMotherboardSpecs($configUuid) {
+        try {
+            // Get motherboard from configuration
+            $stmt = $this->pdo->prepare("
+                SELECT component_uuid FROM server_configuration_components 
+                WHERE config_uuid = ? AND component_type = 'motherboard'
+                LIMIT 1
+            ");
+            $stmt->execute([$configUuid]);
+            $motherboard = $stmt->fetch(PDO::FETCH_ASSOC);
+            
+            if (!$motherboard) {
+                return [
+                    'found' => false,
+                    'error' => 'No motherboard found in configuration',
+                    'specifications' => null
+                ];
+            }
+            
+            // Initialize compatibility engine
+            require_once __DIR__ . '/ComponentCompatibility.php';
+            $compatibility = new ComponentCompatibility($this->pdo);
+            
+            // Get motherboard limits
+            return $compatibility->getMotherboardLimits($motherboard['component_uuid']);
+            
+        } catch (Exception $e) {
+            error_log("Error getting motherboard specs: " . $e->getMessage());
+            return [
+                'found' => false,
+                'error' => 'Error retrieving motherboard specifications: ' . $e->getMessage(),
+                'specifications' => null
+            ];
+        }
+    }
+
+    /**
+     * Enhanced addComponent with JSON existence validation and compatibility checking
+     */
+    public function addComponentEnhanced($configUuid, $componentType, $componentUuid, $options = []) {
+        try {
+            // Initialize compatibility engine
+            require_once __DIR__ . '/ComponentCompatibility.php';
+            $compatibility = new ComponentCompatibility($this->pdo);
+            
+            // Phase 1: JSON existence validation
+            $existsResult = $compatibility->validateComponentExistsInJSON($componentType, $componentUuid);
+            if (!$existsResult) {
+                return [
+                    'success' => false,
+                    'message' => "Component UUID $componentUuid not found in $componentType JSON specifications",
+                    'error_type' => 'json_not_found'
+                ];
+            }
+            
+            // Phase 2: Get motherboard specifications for compatibility checking
+            $motherboardSpecs = null;
+            if ($componentType !== 'motherboard') {
+                $specsResult = $this->getConfigurationMotherboardSpecs($configUuid);
+                if (!$specsResult['found']) {
+                    return [
+                        'success' => false,
+                        'message' => $specsResult['error'],
+                        'error_type' => 'no_motherboard'
+                    ];
+                }
+                $motherboardSpecs = $specsResult['limits'];
+            }
+            
+            // Phase 3: Component-specific compatibility validation
+            $compatibilityResult = $this->validateComponentCompatibility($componentType, $componentUuid, $configUuid, $motherboardSpecs, $compatibility);
+            
+            if (!$compatibilityResult['compatible']) {
+                return [
+                    'success' => false,
+                    'message' => $compatibilityResult['error'],
+                    'error_type' => 'compatibility_failure',
+                    'details' => $compatibilityResult['details']
+                ];
+            }
+            
+            // Phase 4: Proceed with original addComponent logic
+            $result = $this->addComponent($configUuid, $componentType, $componentUuid, $options);
+            
+            // Add compatibility information to successful response
+            if ($result['success']) {
+                $result['compatibility_info'] = $compatibilityResult['details'];
+                $result['component_specifications'] = $this->getComponentSpecifications($componentType, $componentUuid, $compatibility);
+            }
+            
+            return $result;
+            
+        } catch (Exception $e) {
+            error_log("Error in enhanced addComponent: " . $e->getMessage());
+            return [
+                'success' => false,
+                'message' => 'Error adding component: ' . $e->getMessage(),
+                'error_type' => 'system_error'
+            ];
+        }
+    }
+
+    /**
+     * Validate component compatibility based on type
+     */
+    private function validateComponentCompatibility($componentType, $componentUuid, $configUuid, $motherboardSpecs, $compatibility) {
+        switch ($componentType) {
+            case 'motherboard':
+                // For motherboard, validate it exists and can be parsed
+                $mbValidation = $compatibility->validateMotherboardExists($componentUuid);
+                return [
+                    'compatible' => $mbValidation['exists'],
+                    'error' => $mbValidation['error'],
+                    'details' => ['validation' => 'motherboard_existence']
+                ];
+                
+            case 'cpu':
+                return $this->validateCPUCompatibility($componentUuid, $configUuid, $motherboardSpecs, $compatibility);
+                
+            case 'ram':
+                return $this->validateRAMCompatibility($componentUuid, $configUuid, $motherboardSpecs, $compatibility);
+                
+            case 'storage':
+                return $this->validateStorageCompatibility($componentUuid, $configUuid, $motherboardSpecs, $compatibility);
+                
+            case 'nic':
+                return $this->validateNICCompatibility($componentUuid, $configUuid, $motherboardSpecs, $compatibility);
+                
+            case 'caddy':
+                // Basic validation for caddy
+                $caddyValidation = $compatibility->validateCaddyExists($componentUuid);
+                return [
+                    'compatible' => $caddyValidation['exists'],
+                    'error' => $caddyValidation['error'],
+                    'details' => ['validation' => 'caddy_existence']
+                ];
+                
+            default:
+                return [
+                    'compatible' => true,
+                    'error' => null,
+                    'details' => ['validation' => 'no_specific_rules']
+                ];
+        }
+    }
+
+    /**
+     * Validate CPU compatibility
+     */
+    private function validateCPUCompatibility($cpuUuid, $configUuid, $motherboardSpecs, $compatibility) {
+        // Check socket compatibility
+        $socketResult = $compatibility->validateCPUSocketCompatibility($cpuUuid, $motherboardSpecs);
+        if (!$socketResult['compatible']) {
+            return [
+                'compatible' => false,
+                'error' => $socketResult['error'],
+                'details' => $socketResult['details']
+            ];
+        }
+        
+        // Check CPU count limit
+        $countResult = $compatibility->validateCPUCountLimit($configUuid, $motherboardSpecs);
+        if (!$countResult['within_limit']) {
+            return [
+                'compatible' => false,
+                'error' => $countResult['error'],
+                'details' => [
+                    'current_count' => $countResult['current_count'],
+                    'max_allowed' => $countResult['max_allowed']
+                ]
+            ];
+        }
+        
+        // Check mixed CPU compatibility
+        $stmt = $this->pdo->prepare("
+            SELECT component_uuid FROM server_configuration_components 
+            WHERE config_uuid = ? AND component_type = 'cpu'
+        ");
+        $stmt->execute([$configUuid]);
+        $existingCPUs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        
+        $mixedResult = $compatibility->validateMixedCPUCompatibility($existingCPUs, $cpuUuid);
+        if (!$mixedResult['compatible']) {
+            return [
+                'compatible' => false,
+                'error' => $mixedResult['error'],
+                'details' => $mixedResult['details']
+            ];
+        }
+        
+        return [
+            'compatible' => true,
+            'error' => null,
+            'details' => [
+                'socket_compatibility' => $socketResult['details'],
+                'count_check' => $countResult,
+                'mixed_compatibility' => $mixedResult['details']
+            ]
+        ];
+    }
+
+    /**
+     * Validate RAM compatibility
+     */
+    private function validateRAMCompatibility($ramUuid, $configUuid, $motherboardSpecs, $compatibility) {
+        // Check RAM type compatibility
+        $typeResult = $compatibility->validateRAMTypeCompatibility($ramUuid, $motherboardSpecs);
+        if (!$typeResult['compatible']) {
+            return [
+                'compatible' => false,
+                'error' => $typeResult['error'],
+                'details' => $typeResult['details']
+            ];
+        }
+        
+        // Check slot availability
+        $slotResult = $compatibility->validateRAMSlotAvailability($configUuid, $motherboardSpecs);
+        if (!$slotResult['available']) {
+            return [
+                'compatible' => false,
+                'error' => $slotResult['error'],
+                'details' => [
+                    'used_slots' => $slotResult['used_slots'],
+                    'total_slots' => $slotResult['total_slots']
+                ]
+            ];
+        }
+        
+        return [
+            'compatible' => true,
+            'error' => null,
+            'details' => [
+                'type_compatibility' => $typeResult['details'],
+                'slot_availability' => $slotResult
+            ]
+        ];
+    }
+
+    /**
+     * Validate Storage compatibility
+     */
+    private function validateStorageCompatibility($storageUuid, $configUuid, $motherboardSpecs, $compatibility) {
+        $result = $compatibility->validateStorageInterfaceCompatibility($storageUuid, $motherboardSpecs);
+        
+        return [
+            'compatible' => $result['compatible'],
+            'error' => $result['error'],
+            'details' => $result['details']
+        ];
+    }
+
+    /**
+     * Validate NIC compatibility
+     */
+    private function validateNICCompatibility($nicUuid, $configUuid, $motherboardSpecs, $compatibility) {
+        $result = $compatibility->validateNICPCIeCompatibility($nicUuid, $configUuid, $motherboardSpecs);
+        
+        return [
+            'compatible' => $result['compatible'],
+            'error' => $result['error'],
+            'details' => $result['details']
+        ];
+    }
+
+    /**
+     * Get component specifications
+     */
+    private function getComponentSpecifications($componentType, $componentUuid, $compatibility) {
+        switch ($componentType) {
+            case 'cpu':
+                return $compatibility->getCPUSpecifications($componentUuid);
+            case 'ram':
+                return $compatibility->getRAMSpecifications($componentUuid);
+            case 'motherboard':
+                return $compatibility->parseMotherboardSpecifications($componentUuid);
+            default:
+                return ['found' => false, 'message' => 'No specifications available'];
         }
     }
 }

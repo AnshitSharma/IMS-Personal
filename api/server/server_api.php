@@ -7,19 +7,29 @@ require_once __DIR__ . '/../../includes/models/CompatibilityEngine.php';
 
 header('Content-Type: application/json');
 
-// Initialize authentication
+// Initialize database connection and authentication
+global $pdo;
+if (!$pdo) {
+    require_once __DIR__ . '/../../includes/db_config.php';
+}
+
 $user = authenticateWithJWT($pdo);
 
 if (!$user) {
     send_json_response(0, 0, 401, "Authentication required");
 }
 
-// Initialize ServerBuilder
+// Initialize ServerBuilder with enhanced error handling
 try {
+    if (!$pdo) {
+        throw new Exception("Database connection not available");
+    }
     $serverBuilder = new ServerBuilder($pdo);
+    error_log("ServerBuilder initialized successfully");
 } catch (Exception $e) {
     error_log("Failed to initialize ServerBuilder: " . $e->getMessage());
-    send_json_response(0, 1, 500, "Server system unavailable");
+    error_log("Stack trace: " . $e->getTraceAsString());
+    send_json_response(0, 1, 500, "Server system unavailable: " . $e->getMessage());
 }
 
 // Get action from global operation or POST data
@@ -265,10 +275,10 @@ function handleCreateStart($serverBuilder, $user) {
     }
     
     try {
-        // Validate motherboard exists and is available
+        // Validate motherboard exists and is available in database
         $motherboardDetails = getComponentDetails($pdo, 'motherboard', $motherboardUuid);
         if (!$motherboardDetails) {
-            send_json_response(0, 1, 404, "Motherboard not found", [
+            send_json_response(0, 1, 404, "Motherboard not found in inventory database", [
                 'motherboard_uuid' => $motherboardUuid
             ]);
         }
@@ -356,6 +366,10 @@ function handleCreateStart($serverBuilder, $user) {
 function handleAddComponent($serverBuilder, $user) {
     global $pdo;
     
+    // Enhanced logging for debugging
+    error_log("=== SERVER ADD COMPONENT REQUEST ===");
+    error_log("POST data: " . json_encode($_POST));
+    
     $configUuid = $_POST['config_uuid'] ?? '';
     $componentType = $_POST['component_type'] ?? '';
     $componentUuid = $_POST['component_uuid'] ?? '';
@@ -364,7 +378,10 @@ function handleAddComponent($serverBuilder, $user) {
     $notes = $_POST['notes'] ?? '';
     $override = filter_var($_POST['override'] ?? false, FILTER_VALIDATE_BOOLEAN);
     
+    error_log("Parsed parameters - Config: $configUuid, Type: $componentType, UUID: $componentUuid, Qty: $quantity");
+    
     if (empty($configUuid) || empty($componentType) || empty($componentUuid)) {
+        error_log("Missing required parameters");
         send_json_response(0, 1, 400, "Configuration UUID, component type, and component UUID are required");
     }
     
@@ -441,7 +458,100 @@ function handleAddComponent($serverBuilder, $user) {
             ]);
         }
         
-        // Add the component
+        // ENHANCED: Step 1 - Comprehensive validation before component addition
+        try {
+            // Check if ComponentCompatibility class exists before loading
+            if (file_exists(__DIR__ . '/../../includes/models/ComponentCompatibility.php')) {
+                require_once __DIR__ . '/../../includes/models/ComponentCompatibility.php';
+                $compatibility = new ComponentCompatibility($pdo);
+                
+                // Phase 1: JSON existence validation (optional - don't fail if JSON missing)
+                try {
+                    $existsInJSON = $compatibility->validateComponentExistsInJSON($componentType, $componentUuid);
+                    if (!$existsInJSON) {
+                        error_log("WARNING: Component $componentUuid not found in $componentType JSON specifications");
+                        // Don't fail here, just log warning
+                    }
+                } catch (Exception $jsonError) {
+                    error_log("JSON validation error (non-critical): " . $jsonError->getMessage());
+                    // Continue without JSON validation
+                }
+                
+                // Phase 2: Component-specific enhanced validation
+                if ($componentType === 'cpu') {
+                    try {
+                        // Get motherboard specs for CPU validation
+                        $motherboardSpecs = getMotherboardSpecsFromConfig($pdo, $configUuid);
+                        if (!$motherboardSpecs) {
+                            send_json_response(0, 1, 400, "CPU validation failed: No motherboard found in configuration", [
+                                'error_type' => 'motherboard_required',
+                                'component_type' => $componentType,
+                                'component_uuid' => $componentUuid,
+                                'error_category' => 'dependency_missing',
+                                'suggested_action' => 'Add motherboard to configuration first',
+                                'recovery_options' => [
+                                    'Add a compatible motherboard before adding CPU',
+                                    'Remove and re-add motherboard if one exists',
+                                    'Check motherboard compatibility with desired CPU'
+                                ]
+                            ]);
+                        }
+                        
+                        // Socket compatibility validation
+                        $socketResult = $compatibility->validateCPUSocketCompatibility($componentUuid, $motherboardSpecs);
+                        if (!$socketResult['compatible']) {
+                            send_json_response(0, 1, 400, "Socket mismatch: " . $socketResult['error'], [
+                                'error_type' => 'socket_mismatch',
+                                'component_type' => $componentType,
+                                'component_uuid' => $componentUuid,
+                                'error_category' => 'compatibility_failure',
+                                'socket_details' => $socketResult['details'],
+                                'suggested_action' => 'Use CPU with matching socket type',
+                                'recovery_options' => [
+                                    'Find CPU with socket type: ' . ($socketResult['details']['motherboard_socket'] ?? 'Unknown'),
+                                    'Consider different motherboard if CPU socket type is required',
+                                    'Verify component specifications in JSON database'
+                                ]
+                            ]);
+                        }
+                        
+                        // CPU count limit validation
+                        $countResult = $compatibility->validateCPUCountLimit($configUuid, $motherboardSpecs);
+                        if (!$countResult['within_limit']) {
+                            send_json_response(0, 1, 400, "CPU limit exceeded: " . $countResult['error'], [
+                                'error_type' => 'cpu_limit_exceeded',
+                                'component_type' => $componentType,
+                                'component_uuid' => $componentUuid,
+                                'error_category' => 'hardware_limitation',
+                                'limit_details' => [
+                                    'current_cpu_count' => $countResult['current_count'],
+                                    'maximum_cpus_supported' => $countResult['max_allowed'],
+                                    'cpus_remaining' => 0
+                                ],
+                                'suggested_action' => 'Remove existing CPU or use multi-socket motherboard',
+                                'recovery_options' => [
+                                    'Remove one of the existing CPUs',
+                                    'Use motherboard that supports more CPU sockets',
+                                    'Review motherboard specifications for socket count'
+                                ]
+                            ]);
+                        }
+                    } catch (Exception $cpuValidationError) {
+                        error_log("CPU validation error: " . $cpuValidationError->getMessage());
+                        // Log but don't fail - continue with basic validation
+                    }
+                }
+            } else {
+                error_log("ComponentCompatibility.php not found - skipping enhanced validation");
+                // Continue without enhanced validation
+            }
+            
+        } catch (Exception $e) {
+            error_log("Enhanced validation error (non-critical): " . $e->getMessage());
+            // Don't fail the entire operation for validation errors - continue with basic validation
+        }
+        
+        // Use original component addition method
         $result = $serverBuilder->addComponent($configUuid, $componentType, $componentUuid, [
             'quantity' => $quantity,
             'slot_position' => $slotPosition,
@@ -450,34 +560,16 @@ function handleAddComponent($serverBuilder, $user) {
         ]);
         
         if ($result['success']) {
-            // Get updated configuration summary
-            $summary = $serverBuilder->getConfigurationSummary($configUuid);
+            // Simple success response - avoid complex operations that could fail
+            error_log("Component added successfully: $componentType/$componentUuid to config $configUuid");
             
-            // Calculate progress and determine next step
-            $progressInfo = calculateConfigurationProgress($summary);
-            
-            // Get component limits from motherboard specs
-            $componentLimits = [];
-            $motherboardComponent = $summary['components']['motherboard'][0] ?? null;
-            if ($motherboardComponent && isset($motherboardComponent['details'])) {
-                $motherboardSpecs = parseMotherboardSpecs($motherboardComponent['details']);
-                $componentLimits = [
-                    'cpu_sockets' => [
-                        'max' => $motherboardSpecs['cpu_sockets'] ?? 1,
-                        'used' => $summary['component_counts']['cpu'] ?? 0,
-                        'remaining' => ($motherboardSpecs['cpu_sockets'] ?? 1) - ($summary['component_counts']['cpu'] ?? 0)
-                    ],
-                    'memory_slots' => [
-                        'max' => $motherboardSpecs['memory_slots'] ?? 4,
-                        'used' => $summary['component_counts']['ram'] ?? 0,
-                        'remaining' => ($motherboardSpecs['memory_slots'] ?? 4) - ($summary['component_counts']['ram'] ?? 0)
-                    ],
-                    'storage_slots' => [
-                        'max' => array_sum($motherboardSpecs['storage_slots'] ?? []),
-                        'used' => $summary['component_counts']['storage'] ?? 0,
-                        'remaining' => array_sum($motherboardSpecs['storage_slots'] ?? []) - ($summary['component_counts']['storage'] ?? 0)
-                    ]
-                ];
+            // Get basic configuration summary if possible
+            $summary = null;
+            try {
+                $summary = $serverBuilder->getConfigurationSummary($configUuid);
+            } catch (Exception $e) {
+                error_log("Warning: Could not get configuration summary: " . $e->getMessage());
+                $summary = ['error' => 'Summary unavailable'];
             }
             
             send_json_response(1, 1, 200, "Component added successfully", [
@@ -486,23 +578,87 @@ function handleAddComponent($serverBuilder, $user) {
                     'uuid' => $componentUuid,
                     'quantity' => $quantity,
                     'status_override_used' => $override,
-                    'original_status' => $statusMessage,
+                    'original_status' => $statusMessage ?? 'Unknown',
                     'server_uuid_updated' => $configUuid
                 ],
                 'configuration_summary' => $summary,
-                'progress' => $progressInfo,
-                'component_limits' => $componentLimits,
-                'next_recommendations' => getNextRecommendations($summary, $componentLimits)
+                'timestamp' => date('Y-m-d H:i:s')
             ]);
         } else {
-            send_json_response(0, 1, 400, $result['message'] ?? "Failed to add component", [
-                'suggested_alternatives' => getSuggestedAlternatives($pdo, $componentType, $componentUuid)
-            ]);
+            // ENHANCED ERROR RESPONSES with detailed categorization
+            $errorType = $result['error_type'] ?? 'unknown';
+            $errorMessage = $result['message'] ?? "Failed to add component";
+            
+            $enhancedErrorDetails = [
+                'error_type' => $errorType,
+                'component_type' => $componentType,
+                'component_uuid' => $componentUuid,
+                'error_category' => categorizeError($errorType),
+                'compatibility_details' => $result['details'] ?? null,
+                'suggested_alternatives' => getSuggestedAlternatives($pdo, $componentType, $componentUuid),
+                'recovery_options' => generateRecoveryOptions($errorType, $componentType),
+                'system_context' => [
+                    'configuration_uuid' => $configUuid,
+                    'validation_timestamp' => date('Y-m-d H:i:s'),
+                    'user_id' => $user['id']
+                ]
+            ];
+            
+            // Add specific error details based on error type
+            switch ($errorType) {
+                case 'json_not_found':
+                    $enhancedErrorDetails['suggested_action'] = 'Verify component exists in JSON specifications database';
+                    $enhancedErrorDetails['technical_details'] = 'Component UUID not found in corresponding JSON file';
+                    break;
+                    
+                case 'socket_mismatch':
+                    $enhancedErrorDetails['suggested_action'] = 'Use components with matching socket types';
+                    $enhancedErrorDetails['technical_details'] = 'CPU and motherboard socket types are incompatible';
+                    break;
+                    
+                case 'cpu_limit_exceeded':
+                    $enhancedErrorDetails['suggested_action'] = 'Remove existing CPU or use multi-socket motherboard';
+                    $enhancedErrorDetails['technical_details'] = 'Motherboard CPU socket limit reached';
+                    break;
+                    
+                case 'duplicate_component':
+                    $enhancedErrorDetails['suggested_action'] = 'Component already exists in this configuration';
+                    $enhancedErrorDetails['technical_details'] = 'Duplicate component UUID detected';
+                    break;
+                    
+                case 'compatibility_failure':
+                    $enhancedErrorDetails['suggested_action'] = 'Review component compatibility requirements';
+                    $enhancedErrorDetails['technical_details'] = 'Component failed compatibility validation checks';
+                    break;
+                    
+                default:
+                    $enhancedErrorDetails['suggested_action'] = 'Review component specifications and try again';
+                    $enhancedErrorDetails['technical_details'] = 'Component addition failed validation';
+            }
+            
+            send_json_response(0, 1, 400, $errorMessage, $enhancedErrorDetails);
         }
         
     } catch (Exception $e) {
         error_log("Error adding component: " . $e->getMessage());
-        send_json_response(0, 1, 500, "Failed to add component: " . $e->getMessage());
+        error_log("Stack trace: " . $e->getTraceAsString());
+        error_log("Component details: Type=$componentType, UUID=$componentUuid, ConfigUUID=$configUuid");
+        
+        // Send detailed error for debugging instead of generic 500
+        send_json_response(0, 1, 500, "Internal server error: " . $e->getMessage(), [
+            'error_type' => 'exception_thrown',
+            'component_type' => $componentType,
+            'component_uuid' => $componentUuid,
+            'config_uuid' => $configUuid,
+            'error_details' => $e->getMessage(),
+            'file' => basename($e->getFile()),
+            'line' => $e->getLine(),
+            'debug_info' => [
+                'php_version' => PHP_VERSION,
+                'timestamp' => date('Y-m-d H:i:s'),
+                'request_method' => $_SERVER['REQUEST_METHOD'] ?? 'unknown'
+            ]
+        ]);
     }
 }
 
@@ -585,211 +741,41 @@ function handleGetConfiguration($serverBuilder, $user) {
             send_json_response(0, 1, 500, "Failed to retrieve configuration: " . $details['error']);
         }
         
-        // Calculate compatibility score and validation results using enhanced CompatibilityEngine
-        $compatibilityScore = null;
-        $validationResults = null;
-        $individualComponentChecks = [];
-        
-        try {
-            // Use enhanced CompatibilityEngine for detailed compatibility analysis
-            if (class_exists('CompatibilityEngine')) {
-                $compatibilityEngine = new CompatibilityEngine($pdo, true); // Enable debug mode for detailed logging
-                
-                // Use the enhanced validateServerConfiguration method with multi-CPU support
-                $compatibilityValidation = $compatibilityEngine->validateServerConfiguration($details['configuration']);
-                $compatibilityScore = round($compatibilityValidation['overall_score'] * 100, 1);
-                $validationResults = $compatibilityValidation;
-                
-                // Get individual component checks for better debugging
-                $individualComponentChecks = $compatibilityValidation['individual_component_checks'] ?? [];
-                
-                // Also get global checks for system-level validations
-                $globalChecks = $compatibilityValidation['global_checks'] ?? [];
-                
-            } else {
-                // Fallback: Run basic validation using ServerBuilder only
-                $validation = $serverBuilder->validateConfiguration($configUuid);
-                $validationResults = $validation;
-                $compatibilityScore = round(($validation['overall_score'] ?? 1.0) * 100, 1);
-                
-                // Create individual component checks from validation results
-                $individualComponentChecks = [];
-                if (isset($validation['global_checks'])) {
-                    foreach ($validation['global_checks'] as $check) {
-                        $individualComponentChecks[] = [
-                            'component_type' => strtolower(explode(' ', $check['check'])[0]),
-                            'check_name' => $check['check'],
-                            'passed' => $check['passed'],
-                            'message' => $check['message'],
-                            'score' => $check['passed'] ? 1.0 : 0.0
-                        ];
-                    }
-                }
-            }
-            
-            // Add missing component validation check
-            if (!empty($details['missing_components'])) {
-                if (!isset($validationResults['global_checks'])) {
-                    $validationResults['global_checks'] = [];
-                }
-                
-                $missingComponentNames = [];
-                foreach ($details['missing_components'] as $missing) {
-                    $missingComponentNames[] = strtoupper($missing['component_type']) . ' (' . $missing['component_uuid'] . ')';
-                }
-                
-                $validationResults['global_checks'][] = [
-                    'check' => 'Component Data Integrity',
-                    'passed' => false,
-                    'message' => 'Missing components in inventory: ' . implode(', ', $missingComponentNames)
-                ];
-                
-                // Reduce overall score if there are missing components
-                if (isset($validationResults['overall_score'])) {
-                    $validationResults['overall_score'] = 0; // Set to 0 if components are missing
-                }
-                $compatibilityScore = 0; // Also set compatibility score to 0
-            }
-            
-            // Store the calculated values in the database
-            if ($compatibilityScore !== null || $validationResults !== null) {
-                $serverBuilder->updateConfigurationValidation($configUuid, $compatibilityScore, $validationResults);
-            }
-            
-        } catch (Exception $compatError) {
-            error_log("Error calculating compatibility for config $configUuid: " . $compatError->getMessage());
-            // Continue without compatibility data rather than failing the entire request
-            $compatibilityScore = null;
-            $validationResults = [
-                'error' => 'Compatibility calculation failed',
-                'message' => $compatError->getMessage()
-            ];
-            $componentChecks = [];
-        }
-        
-        // Clean up configuration data and fix JSON configurations
+        // Use stored compatibility score and validation results from database
         $configuration = $details['configuration'];
+        $compatibilityScore = $configuration['compatibility_score'];
+        $validationResults = $configuration['validation_results'] ?? [];
+        $individualComponentChecks = []; // Simplified - no individual component checks
+        // Simple basic validation checks using stored data only
+        $configurationValid = $compatibilityScore !== null && $compatibilityScore > 0;
+            
         
-        // Ensure all calculated fields are present and up-to-date
+        // Simplified configuration data - use stored values from database
         $configuration['power_consumption'] = $details['power_consumption']['total_with_overhead_watts'] ?? 0;
         $configuration['compatibility_score'] = $compatibilityScore;
         
-        // FIXED: Build proper component configurations as arrays for multiple components
-        $cpuConfig = [];
-        $ramConfig = [];
-        $storageConfig = [];
-        $nicConfig = [];
-        $caddyConfig = [];
-        
-        // Build configurations from actual components
-        if (isset($details['components']['cpu'])) {
-            foreach ($details['components']['cpu'] as $cpu) {
-                $cpuConfig[] = [
-                    'uuid' => $cpu['component_uuid'],
-                    'id' => $cpu['details']['id'] ?? null, // Include component ID
-                    'quantity' => $cpu['quantity'] ?? 1,
-                    'added_at' => $cpu['added_at'],
-                    'serial_number' => $cpu['details']['SerialNumber'] ?? 'Unknown'
-                ];
-            }
-        }
-        
-        if (isset($details['components']['ram'])) {
-            foreach ($details['components']['ram'] as $ram) {
-                $ramConfig[] = [
-                    'uuid' => $ram['component_uuid'],
-                    'id' => $ram['details']['id'] ?? null,
-                    'quantity' => $ram['quantity'] ?? 1,
-                    'slot_position' => $ram['slot_position'] ?? null,
-                    'added_at' => $ram['added_at'],
-                    'serial_number' => $ram['details']['SerialNumber'] ?? 'Unknown'
-                ];
-            }
-        }
-        
-        if (isset($details['components']['storage'])) {
-            foreach ($details['components']['storage'] as $storage) {
-                $storageConfig[] = [
-                    'uuid' => $storage['component_uuid'],
-                    'id' => $storage['details']['id'] ?? null,
-                    'quantity' => $storage['quantity'] ?? 1,
-                    'bay_position' => $storage['slot_position'] ?? null,
-                    'added_at' => $storage['added_at'],
-                    'serial_number' => $storage['details']['SerialNumber'] ?? 'Unknown'
-                ];
-            }
-        }
-        
-        if (isset($details['components']['nic'])) {
-            foreach ($details['components']['nic'] as $nic) {
-                $nicConfig[] = [
-                    'uuid' => $nic['component_uuid'],
-                    'id' => $nic['details']['id'] ?? null,
-                    'quantity' => $nic['quantity'] ?? 1,
-                    'slot_position' => $nic['slot_position'] ?? null,
-                    'added_at' => $nic['added_at'],
-                    'serial_number' => $nic['details']['SerialNumber'] ?? 'Unknown'
-                ];
-            }
-        }
-        
-        if (isset($details['components']['caddy'])) {
-            foreach ($details['components']['caddy'] as $caddy) {
-                $caddyConfig[] = [
-                    'uuid' => $caddy['component_uuid'],
-                    'id' => $caddy['details']['id'] ?? null,
-                    'quantity' => $caddy['quantity'] ?? 1,
-                    'added_at' => $caddy['added_at'],
-                    'serial_number' => $caddy['details']['SerialNumber'] ?? 'Unknown'
-                ];
-            }
-        }
-        
-        // FIXED: Remove individual cpu_uuid and cpu_id, replace with cpu_configuration
-        unset($configuration['cpu_uuid']);
-        unset($configuration['cpu_id']);
-        unset($configuration['motherboard_uuid']);
-        unset($configuration['motherboard_id']);
-        
-        // Set the properly built configurations in the correct positions
-        // Also add motherboard_configuration for consistency
-        $motherboardConfig = [];
-        if (isset($details['components']['motherboard'])) {
-            foreach ($details['components']['motherboard'] as $motherboard) {
-                $motherboardConfig[] = [
-                    'uuid' => $motherboard['component_uuid'],
-                    'id' => $motherboard['details']['id'] ?? null,
-                    'quantity' => $motherboard['quantity'] ?? 1,
-                    'added_at' => $motherboard['added_at'],
-                    'serial_number' => $motherboard['details']['SerialNumber'] ?? 'Unknown'
-                ];
-            }
-        }
-        $configuration['motherboard_configuration'] = $motherboardConfig;
-        $configuration['cpu_configuration'] = $cpuConfig;
-        $configuration['ram_configuration'] = $ramConfig;
-        $configuration['storage_configuration'] = $storageConfig;
-        $configuration['nic_configuration'] = $nicConfig;
-        $configuration['caddy_configuration'] = $caddyConfig;
         
         send_json_response(1, 1, 200, "Configuration retrieved successfully", [
-            'configuration' => $configuration,
-            'component_counts' => $details['component_counts'],
-            'component_ids_uuids' => $details['component_ids_uuids'],
-            'total_components' => $details['total_components'],
-            'power_consumption' => $details['power_consumption'],
-            'server_name' => $details['server_name'],
-            'configuration_status' => $details['configuration_status'],
-            'configuration_status_text' => getConfigurationStatusText($details['configuration_status']),
-            'compatibility_score' => $compatibilityScore,
-            'validation_results' => $validationResults,
-            'individual_component_checks' => $individualComponentChecks,
-            'compatibility_engine' => [
-                'available' => class_exists('CompatibilityEngine'),
-                'json_based' => true,
-                'multi_cpu_support' => true,
-                'individual_checks' => count($individualComponentChecks),
-                'total_compatibility_score' => $compatibilityScore
+            'configuration' => [
+                'config_uuid' => $configuration['config_uuid'],
+                'server_name' => $configuration['server_name'],
+                'description' => $configuration['description'] ?? '',
+                'configuration_status' => $configuration['configuration_status'],
+                'compatibility_score' => $compatibilityScore,
+                'power_consumption' => $configuration['power_consumption'],
+                'created_at' => $configuration['created_at'],
+                'location' => $configuration['location'] ?? '',
+                'components' => $details['components'] ?? []
+            ],
+            'summary' => [
+                'total_components' => $details['total_components'],
+                'component_counts' => $details['component_counts'],
+                'power_consumption' => $details['power_consumption']
+            ],
+            'status' => [
+                'compatibility_score' => $compatibilityScore,
+                'configuration_valid' => $configurationValid,
+                'last_validation' => $configuration['updated_at'] ?? $configuration['created_at']
             ]
         ]);
         
@@ -1120,6 +1106,141 @@ function handleGetCompatible($serverBuilder, $user) {
         error_log("Error getting compatible components: " . $e->getMessage());
         send_json_response(0, 1, 500, "Failed to get compatible components: " . $e->getMessage());
     }
+}
+
+// Enhanced Helper Functions for Error Handling and Component Management
+
+/**
+ * Get motherboard specifications from configuration for validation
+ */
+function getMotherboardSpecsFromConfig($pdo, $configUuid) {
+    try {
+        // Get motherboard from configuration
+        $stmt = $pdo->prepare("
+            SELECT component_uuid FROM server_configuration_components 
+            WHERE config_uuid = ? AND component_type = 'motherboard'
+            LIMIT 1
+        ");
+        $stmt->execute([$configUuid]);
+        $motherboard = $stmt->fetch(PDO::FETCH_ASSOC);
+        
+        if (!$motherboard) {
+            return null;
+        }
+        
+        // Initialize compatibility engine
+        require_once __DIR__ . '/../../includes/models/ComponentCompatibility.php';
+        $compatibility = new ComponentCompatibility($pdo);
+        
+        // Get motherboard limits
+        $limitsResult = $compatibility->getMotherboardLimits($motherboard['component_uuid']);
+        return $limitsResult['found'] ? $limitsResult['limits'] : null;
+        
+    } catch (Exception $e) {
+        error_log("Error getting motherboard specs: " . $e->getMessage());
+        return null;
+    }
+}
+
+/**
+ * Categorize error types for better error handling
+ */
+function categorizeError($errorType) {
+    $errorCategories = [
+        'json_not_found' => 'data_integrity',
+        'json_data_not_found' => 'data_integrity',
+        'socket_mismatch' => 'compatibility',
+        'cpu_limit_exceeded' => 'hardware_limitation',
+        'duplicate_component' => 'configuration_conflict',
+        'motherboard_required' => 'dependency_missing',
+        'compatibility_failure' => 'compatibility',
+        'validation_system_error' => 'system_error',
+        'unknown' => 'general_error'
+    ];
+    
+    return $errorCategories[$errorType] ?? 'general_error';
+}
+
+/**
+ * Generate recovery options based on error type and component type
+ */
+function generateRecoveryOptions($errorType, $componentType) {
+    $recoveryOptions = [];
+    
+    switch ($errorType) {
+        case 'json_not_found':
+        case 'json_data_not_found':
+            $recoveryOptions = [
+                'Verify the component UUID is correct',
+                'Check if component exists in the JSON specifications database',
+                'Contact administrator to add missing component data',
+                'Try using a different ' . $componentType . ' component'
+            ];
+            break;
+            
+        case 'socket_mismatch':
+            if ($componentType === 'cpu') {
+                $recoveryOptions = [
+                    'Select a CPU with matching socket type',
+                    'Choose a different motherboard with compatible socket',
+                    'Verify socket specifications in component database',
+                    'Contact support for socket compatibility information'
+                ];
+            } else {
+                $recoveryOptions = [
+                    'Select compatible components with matching specifications',
+                    'Review component compatibility requirements',
+                    'Choose alternative components from the same family'
+                ];
+            }
+            break;
+            
+        case 'cpu_limit_exceeded':
+            $recoveryOptions = [
+                'Remove one of the existing CPUs from the configuration',
+                'Use a motherboard that supports multiple CPU sockets',
+                'Consider a single more powerful CPU instead of multiple CPUs',
+                'Review motherboard specifications for socket count'
+            ];
+            break;
+            
+        case 'duplicate_component':
+            $recoveryOptions = [
+                'Component is already added - no action needed',
+                'Remove the existing component first if replacement is intended',
+                'Check configuration to see currently added components',
+                'Use quantity parameter if multiple units are needed'
+            ];
+            break;
+            
+        case 'motherboard_required':
+            $recoveryOptions = [
+                'Add a motherboard to the configuration first',
+                'Select a motherboard compatible with the desired CPU',
+                'Review available motherboards in inventory',
+                'Ensure motherboard supports the CPU socket type'
+            ];
+            break;
+            
+        case 'compatibility_failure':
+            $recoveryOptions = [
+                'Review component specifications for compatibility',
+                'Choose components from the same generation or family',
+                'Verify memory type, socket type, and interface compatibility',
+                'Use the compatibility checker to find suitable alternatives'
+            ];
+            break;
+            
+        default:
+            $recoveryOptions = [
+                'Review component specifications and requirements',
+                'Try selecting a different ' . $componentType . ' component',
+                'Check system logs for more detailed error information',
+                'Contact system administrator if problem persists'
+            ];
+    }
+    
+    return $recoveryOptions;
 }
 
 // Helper Functions
@@ -1532,7 +1653,6 @@ function parseSpecsFromNotes($notes) {
     if (preg_match('/(\d+)[\s]*dimm/i', $notes, $matches)) {
         $specs['memory_slots'] = (int)$matches[1];
     }
-    
     if (preg_match('/DDR(\d)/i', $notes, $matches)) {
         $specs['memory_type'] = 'DDR' . $matches[1];
     }

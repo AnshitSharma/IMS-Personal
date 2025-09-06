@@ -156,8 +156,9 @@
               "brand": "Supermicro",
               "models": ["SuperServer 1029U-TR4", "SuperServer 2029U-TR4"]
             }
-          ]
-          
+          ],
+        "UUID": "545e143b-57b3-419e-86e5-1df6f7aa8fxx"
+
         }
       ]
     },
@@ -286,7 +287,9 @@
               "brand": "Supermicro",
               "models": ["AS-2145GH-TNRT", "AS-2145SH-TNRT"]
             }
-          ]
+          ],
+          "UUID": "d3b5f1c2-9f4e-4c2a-8e6b-7a9f3e2d1c4b"
+          
         }
       ]
     }

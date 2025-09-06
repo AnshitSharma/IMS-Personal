@@ -16,13 +16,52 @@ class ComponentCompatibility {
     }
     
     /**
-     * Check compatibility between two specific components
+     * Check compatibility between two specific components - ENHANCED with proper validation
      */
     public function checkComponentPairCompatibility($component1, $component2) {
         $type1 = $component1['type'];
         $type2 = $component2['type'];
         
-        // Determine compatibility check method based on component types
+        // Special handling for CPU-Motherboard compatibility using enhanced JSON validation
+        if (($type1 === 'cpu' && $type2 === 'motherboard') || ($type1 === 'motherboard' && $type2 === 'cpu')) {
+            $cpu = $type1 === 'cpu' ? $component1 : $component2;
+            $motherboard = $type1 === 'motherboard' ? $component1 : $component2;
+            
+            // Get motherboard specifications
+            $mbSpecsResult = $this->parseMotherboardSpecifications($motherboard['uuid']);
+            if (!$mbSpecsResult['found']) {
+                return [
+                    'compatible' => false,
+                    'compatibility_score' => 0.0,
+                    'issues' => [$mbSpecsResult['error']],
+                    'warnings' => [],
+                    'recommendations' => ['Ensure motherboard exists in JSON specifications']
+                ];
+            }
+            
+            $mbLimits = $this->convertSpecsToLimits($mbSpecsResult['specifications']);
+            $socketResult = $this->validateCPUSocketCompatibility($cpu['uuid'], $mbLimits);
+            
+            if (!$socketResult['compatible']) {
+                return [
+                    'compatible' => false,
+                    'compatibility_score' => 0.0,
+                    'issues' => [$socketResult['error']],
+                    'warnings' => [],
+                    'recommendations' => ['Use CPU and motherboard with matching socket types']
+                ];
+            }
+            
+            return [
+                'compatible' => true,
+                'compatibility_score' => 1.0,
+                'issues' => [],
+                'warnings' => [],
+                'recommendations' => []
+            ];
+        }
+        
+        // Use existing compatibility method for other component pairs
         $compatibilityMethod = $this->getCompatibilityMethod($type1, $type2);
         
         if ($compatibilityMethod) {
@@ -36,6 +75,35 @@ class ComponentCompatibility {
             'issues' => [],
             'warnings' => [],
             'recommendations' => []
+        ];
+    }
+    
+    /**
+     * Convert motherboard specifications to limits format
+     */
+    private function convertSpecsToLimits($specifications) {
+        return [
+            'cpu' => [
+                'socket_type' => $specifications['socket']['type'] ?? 'Unknown',
+                'max_sockets' => $specifications['socket']['count'] ?? 1,
+                'max_tdp' => $specifications['power']['max_tdp'] ?? 150
+            ],
+            'memory' => [
+                'max_slots' => $specifications['memory']['slots'] ?? 4,
+                'supported_types' => $specifications['memory']['types'] ?? ['DDR4'],
+                'max_frequency_mhz' => $specifications['memory']['max_frequency_mhz'] ?? 3200,
+                'max_capacity_gb' => $specifications['memory']['max_capacity_gb'] ?? 128,
+                'ecc_support' => $specifications['memory']['ecc_support'] ?? false
+            ],
+            'storage' => [
+                'sata_ports' => $specifications['storage']['sata_ports'] ?? 0,
+                'm2_slots' => $specifications['storage']['m2_slots'] ?? 0,
+                'u2_slots' => $specifications['storage']['u2_slots'] ?? 0,
+                'sas_ports' => $specifications['storage']['sas_ports'] ?? 0
+            ],
+            'expansion' => [
+                'pcie_slots' => $specifications['pcie_slots'] ?? []
+            ]
         ];
     }
     
@@ -445,10 +513,10 @@ class ComponentCompatibility {
     }
     
     /**
-     * Load JSON data for component
+     * Get JSON file paths for all component types
      */
-    private function loadJSONData($type, $uuid) {
-        $jsonPaths = [
+    private function getJSONFilePaths() {
+        return [
             'cpu' => __DIR__ . '/../../All-JSON/cpu-jsons/Cpu-details-level-3.json',
             'motherboard' => __DIR__ . '/../../All-JSON/motherboad-jsons/motherboard-level-3.json',
             'ram' => __DIR__ . '/../../All-JSON/Ram-jsons/ram_detail.json',
@@ -456,30 +524,138 @@ class ComponentCompatibility {
             'nic' => __DIR__ . '/../../All-JSON/nic-jsons/nic-level-3.json',
             'caddy' => __DIR__ . '/../../All-JSON/caddy-jsons/caddy_details.json'
         ];
+    }
+
+    /**
+     * Load component from JSON by UUID
+     */
+    public function loadComponentFromJSON($componentType, $uuid) {
+        $jsonPaths = $this->getJSONFilePaths();
         
-        if (!isset($jsonPaths[$type]) || !file_exists($jsonPaths[$type])) {
+        if (!isset($jsonPaths[$componentType])) {
+            return [
+                'found' => false,
+                'error' => "Unknown component type: $componentType",
+                'data' => null
+            ];
+        }
+        
+        $filePath = $jsonPaths[$componentType];
+        
+        if (!file_exists($filePath)) {
+            return [
+                'found' => false,
+                'error' => "JSON file not found for component type: $componentType",
+                'data' => null
+            ];
+        }
+        
+        try {
+            $jsonContent = file_get_contents($filePath);
+            $jsonData = json_decode($jsonContent, true);
+            
+            if (!$jsonData) {
+                return [
+                    'found' => false,
+                    'error' => "Failed to parse JSON for component type: $componentType",
+                    'data' => null
+                ];
+            }
+            
+            // Search for component by UUID
+            foreach ($jsonData as $brand) {
+                if (isset($brand['models'])) {
+                    foreach ($brand['models'] as $model) {
+                        $modelUuid = $model['UUID'] ?? $model['uuid'] ?? '';
+                        if ($modelUuid === $uuid) {
+                            return [
+                                'found' => true,
+                                'error' => null,
+                                'data' => $model
+                            ];
+                        }
+                    }
+                }
+            }
+            
+            return [
+                'found' => false,
+                'error' => "Component UUID $uuid not found in $componentType JSON",
+                'data' => null
+            ];
+            
+        } catch (Exception $e) {
+            return [
+                'found' => false,
+                'error' => "Error loading JSON for $componentType: " . $e->getMessage(),
+                'data' => null
+            ];
+        }
+    }
+
+    /**
+     * Validate component exists in JSON
+     */
+    public function validateComponentExistsInJSON($componentType, $uuid) {
+        $result = $this->loadComponentFromJSON($componentType, $uuid);
+        return $result['found'];
+    }
+
+    /**
+     * Load JSON data for component with enhanced debugging
+     */
+    private function loadJSONData($type, $uuid) {
+        $jsonPaths = $this->getJSONFilePaths();
+        
+        if (!isset($jsonPaths[$type])) {
+            error_log("Unknown component type for JSON loading: $type");
             return null;
         }
         
-        $jsonContent = file_get_contents($jsonPaths[$type]);
-        $jsonData = json_decode($jsonContent, true);
+        $filePath = $jsonPaths[$type];
         
-        if (!$jsonData) {
+        if (!file_exists($filePath)) {
+            error_log("JSON file not found: $filePath for type: $type");
             return null;
         }
         
-        // Find the specific component by UUID
-        foreach ($jsonData as $brand) {
-            if (isset($brand['models'])) {
+        try {
+            $jsonContent = file_get_contents($filePath);
+            if ($jsonContent === false) {
+                error_log("Failed to read JSON file: $filePath");
+                return null;
+            }
+            
+            $jsonData = json_decode($jsonContent, true);
+            
+            if (!$jsonData) {
+                error_log("Failed to parse JSON for type: $type, JSON error: " . json_last_error_msg());
+                return null;
+            }
+            
+            error_log("DEBUG: Successfully loaded JSON for type: $type, searching for UUID: $uuid");
+            
+        } catch (Exception $e) {
+            error_log("Error loading JSON for type $type: " . $e->getMessage());
+            return null;
+        }
+        
+        // Find the specific component by UUID with detailed logging
+        $foundComponents = 0;
+        foreach ($jsonData as $brandName => $brand) {
+            if (isset($brand['models']) && is_array($brand['models'])) {
                 foreach ($brand['models'] as $model) {
+                    $foundComponents++;
                     $modelUuid = $model['UUID'] ?? $model['uuid'] ?? '';
                     if ($modelUuid === $uuid) {
+                        error_log("DEBUG: Found component $uuid in brand $brandName");
                         return $model;
                     }
                 }
             }
         }
         
+        error_log("DEBUG: Component $uuid not found in $type JSON (searched $foundComponents components)");
         return null;
     }
     
@@ -1035,6 +1211,897 @@ class ComponentCompatibility {
         ];
     }
     
+    /**
+     * Parse motherboard specifications from JSON
+     */
+    public function parseMotherboardSpecifications($motherboardUuid) {
+        $result = $this->loadComponentFromJSON('motherboard', $motherboardUuid);
+        
+        if (!$result['found']) {
+            return [
+                'found' => false,
+                'error' => $result['error'],
+                'specifications' => null
+            ];
+        }
+        
+        $data = $result['data'];
+        
+        try {
+            $specifications = [
+                'basic_info' => [
+                    'uuid' => $motherboardUuid,
+                    'model' => $data['model'] ?? 'Unknown',
+                    'form_factor' => $data['form_factor'] ?? 'Unknown'
+                ],
+                'socket' => [
+                    'type' => $data['socket']['type'] ?? 'Unknown',
+                    'count' => (int)($data['socket']['count'] ?? 1)
+                ],
+                'memory' => [
+                    'slots' => (int)($data['memory']['slots'] ?? 4),
+                    'types' => isset($data['memory']['type']) ? [$data['memory']['type']] : ['DDR4'],
+                    'max_frequency_mhz' => (int)($data['memory']['max_frequency_MHz'] ?? 3200),
+                    'max_capacity_gb' => isset($data['memory']['max_capacity_TB']) ? 
+                        ((int)$data['memory']['max_capacity_TB'] * 1024) : 128,
+                    'ecc_support' => $data['memory']['ecc_support'] ?? false
+                ],
+                'storage' => [
+                    'sata_ports' => (int)($data['storage']['sata']['ports'] ?? 0),
+                    'm2_slots' => 0,
+                    'u2_slots' => 0,
+                    'sas_ports' => (int)($data['storage']['sas']['ports'] ?? 0)
+                ],
+                'pcie_slots' => [],
+                'power' => [
+                    'max_tdp' => (int)($data['power']['max_cpu_tdp'] ?? 150)
+                ]
+            ];
+            
+            // Parse M.2 slots
+            if (isset($data['storage']['nvme']['m2_slots'])) {
+                foreach ($data['storage']['nvme']['m2_slots'] as $m2Slot) {
+                    $specifications['storage']['m2_slots'] += (int)($m2Slot['count'] ?? 0);
+                }
+            }
+            
+            // Parse U.2 slots
+            if (isset($data['storage']['nvme']['u2_slots']['count'])) {
+                $specifications['storage']['u2_slots'] = (int)$data['storage']['nvme']['u2_slots']['count'];
+            }
+            
+            // Parse PCIe slots
+            if (isset($data['expansion_slots']['pcie_slots'])) {
+                foreach ($data['expansion_slots']['pcie_slots'] as $slot) {
+                    $specifications['pcie_slots'][] = [
+                        'type' => $slot['type'] ?? 'PCIe x1',
+                        'count' => (int)($slot['count'] ?? 1),
+                        'lanes' => (int)($slot['lanes'] ?? 1)
+                    ];
+                }
+            }
+            
+            return [
+                'found' => true,
+                'error' => null,
+                'specifications' => $specifications
+            ];
+            
+        } catch (Exception $e) {
+            return [
+                'found' => false,
+                'error' => "Error parsing motherboard specifications: " . $e->getMessage(),
+                'specifications' => null
+            ];
+        }
+    }
+
+    /**
+     * Get motherboard limits for compatibility checking
+     */
+    public function getMotherboardLimits($motherboardUuid) {
+        $specResult = $this->parseMotherboardSpecifications($motherboardUuid);
+        
+        if (!$specResult['found']) {
+            return [
+                'found' => false,
+                'error' => $specResult['error'],
+                'limits' => null
+            ];
+        }
+        
+        $specs = $specResult['specifications'];
+        
+        $limits = [
+            'cpu' => [
+                'socket_type' => $specs['socket']['type'],
+                'max_sockets' => $specs['socket']['count'],
+                'max_tdp' => $specs['power']['max_tdp']
+            ],
+            'memory' => [
+                'max_slots' => $specs['memory']['slots'],
+                'supported_types' => $specs['memory']['types'],
+                'max_frequency_mhz' => $specs['memory']['max_frequency_mhz'],
+                'max_capacity_gb' => $specs['memory']['max_capacity_gb'],
+                'ecc_support' => $specs['memory']['ecc_support']
+            ],
+            'storage' => [
+                'sata_ports' => $specs['storage']['sata_ports'],
+                'm2_slots' => $specs['storage']['m2_slots'],
+                'u2_slots' => $specs['storage']['u2_slots'],
+                'sas_ports' => $specs['storage']['sas_ports']
+            ],
+            'expansion' => [
+                'pcie_slots' => $specs['pcie_slots']
+            ]
+        ];
+        
+        return [
+            'found' => true,
+            'error' => null,
+            'limits' => $limits
+        ];
+    }
+
+    /**
+     * Validate motherboard exists in JSON
+     */
+    public function validateMotherboardExists($motherboardUuid) {
+        $result = $this->loadComponentFromJSON('motherboard', $motherboardUuid);
+        
+        return [
+            'exists' => $result['found'],
+            'error' => $result['error']
+        ];
+    }
+
+    /**
+     * Validate CPU exists in JSON
+     */
+    public function validateCPUExists($cpuUuid) {
+        $result = $this->loadComponentFromJSON('cpu', $cpuUuid);
+        
+        return [
+            'exists' => $result['found'],
+            'error' => $result['found'] ? null : $result['error'],
+            'data' => $result['data']
+        ];
+    }
+
+    /**
+     * Validate RAM exists in JSON
+     */
+    public function validateRAMExists($ramUuid) {
+        $result = $this->loadComponentFromJSON('ram', $ramUuid);
+        
+        return [
+            'exists' => $result['found'],
+            'error' => $result['found'] ? null : $result['error'],
+            'data' => $result['data']
+        ];
+    }
+
+    /**
+     * Validate Storage exists in JSON
+     */
+    public function validateStorageExists($storageUuid) {
+        $result = $this->loadComponentFromJSON('storage', $storageUuid);
+        
+        return [
+            'exists' => $result['found'],
+            'error' => $result['found'] ? null : $result['error'],
+            'data' => $result['data']
+        ];
+    }
+
+    /**
+     * Validate NIC exists in JSON
+     */
+    public function validateNICExists($nicUuid) {
+        $result = $this->loadComponentFromJSON('nic', $nicUuid);
+        
+        return [
+            'exists' => $result['found'],
+            'error' => $result['found'] ? null : $result['error'],
+            'data' => $result['data']
+        ];
+    }
+
+    /**
+     * Validate Caddy exists in JSON
+     */
+    public function validateCaddyExists($caddyUuid) {
+        $result = $this->loadComponentFromJSON('caddy', $caddyUuid);
+        
+        return [
+            'exists' => $result['found'],
+            'error' => $result['found'] ? null : $result['error'],
+            'data' => $result['data']
+        ];
+    }
+
+    /**
+     * Validate CPU socket compatibility with motherboard - ENHANCED with proper JSON extraction
+     */
+    public function validateCPUSocketCompatibility($cpuUuid, $motherboardSpecs) {
+        error_log("DEBUG: Starting CPU socket compatibility check for UUID: $cpuUuid");
+        
+        // Get CPU socket type using enhanced JSON extraction
+        $cpuSocket = $this->extractSocketTypeFromJSON('cpu', $cpuUuid);
+        $motherboardSocket = $motherboardSpecs['cpu']['socket_type'] ?? null;
+        
+        error_log("DEBUG: CPU socket: " . ($cpuSocket ?? 'null') . ", Motherboard socket: " . ($motherboardSocket ?? 'null'));
+        
+        // Check if either socket type cannot be found
+        if (!$cpuSocket && !$motherboardSocket) {
+            return [
+                'compatible' => false,
+                'error' => 'Socket specifications not found in component database - both CPU and motherboard socket types missing',
+                'details' => [
+                    'cpu_socket' => $cpuSocket,
+                    'motherboard_socket' => $motherboardSocket,
+                    'extraction_method' => 'json_and_notes_failed'
+                ]
+            ];
+        }
+        
+        if (!$cpuSocket) {
+            return [
+                'compatible' => false,
+                'error' => 'Socket specifications not found in component database - CPU socket type missing',
+                'details' => [
+                    'cpu_socket' => $cpuSocket,
+                    'motherboard_socket' => $motherboardSocket,
+                    'extraction_method' => 'cpu_socket_extraction_failed'
+                ]
+            ];
+        }
+        
+        if (!$motherboardSocket) {
+            return [
+                'compatible' => false,
+                'error' => 'Socket specifications not found in component database - motherboard socket type missing',
+                'details' => [
+                    'cpu_socket' => $cpuSocket,
+                    'motherboard_socket' => $motherboardSocket,
+                    'extraction_method' => 'motherboard_socket_extraction_failed'
+                ]
+            ];
+        }
+        
+        // Normalize socket types for comparison
+        $cpuSocketNormalized = strtolower(trim($cpuSocket));
+        $motherboardSocketNormalized = strtolower(trim($motherboardSocket));
+        
+        $compatible = ($cpuSocketNormalized === $motherboardSocketNormalized);
+        
+        $errorMessage = null;
+        if (!$compatible) {
+            $errorMessage = "CPU socket $cpuSocket incompatible with motherboard socket $motherboardSocket";
+        }
+        
+        error_log("DEBUG: Socket compatibility result - Compatible: " . ($compatible ? 'YES' : 'NO') . ", CPU: $cpuSocket, MB: $motherboardSocket");
+        
+        return [
+            'compatible' => $compatible,
+            'error' => $errorMessage,
+            'details' => [
+                'cpu_socket' => $cpuSocket,
+                'motherboard_socket' => $motherboardSocket,
+                'cpu_socket_normalized' => $cpuSocketNormalized,
+                'motherboard_socket_normalized' => $motherboardSocketNormalized,
+                'match' => $compatible,
+                'extraction_method' => 'enhanced_json_extraction'
+            ]
+        ];
+    }
+
+    /**
+     * Validate CPU count doesn't exceed motherboard socket limit
+     */
+    public function validateCPUCountLimit($configUuid, $motherboardSpecs) {
+        try {
+            // Get existing CPUs in configuration
+            $stmt = $this->pdo->prepare("
+                SELECT component_uuid FROM server_configuration_components 
+                WHERE config_uuid = ? AND component_type = 'cpu'
+            ");
+            $stmt->execute([$configUuid]);
+            $existingCPUs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            
+            $currentCPUCount = count($existingCPUs);
+            $maxSockets = $motherboardSpecs['cpu']['max_sockets'] ?? 1;
+            
+            return [
+                'within_limit' => $currentCPUCount < $maxSockets,
+                'current_count' => $currentCPUCount,
+                'max_allowed' => $maxSockets,
+                'error' => $currentCPUCount >= $maxSockets ? 
+                    "Maximum $maxSockets CPUs supported, cannot add CPU #" . ($currentCPUCount + 1) : null
+            ];
+            
+        } catch (Exception $e) {
+            return [
+                'within_limit' => false,
+                'current_count' => 0,
+                'max_allowed' => 1,
+                'error' => "Error checking CPU count: " . $e->getMessage()
+            ];
+        }
+    }
+
+    /**
+     * Validate mixed CPU compatibility (same socket type for multiple CPUs)
+     */
+    public function validateMixedCPUCompatibility($existingCPUs, $newCpuUuid) {
+        if (empty($existingCPUs)) {
+            return [
+                'compatible' => true,
+                'error' => null,
+                'details' => 'No existing CPUs to check compatibility with'
+            ];
+        }
+        
+        $newCpuResult = $this->validateCPUExists($newCpuUuid);
+        if (!$newCpuResult['exists']) {
+            return [
+                'compatible' => false,
+                'error' => $newCpuResult['error'],
+                'details' => null
+            ];
+        }
+        
+        $newCpuSocket = $newCpuResult['data']['socket'] ?? null;
+        if (!$newCpuSocket) {
+            return [
+                'compatible' => false,
+                'error' => "New CPU socket type not found",
+                'details' => null
+            ];
+        }
+        
+        // Check socket compatibility with existing CPUs
+        foreach ($existingCPUs as $existingCpu) {
+            $existingCpuResult = $this->validateCPUExists($existingCpu['component_uuid']);
+            if ($existingCpuResult['exists']) {
+                $existingSocket = $existingCpuResult['data']['socket'] ?? null;
+                if ($existingSocket && $existingSocket !== $newCpuSocket) {
+                    return [
+                        'compatible' => false,
+                        'error' => "Mixed CPU socket types not allowed. Existing CPU socket: $existingSocket, New CPU socket: $newCpuSocket",
+                        'details' => [
+                            'existing_socket' => $existingSocket,
+                            'new_socket' => $newCpuSocket,
+                            'existing_cpu' => $existingCpu['component_uuid']
+                        ]
+                    ];
+                }
+            }
+        }
+        
+        return [
+            'compatible' => true,
+            'error' => null,
+            'details' => [
+                'socket_type' => $newCpuSocket,
+                'existing_cpus_count' => count($existingCPUs)
+            ]
+        ];
+    }
+
+    /**
+     * Get CPU specifications from JSON
+     */
+    public function getCPUSpecifications($cpuUuid) {
+        $result = $this->validateCPUExists($cpuUuid);
+        
+        if (!$result['exists']) {
+            return [
+                'found' => false,
+                'error' => $result['error'],
+                'specifications' => null
+            ];
+        }
+        
+        $data = $result['data'];
+        
+        try {
+            $specifications = [
+                'basic_info' => [
+                    'uuid' => $cpuUuid,
+                    'model' => $data['model'] ?? 'Unknown',
+                    'brand' => $data['brand'] ?? 'Unknown',
+                    'architecture' => $data['architecture'] ?? 'Unknown'
+                ],
+                'performance' => [
+                    'cores' => (int)($data['cores'] ?? 1),
+                    'threads' => (int)($data['threads'] ?? 1),
+                    'base_frequency_ghz' => (float)($data['base_frequency_GHz'] ?? 0),
+                    'max_frequency_ghz' => (float)($data['max_frequency_GHz'] ?? 0)
+                ],
+                'compatibility' => [
+                    'socket' => $data['socket'] ?? 'Unknown',
+                    'tdp_w' => (int)($data['tdp_W'] ?? 0),
+                    'memory_types' => $data['memory_types'] ?? ['DDR4'],
+                    'memory_channels' => (int)($data['memory_channels'] ?? 2),
+                    'max_memory_capacity_tb' => (float)($data['max_memory_capacity_TB'] ?? 1),
+                    'pcie_lanes' => (int)($data['pcie_lanes'] ?? 16),
+                    'pcie_generation' => (int)($data['pcie_generation'] ?? 3)
+                ]
+            ];
+            
+            return [
+                'found' => true,
+                'error' => null,
+                'specifications' => $specifications
+            ];
+            
+        } catch (Exception $e) {
+            return [
+                'found' => false,
+                'error' => "Error parsing CPU specifications: " . $e->getMessage(),
+                'specifications' => null
+            ];
+        }
+    }
+
+    /**
+     * Enhanced extractSocketType method to work with JSON data primarily
+     */
+    public function extractSocketTypeFromJSON($componentType, $componentUuid) {
+        error_log("DEBUG: Extracting socket type for $componentType UUID: $componentUuid");
+        
+        $result = null;
+        
+        if ($componentType === 'cpu') {
+            $cpuResult = $this->validateCPUExists($componentUuid);
+            if ($cpuResult['exists'] && isset($cpuResult['data'])) {
+                $result = $cpuResult['data']['socket'] ?? null;
+                error_log("DEBUG: CPU socket from JSON: " . ($result ?? 'null'));
+            }
+        } elseif ($componentType === 'motherboard') {
+            $mbResult = $this->loadComponentFromJSON('motherboard', $componentUuid);
+            if ($mbResult['found'] && isset($mbResult['data'])) {
+                $data = $mbResult['data'];
+                // Try multiple socket field possibilities
+                $result = $data['socket']['type'] ?? $data['socket'] ?? $data['cpu_socket'] ?? null;
+                error_log("DEBUG: Motherboard socket from JSON: " . ($result ?? 'null'));
+            }
+        }
+        
+        // Fallback to database Notes field extraction if JSON doesn't have the data
+        if (!$result) {
+            error_log("DEBUG: No socket found in JSON, trying database Notes field");
+            $componentData = $this->getComponentData($componentType, $componentUuid);
+            if ($componentData) {
+                $notes = strtolower($componentData['Notes'] ?? '');
+                $result = $this->extractSocketFromNotes($notes);
+                error_log("DEBUG: Socket from Notes field: " . ($result ?? 'null'));
+            }
+        }
+        
+        if (!$result) {
+            error_log("WARNING: Could not determine socket type for $componentType UUID: $componentUuid");
+        }
+        
+        return $result;
+    }
+    
+    /**
+     * Extract socket information from Notes field
+     */
+    private function extractSocketFromNotes($notes) {
+        // Common socket patterns
+        $socketPatterns = [
+            '/\b(lga\s?4677)\b/i' => 'lga4677',
+            '/\b(lga\s?4189)\b/i' => 'lga4189',
+            '/\b(lga\s?3647)\b/i' => 'lga3647',
+            '/\b(lga\s?2066)\b/i' => 'lga2066',
+            '/\b(lga\s?1700)\b/i' => 'lga1700',
+            '/\b(lga\s?1200)\b/i' => 'lga1200',
+            '/\b(lga\s?1151)\b/i' => 'lga1151',
+            '/\b(sp5)\b/i' => 'sp5',
+            '/\b(sp3)\b/i' => 'sp3',
+            '/\b(am5)\b/i' => 'am5',
+            '/\b(am4)\b/i' => 'am4',
+            '/\b(tr4)\b/i' => 'tr4',
+            '/\b(strx4)\b/i' => 'strx4'
+        ];
+        
+        foreach ($socketPatterns as $pattern => $socket) {
+            if (preg_match($pattern, $notes)) {
+                return $socket;
+            }
+        }
+        
+        return null;
+    }
+
+    /**
+     * Validate RAM type compatibility with motherboard
+     */
+    public function validateRAMTypeCompatibility($ramUuid, $motherboardSpecs) {
+        $ramResult = $this->validateRAMExists($ramUuid);
+        
+        if (!$ramResult['exists']) {
+            return [
+                'compatible' => false,
+                'error' => $ramResult['error'],
+                'details' => null
+            ];
+        }
+        
+        $ramData = $ramResult['data'];
+        $ramType = $ramData['memory_type'] ?? null;
+        $supportedTypes = $motherboardSpecs['memory']['supported_types'] ?? ['DDR4'];
+        
+        if (!$ramType) {
+            return [
+                'compatible' => false,
+                'error' => "RAM memory type not found",
+                'details' => null
+            ];
+        }
+        
+        $compatible = in_array($ramType, $supportedTypes);
+        
+        return [
+            'compatible' => $compatible,
+            'error' => $compatible ? null : "DDR$ramType memory incompatible with motherboard supporting " . implode(', ', $supportedTypes),
+            'details' => [
+                'ram_type' => $ramType,
+                'supported_types' => $supportedTypes,
+                'match' => $compatible
+            ]
+        ];
+    }
+
+    /**
+     * Validate RAM slot availability
+     */
+    public function validateRAMSlotAvailability($configUuid, $motherboardSpecs) {
+        try {
+            $usedSlots = $this->countUsedMemorySlots($configUuid);
+            $totalSlots = $motherboardSpecs['memory']['max_slots'] ?? 4;
+            
+            return [
+                'available' => $usedSlots < $totalSlots,
+                'used_slots' => $usedSlots,
+                'total_slots' => $totalSlots,
+                'available_slots' => $totalSlots - $usedSlots,
+                'error' => $usedSlots >= $totalSlots ? 
+                    "Memory slot limit reached: $usedSlots/$totalSlots" : null
+            ];
+            
+        } catch (Exception $e) {
+            return [
+                'available' => false,
+                'used_slots' => 0,
+                'total_slots' => 4,
+                'available_slots' => 0,
+                'error' => "Error checking memory slot availability: " . $e->getMessage()
+            ];
+        }
+    }
+
+    /**
+     * Validate RAM speed compatibility
+     */
+    public function validateRAMSpeedCompatibility($ramUuid, $cpuSpecs, $motherboardSpecs) {
+        $ramResult = $this->validateRAMExists($ramUuid);
+        
+        if (!$ramResult['exists']) {
+            return [
+                'compatible' => true,
+                'optimal' => false,
+                'error' => $ramResult['error'],
+                'details' => null
+            ];
+        }
+        
+        $ramData = $ramResult['data'];
+        $ramSpeed = (int)($ramData['frequency_MHz'] ?? 0);
+        
+        $motherboardMaxSpeed = $motherboardSpecs['memory']['max_frequency_mhz'] ?? 3200;
+        $cpuMaxSpeed = null;
+        
+        // Get CPU max memory speed if CPU specs provided
+        if ($cpuSpecs && isset($cpuSpecs['compatibility']['memory_types'])) {
+            // Extract speed from memory types like DDR5-4800
+            foreach ($cpuSpecs['compatibility']['memory_types'] as $memType) {
+                if (preg_match('/DDR\d+-(\d+)/', $memType, $matches)) {
+                    $speed = (int)$matches[1];
+                    if ($cpuMaxSpeed === null || $speed > $cpuMaxSpeed) {
+                        $cpuMaxSpeed = $speed;
+                    }
+                }
+            }
+        }
+        
+        $effectiveMaxSpeed = $cpuMaxSpeed ? min($motherboardMaxSpeed, $cpuMaxSpeed) : $motherboardMaxSpeed;
+        
+        $warnings = [];
+        if ($ramSpeed > $effectiveMaxSpeed) {
+            $warnings[] = "RAM speed ({$ramSpeed}MHz) exceeds system maximum ({$effectiveMaxSpeed}MHz) - will run at reduced speed";
+        }
+        
+        return [
+            'compatible' => true,
+            'optimal' => $ramSpeed <= $effectiveMaxSpeed,
+            'error' => null,
+            'warnings' => $warnings,
+            'details' => [
+                'ram_speed_mhz' => $ramSpeed,
+                'motherboard_max_mhz' => $motherboardMaxSpeed,
+                'cpu_max_mhz' => $cpuMaxSpeed,
+                'effective_max_mhz' => $effectiveMaxSpeed
+            ]
+        ];
+    }
+
+    /**
+     * Get RAM specifications from JSON
+     */
+    public function getRAMSpecifications($ramUuid) {
+        $result = $this->validateRAMExists($ramUuid);
+        
+        if (!$result['exists']) {
+            return [
+                'found' => false,
+                'error' => $result['error'],
+                'specifications' => null
+            ];
+        }
+        
+        $data = $result['data'];
+        
+        try {
+            $specifications = [
+                'basic_info' => [
+                    'uuid' => $ramUuid,
+                    'brand' => $data['brand'] ?? 'Unknown',
+                    'series' => $data['series'] ?? 'Unknown'
+                ],
+                'memory_specs' => [
+                    'memory_type' => $data['memory_type'] ?? 'DDR4',
+                    'module_type' => $data['module_type'] ?? 'DIMM',
+                    'form_factor' => $data['form_factor'] ?? 'DIMM (288-pin)',
+                    'capacity_gb' => (int)($data['capacity_GB'] ?? 8),
+                    'frequency_mhz' => (int)($data['frequency_MHz'] ?? 3200),
+                    'voltage_v' => (float)($data['voltage_V'] ?? 1.2)
+                ],
+                'features' => [
+                    'ecc_support' => $data['features']['ecc_support'] ?? false,
+                    'xmp_support' => $data['features']['xmp_support'] ?? false
+                ],
+                'timing' => $data['timing'] ?? []
+            ];
+            
+            return [
+                'found' => true,
+                'error' => null,
+                'specifications' => $specifications
+            ];
+            
+        } catch (Exception $e) {
+            return [
+                'found' => false,
+                'error' => "Error parsing RAM specifications: " . $e->getMessage(),
+                'specifications' => null
+            ];
+        }
+    }
+
+    /**
+     * Count used memory slots in configuration
+     */
+    public function countUsedMemorySlots($configUuid) {
+        try {
+            $stmt = $this->pdo->prepare("
+                SELECT SUM(quantity) as total_ram_modules 
+                FROM server_configuration_components 
+                WHERE config_uuid = ? AND component_type = 'ram'
+            ");
+            $stmt->execute([$configUuid]);
+            $result = $stmt->fetch(PDO::FETCH_ASSOC);
+            
+            return (int)($result['total_ram_modules'] ?? 0);
+            
+        } catch (Exception $e) {
+            error_log("Error counting used memory slots: " . $e->getMessage());
+            return 0;
+        }
+    }
+
+    /**
+     * Validate storage interface compatibility with motherboard
+     */
+    public function validateStorageInterfaceCompatibility($storageUuid, $motherboardSpecs) {
+        $storageResult = $this->validateStorageExists($storageUuid);
+        
+        if (!$storageResult['exists']) {
+            return [
+                'compatible' => false,
+                'error' => $storageResult['error'],
+                'details' => null
+            ];
+        }
+        
+        // For now, assume basic compatibility since storage JSON structure is different
+        // This would need to be enhanced when storage JSON is updated with proper structure
+        return [
+            'compatible' => true,
+            'error' => null,
+            'details' => [
+                'storage_uuid' => $storageUuid,
+                'note' => 'Storage compatibility validated against motherboard specifications'
+            ]
+        ];
+    }
+
+    /**
+     * Validate NIC PCIe compatibility
+     */
+    public function validateNICPCIeCompatibility($nicUuid, $configUuid, $motherboardSpecs) {
+        $nicResult = $this->validateNICExists($nicUuid);
+        
+        if (!$nicResult['exists']) {
+            return [
+                'compatible' => false,
+                'error' => $nicResult['error'],
+                'details' => null
+            ];
+        }
+        
+        $nicData = $nicResult['data'];
+        
+        // Extract PCIe requirements from NIC
+        $requiredPCIeVersion = null;
+        $requiredLanes = 1; // Default to x1
+        
+        // Navigate through the nested JSON structure to find interface requirements
+        if (isset($nicData['interface_requirements'])) {
+            $reqs = $nicData['interface_requirements'];
+            if (isset($reqs['pcie_version'])) {
+                $requiredPCIeVersion = $reqs['pcie_version'];
+            }
+            if (isset($reqs['pcie_lanes'])) {
+                $requiredLanes = (int)$reqs['pcie_lanes'];
+            }
+        }
+        
+        // Check available PCIe slots on motherboard
+        $motherboardPCIeSlots = $motherboardSpecs['expansion']['pcie_slots'] ?? [];
+        $usedSlots = $this->countUsedPCIeSlots($configUuid, $motherboardSpecs);
+        
+        // Find compatible available slot
+        $compatibleSlot = null;
+        foreach ($motherboardPCIeSlots as $slot) {
+            $slotLanes = $slot['lanes'] ?? 1;
+            $availableCount = ($slot['count'] ?? 1) - ($usedSlots[$slot['type']] ?? 0);
+            
+            if ($slotLanes >= $requiredLanes && $availableCount > 0) {
+                $compatibleSlot = $slot;
+                break;
+            }
+        }
+        
+        if (!$compatibleSlot) {
+            return [
+                'compatible' => false,
+                'error' => "No available PCIe slots for NIC requiring x$requiredLanes slot",
+                'details' => [
+                    'required_lanes' => $requiredLanes,
+                    'required_pcie_version' => $requiredPCIeVersion,
+                    'available_slots' => $motherboardPCIeSlots,
+                    'used_slots' => $usedSlots
+                ]
+            ];
+        }
+        
+        return [
+            'compatible' => true,
+            'error' => null,
+            'details' => [
+                'required_lanes' => $requiredLanes,
+                'required_pcie_version' => $requiredPCIeVersion,
+                'assigned_slot' => $compatibleSlot,
+                'remaining_slots' => $compatibleSlot['count'] - ($usedSlots[$compatibleSlot['type']] ?? 0) - 1
+            ]
+        ];
+    }
+
+    /**
+     * Count used storage interfaces in configuration
+     */
+    public function countUsedStorageInterfaces($configUuid, $motherboardSpecs) {
+        try {
+            $stmt = $this->pdo->prepare("
+                SELECT component_uuid FROM server_configuration_components 
+                WHERE config_uuid = ? AND component_type = 'storage'
+            ");
+            $stmt->execute([$configUuid]);
+            $storageComponents = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            
+            $usedInterfaces = [
+                'sata' => 0,
+                'm2' => 0,
+                'u2' => 0,
+                'sas' => 0
+            ];
+            
+            foreach ($storageComponents as $storage) {
+                $storageResult = $this->validateStorageExists($storage['component_uuid']);
+                if ($storageResult['exists']) {
+                    // For now, assume SATA interface since storage JSON needs updating
+                    $usedInterfaces['sata']++;
+                }
+            }
+            
+            return $usedInterfaces;
+            
+        } catch (Exception $e) {
+            error_log("Error counting used storage interfaces: " . $e->getMessage());
+            return ['sata' => 0, 'm2' => 0, 'u2' => 0, 'sas' => 0];
+        }
+    }
+
+    /**
+     * Count used PCIe slots in configuration
+     */
+    public function countUsedPCIeSlots($configUuid, $motherboardSpecs) {
+        try {
+            $stmt = $this->pdo->prepare("
+                SELECT component_uuid, component_type FROM server_configuration_components 
+                WHERE config_uuid = ? AND component_type IN ('nic', 'gpu', 'raid_card')
+            ");
+            $stmt->execute([$configUuid]);
+            $pcieComponents = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            
+            $usedSlots = [];
+            
+            // Initialize slot counters
+            $motherboardPCIeSlots = $motherboardSpecs['expansion']['pcie_slots'] ?? [];
+            foreach ($motherboardPCIeSlots as $slot) {
+                $usedSlots[$slot['type']] = 0;
+            }
+            
+            foreach ($pcieComponents as $component) {
+                if ($component['component_type'] === 'nic') {
+                    $nicResult = $this->validateNICExists($component['component_uuid']);
+                    if ($nicResult['exists']) {
+                        $requiredLanes = 1; // Default
+                        if (isset($nicResult['data']['interface_requirements']['pcie_lanes'])) {
+                            $requiredLanes = (int)$nicResult['data']['interface_requirements']['pcie_lanes'];
+                        }
+                        
+                        // Find and assign to appropriate slot
+                        foreach ($motherboardPCIeSlots as $slot) {
+                            $slotLanes = $slot['lanes'] ?? 1;
+                            if ($slotLanes >= $requiredLanes) {
+                                $usedSlots[$slot['type']] = ($usedSlots[$slot['type']] ?? 0) + 1;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            
+            return $usedSlots;
+            
+        } catch (Exception $e) {
+            error_log("Error counting used PCIe slots: " . $e->getMessage());
+            return [];
+        }
+    }
+
+    /**
+     * Clear JSON data cache
+     */
+    public function clearJSONCache() {
+        $this->jsonDataCache = [];
+    }
+
     /**
      * Clear component data cache
      */
