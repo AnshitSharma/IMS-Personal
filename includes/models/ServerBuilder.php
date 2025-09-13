@@ -134,6 +134,22 @@ class ServerBuilder {
                 }
             }
             
+            // Phase 5.5: RAM-specific validations BEFORE adding
+            $ramValidationResults = null;
+            if ($componentType === 'ram' && isset($compatibility)) {
+                try {
+                    $ramValidation = $this->validateRAMAddition($configUuid, $componentUuid, $compatibility);
+                    if (!$ramValidation['success']) {
+                        return $ramValidation;
+                    }
+                    // Store validation results for inclusion in response
+                    $ramValidationResults = $ramValidation;
+                } catch (Exception $ramError) {
+                    error_log("Error in RAM validation: " . $ramError->getMessage());
+                    // Continue without RAM validation
+                }
+            }
+            
             // Phase 6: Other component-specific validations
             if (isset($compatibility)) {
                 try {
@@ -207,11 +223,20 @@ class ServerBuilder {
             
             $this->pdo->commit();
             
-            return [
+            // Build response with optional RAM validation details
+            $response = [
                 'success' => true,
                 'message' => "Component added successfully",
                 'component_details' => $componentDetails
             ];
+            
+            // Include RAM validation results if available
+            if ($ramValidationResults !== null && $componentType === 'ram') {
+                $response['warnings'] = $ramValidationResults['warnings'] ?? [];
+                $response['compatibility_details'] = $ramValidationResults['compatibility_details'] ?? [];
+            }
+            
+            return $response;
             
         } catch (Exception $e) {
             if ($this->pdo->inTransaction()) {
@@ -298,11 +323,20 @@ class ServerBuilder {
                 ];
             }
             
-            // Get components from server_configuration_components table (primary source)
+            // Get components with serial numbers from inventory tables using JOINs (with collation fix)
             $stmt = $this->pdo->prepare("
-                SELECT * FROM server_configuration_components 
-                WHERE config_uuid = ?
-                ORDER BY component_type, added_at
+                SELECT 
+                    scc.*,
+                    COALESCE(cpu.SerialNumber, mb.SerialNumber, ram.SerialNumber, storage.SerialNumber, nic.SerialNumber, caddy.SerialNumber, 'Not Found') as serial_number
+                FROM server_configuration_components scc
+                LEFT JOIN cpuinventory cpu ON scc.component_type = 'cpu' AND scc.component_uuid COLLATE utf8mb4_general_ci = cpu.UUID COLLATE utf8mb4_general_ci
+                LEFT JOIN motherboardinventory mb ON scc.component_type = 'motherboard' AND scc.component_uuid COLLATE utf8mb4_general_ci = mb.UUID COLLATE utf8mb4_general_ci
+                LEFT JOIN raminventory ram ON scc.component_type = 'ram' AND scc.component_uuid COLLATE utf8mb4_general_ci = ram.UUID COLLATE utf8mb4_general_ci
+                LEFT JOIN storageinventory storage ON scc.component_type = 'storage' AND scc.component_uuid COLLATE utf8mb4_general_ci = storage.UUID COLLATE utf8mb4_general_ci
+                LEFT JOIN nicinventory nic ON scc.component_type = 'nic' AND scc.component_uuid COLLATE utf8mb4_general_ci = nic.UUID COLLATE utf8mb4_general_ci
+                LEFT JOIN caddyinventory caddy ON scc.component_type = 'caddy' AND scc.component_uuid COLLATE utf8mb4_general_ci = caddy.UUID COLLATE utf8mb4_general_ci
+                WHERE scc.config_uuid = ?
+                ORDER BY scc.component_type, scc.added_at
             ");
             $stmt->execute([$configUuid]);
             $components = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -321,10 +355,10 @@ class ServerBuilder {
                     $componentCounts[$type] = 0;
                 }
                 
-                // Simplified approach - create basic component entry
+                // Use actual serial number from database JOINs
                 $simplifiedComponent = [
                     'uuid' => $component['component_uuid'],
-                    'serial_number' => 'Unknown', // Will show as Unknown for now
+                    'serial_number' => $component['serial_number'], // Actual serial number from inventory tables
                     'quantity' => $component['quantity'],
                     'slot_position' => $component['slot_position'] ?? null,
                     'added_at' => $component['added_at']
@@ -1262,6 +1296,116 @@ class ServerBuilder {
             return [
                 'success' => false,
                 'message' => 'Error validating CPU compatibility: ' . $e->getMessage()
+            ];
+        }
+    }
+
+    /**
+     * Comprehensive RAM validation before adding to configuration
+     * Implements all critical compatibility checks as specified in Important-fix
+     */
+    private function validateRAMAddition($configUuid, $ramUuid, $compatibility) {
+        try {
+            // Task 1: JSON existence validation - RAM UUID must exist in JSON
+            $ramValidation = $compatibility->validateRAMExistsInJSON($ramUuid);
+            if (!$ramValidation['exists']) {
+                return [
+                    'success' => false,
+                    'message' => 'RAM not found in specifications database',
+                    'details' => ['error' => $ramValidation['error']]
+                ];
+            }
+            
+            $ramSpecs = $ramValidation['specifications'];
+            
+            // Get system component specifications for compatibility checking
+            $motherboardResult = $this->getMotherboardSpecsFromConfig($configUuid);
+            $cpuResult = $this->getCPUSpecsFromConfig($configUuid);
+            
+            if (!$motherboardResult['found']) {
+                return [
+                    'success' => false,
+                    'message' => 'No motherboard found in configuration - add motherboard first'
+                ];
+            }
+            
+            $motherboardSpecs = $motherboardResult['specifications'];
+            $cpuSpecs = $cpuResult['found'] ? $cpuResult['specifications'] : [];
+            
+            // Task 2: Memory type compatibility - DDR4/DDR5 matching
+            $typeCheck = $compatibility->validateMemoryTypeCompatibility($ramSpecs, $motherboardSpecs, $cpuSpecs);
+            if (!$typeCheck['compatible']) {
+                return [
+                    'success' => false,
+                    'message' => $typeCheck['message'],
+                    'details' => ['supported_types' => $typeCheck['supported_types']]
+                ];
+            }
+            
+            // Task 5: Memory slot limit validation
+            $slotCheck = $compatibility->validateMemorySlotAvailability($configUuid, $motherboardSpecs);
+            if (!$slotCheck['can_add']) {
+                return [
+                    'success' => false,
+                    'message' => $slotCheck['error'],
+                    'details' => [
+                        'used_slots' => $slotCheck['used_slots'],
+                        'max_slots' => $slotCheck['max_slots']
+                    ]
+                ];
+            }
+            
+            // Task 4: Form factor validation - DIMM/SO-DIMM compatibility
+            $formFactorCheck = $compatibility->validateMemoryFormFactor($ramSpecs, $motherboardSpecs);
+            if (!$formFactorCheck['compatible']) {
+                return [
+                    'success' => false,
+                    'message' => $formFactorCheck['message']
+                ];
+            }
+            
+            // Task 4: ECC compatibility validation
+            $eccCheck = $compatibility->validateECCCompatibility($ramSpecs, $motherboardSpecs, $cpuSpecs);
+            // Note: ECC compatibility issues are warnings, not blocking errors
+            $warnings = [];
+            if (isset($eccCheck['warning'])) {
+                $warnings[] = $eccCheck['warning'];
+            }
+            if (isset($eccCheck['recommendation'])) {
+                $warnings[] = $eccCheck['recommendation'];
+            }
+            
+            // Task 3: Advanced frequency analysis - complex performance logic
+            $frequencyAnalysis = $compatibility->analyzeMemoryFrequency($ramSpecs, $motherboardSpecs, $cpuSpecs);
+            if ($frequencyAnalysis['status'] === 'error') {
+                $warnings[] = $frequencyAnalysis['message'];
+            } else {
+                // Add performance warnings for frequency limitations
+                if ($frequencyAnalysis['status'] === 'limited') {
+                    $warnings[] = $frequencyAnalysis['message'];
+                } elseif ($frequencyAnalysis['status'] === 'suboptimal') {
+                    $warnings[] = $frequencyAnalysis['message'];
+                }
+            }
+            
+            return [
+                'success' => true,
+                'message' => 'RAM compatibility validation passed',
+                'warnings' => $warnings,
+                'compatibility_details' => [
+                    'memory_type' => $typeCheck,
+                    'frequency_analysis' => $frequencyAnalysis,
+                    'form_factor' => $formFactorCheck,
+                    'ecc_support' => $eccCheck,
+                    'slot_availability' => $slotCheck
+                ]
+            ];
+            
+        } catch (Exception $e) {
+            error_log("Error validating RAM addition: " . $e->getMessage());
+            return [
+                'success' => false,
+                'message' => 'Error validating RAM compatibility: ' . $e->getMessage()
             ];
         }
     }
@@ -2500,6 +2644,187 @@ class ServerBuilder {
                 return $compatibility->parseMotherboardSpecifications($componentUuid);
             default:
                 return ['found' => false, 'message' => 'No specifications available'];
+        }
+    }
+
+    /**
+     * Get motherboard specifications from configuration
+     * Returns structured motherboard specs for compatibility checking
+     */
+    public function getMotherboardSpecsFromConfig($configUuid) {
+        try {
+            // Get motherboard UUID from configuration
+            $stmt = $this->pdo->prepare("
+                SELECT component_uuid FROM server_configuration_components 
+                WHERE config_uuid = ? AND component_type = 'motherboard' 
+                LIMIT 1
+            ");
+            $stmt->execute([$configUuid]);
+            $result = $stmt->fetch(PDO::FETCH_ASSOC);
+            
+            if (!$result) {
+                return [
+                    'found' => false,
+                    'error' => 'No motherboard found in configuration',
+                    'specifications' => null
+                ];
+            }
+            
+            $motherboardUuid = $result['component_uuid'];
+            
+            // Load motherboard specifications using ComponentCompatibility
+            require_once __DIR__ . '/ComponentCompatibility.php';
+            $compatibility = new ComponentCompatibility($this->pdo);
+            
+            return $compatibility->parseMotherboardSpecifications($motherboardUuid);
+            
+        } catch (Exception $e) {
+            error_log("Error getting motherboard specs from config: " . $e->getMessage());
+            return [
+                'found' => false,
+                'error' => 'Error loading motherboard specifications: ' . $e->getMessage(),
+                'specifications' => null
+            ];
+        }
+    }
+
+    /**
+     * Get CPU specifications from configuration
+     * Returns array of CPU specs with UUIDs for compatibility checking
+     */
+    public function getCPUSpecsFromConfig($configUuid) {
+        try {
+            // Get all CPU UUIDs from configuration
+            $stmt = $this->pdo->prepare("
+                SELECT component_uuid FROM server_configuration_components 
+                WHERE config_uuid = ? AND component_type = 'cpu'
+            ");
+            $stmt->execute([$configUuid]);
+            $cpuResults = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            
+            if (empty($cpuResults)) {
+                return [
+                    'found' => false,
+                    'error' => 'No CPUs found in configuration',
+                    'specifications' => []
+                ];
+            }
+            
+            // Load specifications for each CPU
+            require_once __DIR__ . '/ComponentCompatibility.php';
+            $compatibility = new ComponentCompatibility($this->pdo);
+            
+            $cpuSpecs = [];
+            foreach ($cpuResults as $cpu) {
+                $cpuUuid = $cpu['component_uuid'];
+                $specResult = $compatibility->getCPUSpecifications($cpuUuid);
+                
+                if ($specResult['found']) {
+                    $cpuSpecs[] = $specResult['specifications'];
+                }
+            }
+            
+            return [
+                'found' => !empty($cpuSpecs),
+                'error' => empty($cpuSpecs) ? 'No valid CPU specifications found' : null,
+                'specifications' => $cpuSpecs
+            ];
+            
+        } catch (Exception $e) {
+            error_log("Error getting CPU specs from config: " . $e->getMessage());
+            return [
+                'found' => false,
+                'error' => 'Error loading CPU specifications: ' . $e->getMessage(),
+                'specifications' => []
+            ];
+        }
+    }
+
+    /**
+     * Get unified system memory limits combining motherboard and CPU constraints
+     */
+    public function getSystemMemoryLimits($configUuid) {
+        try {
+            $motherboardResult = $this->getMotherboardSpecsFromConfig($configUuid);
+            $cpuResult = $this->getCPUSpecsFromConfig($configUuid);
+            
+            if (!$motherboardResult['found'] && !$cpuResult['found']) {
+                return [
+                    'found' => false,
+                    'error' => 'No motherboard or CPU found in configuration',
+                    'limits' => null
+                ];
+            }
+            
+            // Initialize with motherboard limits or defaults
+            $limits = [
+                'max_slots' => 4,
+                'supported_types' => ['DDR4'],
+                'max_frequency_mhz' => 3200,
+                'max_capacity_gb' => 128,
+                'ecc_support' => false
+            ];
+            
+            // Apply motherboard constraints if available
+            if ($motherboardResult['found']) {
+                $mbSpecs = $motherboardResult['specifications'];
+                $limits['max_slots'] = $mbSpecs['memory']['slots'] ?? 4;
+                $limits['supported_types'] = $mbSpecs['memory']['types'] ?? ['DDR4'];
+                $limits['max_frequency_mhz'] = $mbSpecs['memory']['max_frequency_mhz'] ?? 3200;
+                $limits['max_capacity_gb'] = $mbSpecs['memory']['max_capacity_gb'] ?? 128;
+                $limits['ecc_support'] = $mbSpecs['memory']['ecc_support'] ?? false;
+            }
+            
+            // Apply CPU constraints if available (find most restrictive)
+            if ($cpuResult['found']) {
+                $cpuSpecs = $cpuResult['specifications'];
+                $cpuMaxFrequency = null;
+                $cpuSupportedTypes = [];
+                
+                foreach ($cpuSpecs as $cpu) {
+                    // Find lowest CPU memory frequency limit
+                    $cpuMemoryTypes = $cpu['compatibility']['memory_types'] ?? [];
+                    foreach ($cpuMemoryTypes as $memType) {
+                        if (preg_match('/DDR\d+-(\d+)/', $memType, $matches)) {
+                            $freq = (int)$matches[1];
+                            if ($cpuMaxFrequency === null || $freq < $cpuMaxFrequency) {
+                                $cpuMaxFrequency = $freq;
+                            }
+                        }
+                        
+                        // Extract memory type (DDR4, DDR5)
+                        if (preg_match('/(DDR\d+)/', $memType, $matches)) {
+                            if (!in_array($matches[1], $cpuSupportedTypes)) {
+                                $cpuSupportedTypes[] = $matches[1];
+                            }
+                        }
+                    }
+                }
+                
+                // Apply CPU frequency limit if more restrictive
+                if ($cpuMaxFrequency !== null && $cpuMaxFrequency < $limits['max_frequency_mhz']) {
+                    $limits['max_frequency_mhz'] = $cpuMaxFrequency;
+                }
+                
+                // Intersect supported memory types
+                if (!empty($cpuSupportedTypes)) {
+                    $limits['supported_types'] = array_intersect($limits['supported_types'], $cpuSupportedTypes);
+                }
+            }
+            
+            return [
+                'found' => true,
+                'error' => null,
+                'limits' => $limits
+            ];
+            
+        } catch (Exception $e) {
+            error_log("Error getting system memory limits: " . $e->getMessage());
+            return [
+                'found' => false,
+                'error' => 'Error determining system memory limits: ' . $e->getMessage(),
+                'limits' => null
+            ];
         }
     }
 }

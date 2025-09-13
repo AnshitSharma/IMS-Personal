@@ -75,6 +75,14 @@ try {
             handleImportCompatibilityRules();
             break;
             
+        case 'check_storage_direct':
+            handleCheckStorageCompatibilityDirect();
+            break;
+            
+        case 'check_storage_recursive':
+            handleCheckStorageCompatibilityRecursive();
+            break;
+            
         default:
             send_json_response(0, 1, 400, "Invalid compatibility action: $action");
     }
@@ -1118,6 +1126,116 @@ function getSampleComponentsForBenchmark($pdo) {
     } catch (Exception $e) {
         error_log("Error getting sample components: " . $e->getMessage());
         return [];
+    }
+}
+
+/**
+ * ENHANCED STORAGE COMPATIBILITY API ENDPOINTS
+ */
+
+/**
+ * Check storage compatibility directly (single component)
+ */
+function handleCheckStorageCompatibilityDirect() {
+    global $pdo;
+    
+    $storageUuid = $_POST['storage_uuid'] ?? '';
+    $motherboardUuid = $_POST['motherboard_uuid'] ?? '';
+    $includeDetails = filter_var($_POST['include_details'] ?? true, FILTER_VALIDATE_BOOLEAN);
+    
+    if (empty($storageUuid) || empty($motherboardUuid)) {
+        send_json_response(0, 1, 400, "Both storage_uuid and motherboard_uuid are required");
+    }
+    
+    try {
+        $componentCompatibility = new ComponentCompatibility($pdo);
+        
+        $result = $componentCompatibility->checkStorageCompatibilityDirect($storageUuid, $motherboardUuid);
+        
+        $response = [
+            'storage_uuid' => $storageUuid,
+            'motherboard_uuid' => $motherboardUuid,
+            'compatibility_result' => $result,
+            'timestamp' => date('Y-m-d H:i:s'),
+            'check_type' => 'direct'
+        ];
+        
+        if ($includeDetails) {
+            $response['validation_details'] = [
+                'json_validation' => 'Enhanced JSON-based validation using storage-level-3.json',
+                'interface_checking' => 'SATA/SAS/NVMe interface compatibility validation',
+                'form_factor_validation' => 'Physical size and connector compatibility',
+                'pcie_bandwidth_checking' => 'PCIe generation and lane requirements',
+                'fallback_support' => 'Database parsing when JSON data unavailable'
+            ];
+        }
+        
+        // Determine response message based on compatibility
+        $message = $result['compatible'] 
+            ? "Storage is compatible with motherboard (Score: " . number_format($result['compatibility_score'], 2) . ")"
+            : "Storage compatibility issues found";
+            
+        send_json_response(1, 1, 200, $message, $response);
+        
+    } catch (Exception $e) {
+        error_log("Error in direct storage compatibility check: " . $e->getMessage());
+        send_json_response(0, 1, 500, "Failed to check storage compatibility");
+    }
+}
+
+/**
+ * Check storage compatibility recursively (complete server configuration)
+ */
+function handleCheckStorageCompatibilityRecursive() {
+    global $pdo;
+    
+    $serverConfigUuid = $_POST['server_config_uuid'] ?? '';
+    $includeComponentDetails = filter_var($_POST['include_component_details'] ?? true, FILTER_VALIDATE_BOOLEAN);
+    $includeBayAnalysis = filter_var($_POST['include_bay_analysis'] ?? true, FILTER_VALIDATE_BOOLEAN);
+    
+    if (empty($serverConfigUuid)) {
+        send_json_response(0, 1, 400, "server_config_uuid is required");
+    }
+    
+    try {
+        $componentCompatibility = new ComponentCompatibility($pdo);
+        
+        $result = $componentCompatibility->checkStorageCompatibilityRecursive($serverConfigUuid);
+        
+        $response = [
+            'server_config_uuid' => $serverConfigUuid,
+            'recursive_result' => $result,
+            'timestamp' => date('Y-m-d H:i:s'),
+            'check_type' => 'recursive'
+        ];
+        
+        // Add summary statistics
+        $response['summary'] = [
+            'overall_compatible' => $result['compatible'],
+            'overall_score' => $result['overall_score'],
+            'total_issues' => count($result['issues']),
+            'total_recommendations' => count($result['recommendations']),
+            'components_checked' => count($result['component_results'])
+        ];
+        
+        if (!$includeComponentDetails) {
+            unset($response['recursive_result']['component_results']);
+        }
+        
+        if (!$includeBayAnalysis) {
+            unset($response['recursive_result']['bay_analysis']);
+        }
+        
+        // Determine response message based on overall compatibility
+        $message = $result['compatible']
+            ? "Server configuration storage compatibility validated successfully (Score: " . number_format($result['overall_score'], 2) . ")"
+            : "Server configuration has storage compatibility issues";
+            
+        send_json_response(1, 1, 200, $message, $response);
+        
+    } catch (Exception $e) {
+        error_log("Error in recursive storage compatibility check: " . $e->getMessage());
+        send_json_response(0, 1, 500, "Failed to check server configuration storage compatibility");
     }
 }
 ?>

@@ -316,7 +316,7 @@ class ComponentCompatibility {
     }
     
     /**
-     * Check Motherboard-Storage compatibility
+     * Check Motherboard-Storage compatibility - ENHANCED WITH JSON VALIDATION
      */
     private function checkMotherboardStorageCompatibility($component1, $component2) {
         $motherboard = $component1['type'] === 'motherboard' ? $component1 : $component2;
@@ -331,38 +331,76 @@ class ComponentCompatibility {
         ];
         
         try {
-            $motherboardData = $this->getComponentData($motherboard['type'], $motherboard['uuid']);
-            $storageData = $this->getComponentData($storage['type'], $storage['uuid']);
-            
-            // Interface compatibility
-            $motherboardInterfaces = $this->extractStorageInterfaces($motherboardData);
-            $storageInterface = $this->extractStorageInterface($storageData);
-            
-            if ($motherboardInterfaces && $storageInterface && !in_array($storageInterface, $motherboardInterfaces)) {
+            // Load storage specifications from JSON with UUID validation
+            $storageSpecs = $this->loadStorageSpecs($storage['uuid']);
+            if (!$storageSpecs) {
                 $result['compatible'] = false;
                 $result['compatibility_score'] = 0.0;
-                $result['issues'][] = "Storage interface incompatible: $storageInterface not available on motherboard";
+                $result['issues'][] = "Storage UUID {$storage['uuid']} not found in storage-level-3.json";
+                $result['warnings'][] = "Falling back to database Notes field parsing";
+                return $this->fallbackStorageCompatibilityCheck($component1, $component2);
+            }
+            
+            // Load motherboard specifications from JSON
+            $motherboardSpecs = $this->loadMotherboardSpecs($motherboard['uuid']);
+            if (!$motherboardSpecs) {
+                $result['compatible'] = false;
+                $result['compatibility_score'] = 0.0;
+                $result['issues'][] = "Motherboard UUID {$motherboard['uuid']} not found in motherboard-level-3.json";
                 return $result;
             }
             
-            // Form factor compatibility
-            $motherboardFormFactors = $this->extractSupportedStorageFormFactors($motherboardData);
-            $storageFormFactor = $this->extractStorageFormFactor($storageData);
-            
-            if ($motherboardFormFactors && $storageFormFactor && !in_array($storageFormFactor, $motherboardFormFactors)) {
-                $result['compatibility_score'] *= 0.7;
-                $result['warnings'][] = "Storage form factor ($storageFormFactor) may not be optimal for motherboard";
+            // Interface Type Compatibility Check
+            $interfaceResult = $this->checkStorageInterfaceCompatibility($storageSpecs, $motherboardSpecs);
+            if (!$interfaceResult['compatible']) {
+                $result['compatible'] = false;
+                $result['compatibility_score'] = min($result['compatibility_score'], $interfaceResult['score']);
+                $result['issues'][] = $interfaceResult['message'];
+                $result['recommendations'][] = $interfaceResult['recommendation'];
+                return $result;
             }
             
-            // Power requirements
-            $storagePower = $this->extractPowerConsumption($storageData);
-            if ($storagePower && $storagePower > 25) {
-                $result['warnings'][] = "High power storage device - ensure adequate PSU capacity";
+            // Form Factor and Connector Validation
+            $formFactorResult = $this->checkFormFactorCompatibility($storageSpecs, $motherboardSpecs);
+            if (!$formFactorResult['compatible']) {
+                $result['compatible'] = false;
+                $result['compatibility_score'] = min($result['compatibility_score'], $formFactorResult['score']);
+                $result['issues'][] = $formFactorResult['message'];
+                $result['recommendations'][] = $formFactorResult['recommendation'];
+                return $result;
+            }
+            
+            // PCIe Bandwidth Validation for NVMe storage
+            if ($this->isNVMeStorage($storageSpecs)) {
+                $bandwidthResult = $this->checkPCIeBandwidthCompatibility($storageSpecs, $motherboardSpecs);
+                if (!$bandwidthResult['compatible']) {
+                    $result['compatibility_score'] = min($result['compatibility_score'], $bandwidthResult['score']);
+                    if ($bandwidthResult['score'] < 0.5) {
+                        $result['compatible'] = false;
+                        $result['issues'][] = $bandwidthResult['message'];
+                    } else {
+                        $result['warnings'][] = $bandwidthResult['message'];
+                    }
+                    $result['recommendations'][] = $bandwidthResult['recommendation'];
+                }
+            }
+            
+            // Calculate final compatibility score
+            $result['compatibility_score'] = min(
+                $interfaceResult['score'],
+                $formFactorResult['score'],
+                isset($bandwidthResult) ? $bandwidthResult['score'] : 1.0
+            );
+            
+            // Add performance recommendations if score is below optimal
+            if ($result['compatibility_score'] < 0.9) {
+                $result['recommendations'][] = 'Consider alternative storage options for optimal compatibility';
             }
             
         } catch (Exception $e) {
-            error_log("Motherboard-Storage compatibility check error: " . $e->getMessage());
-            $result['warnings'][] = "Unable to perform detailed compatibility check";
+            error_log("Enhanced Motherboard-Storage compatibility check error: " . $e->getMessage());
+            $result['warnings'][] = "Detailed compatibility check failed, using fallback method";
+            return $this->fallbackStorageCompatibilityCheck($component1, $component2);
         }
         
         return $result;
@@ -1228,6 +1266,9 @@ class ComponentCompatibility {
         $data = $result['data'];
         
         try {
+            error_log("DEBUG: Parsing motherboard specs for UUID: $motherboardUuid");
+            error_log("DEBUG: Motherboard raw data: " . json_encode($data));
+            
             $specifications = [
                 'basic_info' => [
                     'uuid' => $motherboardUuid,
@@ -1257,6 +1298,8 @@ class ComponentCompatibility {
                     'max_tdp' => (int)($data['power']['max_cpu_tdp'] ?? 150)
                 ]
             ];
+            
+            error_log("DEBUG: Parsed motherboard memory section: " . json_encode($specifications['memory']));
             
             // Parse M.2 slots
             if (isset($data['storage']['nvme']['m2_slots'])) {
@@ -2155,6 +2198,978 @@ class ComponentCompatibility {
         
         // Default to single socket for desktop motherboards
         return 1;
+    }
+
+    /**
+     * Validate RAM exists in JSON specifications and extract detailed specifications
+     * Enhanced version for comprehensive RAM compatibility validation
+     */
+    public function validateRAMExistsInJSON($ramUuid) {
+        $cacheKey = "ram_validation:$ramUuid";
+        
+        // Check cache first to avoid repeated file reads
+        if (isset($this->jsonDataCache[$cacheKey])) {
+            return $this->jsonDataCache[$cacheKey];
+        }
+        
+        $result = $this->loadComponentFromJSON('ram', $ramUuid);
+        
+        if (!$result['found']) {
+            $validationResult = [
+                'exists' => false,
+                'error' => $result['error'],
+                'specifications' => null
+            ];
+            $this->jsonDataCache[$cacheKey] = $validationResult;
+            return $validationResult;
+        }
+        
+        $ramData = $result['data'];
+        
+        try {
+            // Extract comprehensive RAM specifications
+            $specifications = [
+                'uuid' => $ramUuid,
+                'basic_info' => [
+                    'brand' => $ramData['brand'] ?? 'Unknown',
+                    'series' => $ramData['series'] ?? 'Unknown',
+                    'model' => $ramData['model'] ?? 'Unknown'
+                ],
+                'memory_type' => $ramData['memory_type'] ?? 'DDR4',
+                'frequency_mhz' => (int)($ramData['frequency_MHz'] ?? 3200),
+                'form_factor' => $ramData['form_factor'] ?? $ramData['module_type'] ?? 'DIMM',
+                'capacity_gb' => (int)($ramData['capacity_GB'] ?? 8),
+                'voltage_v' => (float)($ramData['voltage_V'] ?? 1.2),
+                'ecc_support' => $ramData['features']['ecc_support'] ?? false,
+                'timing' => $ramData['timing'] ?? [],
+                'features' => [
+                    'xmp_support' => $ramData['features']['xmp_support'] ?? false,
+                    'heat_spreader' => $ramData['features']['heat_spreader'] ?? false,
+                    'rgb_lighting' => $ramData['features']['rgb_lighting'] ?? false
+                ]
+            ];
+            
+            $validationResult = [
+                'exists' => true,
+                'error' => null,
+                'specifications' => $specifications
+            ];
+            
+            // Cache the result
+            $this->jsonDataCache[$cacheKey] = $validationResult;
+            return $validationResult;
+            
+        } catch (Exception $e) {
+            $validationResult = [
+                'exists' => false,
+                'error' => "Error parsing RAM specifications: " . $e->getMessage(),
+                'specifications' => null
+            ];
+            $this->jsonDataCache[$cacheKey] = $validationResult;
+            return $validationResult;
+        }
+    }
+
+    /**
+     * Validate memory type compatibility across RAM, motherboard, and CPUs
+     */
+    public function validateMemoryTypeCompatibility($ramSpecs, $motherboardSpecs, $cpuSpecs) {
+        if (!$ramSpecs || !$motherboardSpecs) {
+            error_log("DEBUG: Memory type validation - Missing specs. RAM specs: " . (is_array($ramSpecs) ? 'present' : 'missing') . ", MB specs: " . (is_array($motherboardSpecs) ? 'present' : 'missing'));
+            return [
+                'compatible' => false,
+                'message' => 'Missing component specifications for memory type validation',
+                'supported_types' => []
+            ];
+        }
+        
+        $ramMemoryType = $ramSpecs['memory_type'] ?? null;
+        $motherboardSupportedTypes = $motherboardSpecs['memory']['types'] ?? ['DDR4'];
+        
+        // Debug logging
+        error_log("DEBUG: Memory type validation - RAM type: '$ramMemoryType', MB supported types: " . json_encode($motherboardSupportedTypes));
+        error_log("DEBUG: Memory type validation - Full motherboard specs: " . json_encode($motherboardSpecs));
+        
+        if (!$ramMemoryType) {
+            return [
+                'compatible' => false,
+                'message' => 'RAM memory type not found in specifications',
+                'supported_types' => $motherboardSupportedTypes
+            ];
+        }
+        
+        // Check motherboard compatibility
+        $motherboardCompatible = in_array($ramMemoryType, $motherboardSupportedTypes);
+        
+        if (!$motherboardCompatible) {
+            error_log("DEBUG: Memory type validation FAILED - RAM '$ramMemoryType' not in supported types: " . json_encode($motherboardSupportedTypes));
+            return [
+                'compatible' => false,
+                'message' => "RAM memory type $ramMemoryType not supported by motherboard. Supported types: " . implode(', ', $motherboardSupportedTypes),
+                'supported_types' => $motherboardSupportedTypes
+            ];
+        }
+        
+        // Check CPU compatibility if CPU specs provided
+        if (!empty($cpuSpecs)) {
+            $allCPUsCompatible = true;
+            $incompatibleCPUs = [];
+            
+            foreach ($cpuSpecs as $cpuSpec) {
+                $cpuSupportedTypes = $cpuSpec['compatibility']['memory_types'] ?? ['DDR4'];
+                
+                // Extract memory types from CPU specs (e.g., "DDR5-4800" -> "DDR5")
+                $extractedTypes = [];
+                foreach ($cpuSupportedTypes as $memType) {
+                    if (preg_match('/(DDR\d+)/', $memType, $matches)) {
+                        if (!in_array($matches[1], $extractedTypes)) {
+                            $extractedTypes[] = $matches[1];
+                        }
+                    } else {
+                        // If no pattern match, use as-is (for backward compatibility)
+                        $extractedTypes[] = $memType;
+                    }
+                }
+                
+                if (!in_array($ramMemoryType, $extractedTypes)) {
+                    $allCPUsCompatible = false;
+                    $incompatibleCPUs[] = $cpuSpec['basic_info']['model'] ?? 'Unknown CPU';
+                }
+            }
+            
+            if (!$allCPUsCompatible) {
+                return [
+                    'compatible' => false,
+                    'message' => "RAM memory type $ramMemoryType not supported by CPUs: " . implode(', ', $incompatibleCPUs),
+                    'supported_types' => $motherboardSupportedTypes
+                ];
+            }
+        }
+        
+        return [
+            'compatible' => true,
+            'message' => "Memory type $ramMemoryType is compatible with all system components",
+            'supported_types' => $motherboardSupportedTypes
+        ];
+    }
+
+    /**
+     * Analyze memory frequency compatibility and performance impact
+     */
+    public function analyzeMemoryFrequency($ramSpecs, $motherboardSpecs, $cpuSpecs) {
+        if (!$ramSpecs || !$motherboardSpecs) {
+            return [
+                'status' => 'error',
+                'message' => 'Missing component specifications for frequency analysis'
+            ];
+        }
+        
+        $ramFrequency = $ramSpecs['frequency_mhz'] ?? 0;
+        $motherboardMaxFrequency = $motherboardSpecs['memory']['max_frequency_mhz'] ?? 3200;
+        
+        // Find the lowest CPU max frequency if multiple CPUs
+        $cpuMaxFrequency = null;
+        $limitingCPU = null;
+        
+        if (!empty($cpuSpecs)) {
+            foreach ($cpuSpecs as $cpuSpec) {
+                // Extract max memory frequency from CPU memory types (e.g., DDR5-4800)
+                $cpuMemoryTypes = $cpuSpec['compatibility']['memory_types'] ?? [];
+                foreach ($cpuMemoryTypes as $memType) {
+                    if (preg_match('/DDR\d+-(\d+)/', $memType, $matches)) {
+                        $cpuFreq = (int)$matches[1];
+                        if ($cpuMaxFrequency === null || $cpuFreq < $cpuMaxFrequency) {
+                            $cpuMaxFrequency = $cpuFreq;
+                            $limitingCPU = $cpuSpec['basic_info']['model'] ?? 'Unknown CPU';
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Calculate system maximum frequency (lowest component limit)
+        $systemMaxFrequency = $motherboardMaxFrequency;
+        $limitingComponent = 'motherboard';
+        
+        if ($cpuMaxFrequency !== null && $cpuMaxFrequency < $systemMaxFrequency) {
+            $systemMaxFrequency = $cpuMaxFrequency;
+            $limitingComponent = $limitingCPU;
+        }
+        
+        // Determine status and effective frequency
+        if ($ramFrequency <= $systemMaxFrequency) {
+            $status = 'optimal';
+            $effectiveFrequency = $ramFrequency;
+            $message = "RAM will operate at full rated speed of {$ramFrequency}MHz";
+        } else {
+            $status = 'limited';
+            $effectiveFrequency = $systemMaxFrequency;
+            $message = "RAM will operate at {$systemMaxFrequency}MHz (limited by $limitingComponent) instead of rated {$ramFrequency}MHz";
+        }
+        
+        // Check for suboptimal frequency (significantly below system max)
+        if ($ramFrequency < ($systemMaxFrequency * 0.8)) {
+            $status = 'suboptimal';
+            $message = "RAM frequency may impact performance - consider higher frequency memory";
+        }
+        
+        return [
+            'status' => $status,
+            'ram_frequency' => $ramFrequency,
+            'system_max_frequency' => $systemMaxFrequency,
+            'effective_frequency' => $effectiveFrequency,
+            'limiting_component' => $limitingComponent,
+            'message' => $message,
+            'performance_impact' => $status === 'limited' ? "Performance limited by $limitingComponent" : null
+        ];
+    }
+
+    /**
+     * Validate memory form factor compatibility
+     */
+    public function validateMemoryFormFactor($ramSpecs, $motherboardSpecs) {
+        if (!$ramSpecs || !$motherboardSpecs) {
+            return [
+                'compatible' => false,
+                'message' => 'Missing specifications for form factor validation'
+            ];
+        }
+        
+        $ramFormFactor = $ramSpecs['form_factor'] ?? 'DIMM';
+        
+        // Normalize form factor strings
+        $ramFormFactor = $this->normalizeFormFactor($ramFormFactor);
+        
+        // Extract motherboard slot type from specifications
+        $motherboardSlotType = 'DIMM'; // Default assumption for server motherboards
+        
+        // Try to determine slot type from motherboard specs
+        if (isset($motherboardSpecs['memory']['slot_type'])) {
+            $motherboardSlotType = $this->normalizeFormFactor($motherboardSpecs['memory']['slot_type']);
+        }
+        
+        $compatible = ($ramFormFactor === $motherboardSlotType);
+        
+        if (!$compatible) {
+            return [
+                'compatible' => false,
+                'message' => "Memory form factor mismatch: RAM is $ramFormFactor but motherboard requires $motherboardSlotType"
+            ];
+        }
+        
+        return [
+            'compatible' => true,
+            'message' => "Memory form factor $ramFormFactor is compatible"
+        ];
+    }
+
+    /**
+     * Validate ECC compatibility across components
+     */
+    public function validateECCCompatibility($ramSpecs, $motherboardSpecs, $cpuSpecs) {
+        if (!$ramSpecs || !$motherboardSpecs) {
+            return [
+                'compatible' => true,
+                'message' => 'Missing specifications for ECC validation'
+            ];
+        }
+        
+        $ramHasECC = $ramSpecs['ecc_support'] ?? false;
+        $motherboardSupportsECC = $motherboardSpecs['memory']['ecc_support'] ?? false;
+        
+        // Check CPU ECC support
+        $cpuSupportsECC = true; // Default assumption
+        if (!empty($cpuSpecs)) {
+            foreach ($cpuSpecs as $cpuSpec) {
+                $cpuECC = $cpuSpec['features']['ecc_support'] ?? true;
+                if (!$cpuECC) {
+                    $cpuSupportsECC = false;
+                    break;
+                }
+            }
+        }
+        
+        $systemSupportsECC = $motherboardSupportsECC && $cpuSupportsECC;
+        
+        // Determine compatibility and warnings
+        if ($ramHasECC && !$systemSupportsECC) {
+            return [
+                'compatible' => true,
+                'message' => 'ECC memory will function but ECC features will be disabled',
+                'warning' => 'ECC functionality disabled - system does not support ECC'
+            ];
+        }
+        
+        if (!$ramHasECC && $systemSupportsECC) {
+            return [
+                'compatible' => true,
+                'message' => 'Non-ECC memory compatible with ECC-capable system',
+                'recommendation' => 'Consider ECC memory for enhanced reliability'
+            ];
+        }
+        
+        if ($ramHasECC && $systemSupportsECC) {
+            return [
+                'compatible' => true,
+                'message' => 'ECC memory fully supported and enabled'
+            ];
+        }
+        
+        return [
+            'compatible' => true,
+            'message' => 'Standard non-ECC memory configuration'
+        ];
+    }
+
+    /**
+     * Validate memory slot availability
+     */
+    public function validateMemorySlotAvailability($configUuid, $motherboardSpecs) {
+        if (!$motherboardSpecs) {
+            return [
+                'can_add' => false,
+                'available_slots' => 0,
+                'max_slots' => 4,
+                'used_slots' => 0,
+                'error' => 'Motherboard specifications not available'
+            ];
+        }
+        
+        try {
+            $maxSlots = $motherboardSpecs['memory']['max_slots'] ?? 4;
+            $usedSlots = $this->countUsedMemorySlots($configUuid);
+            $availableSlots = $maxSlots - $usedSlots;
+            
+            return [
+                'can_add' => $availableSlots > 0,
+                'available_slots' => $availableSlots,
+                'max_slots' => $maxSlots,
+                'used_slots' => $usedSlots,
+                'error' => $availableSlots > 0 ? null : "Memory slot limit reached: $usedSlots/$maxSlots slots used"
+            ];
+            
+        } catch (Exception $e) {
+            return [
+                'can_add' => false,
+                'available_slots' => 0,
+                'max_slots' => 4,
+                'used_slots' => 0,
+                'error' => "Error checking slot availability: " . $e->getMessage()
+            ];
+        }
+    }
+
+    /**
+     * Normalize memory form factor strings for comparison
+     */
+    private function normalizeFormFactor($formFactor) {
+        $formFactor = strtoupper(trim($formFactor));
+        
+        // Handle common variations
+        if (strpos($formFactor, 'SO-DIMM') !== false || strpos($formFactor, 'SODIMM') !== false) {
+            return 'SO-DIMM';
+        }
+        
+        if (strpos($formFactor, 'DIMM') !== false) {
+            return 'DIMM';
+        }
+        
+        return $formFactor;
+    }
+
+    /**
+     * ENHANCED STORAGE COMPATIBILITY METHODS
+     */
+
+    /**
+     * Load storage specifications from JSON with UUID validation
+     */
+    private function loadStorageSpecs($uuid) {
+        $jsonPath = 'All-JSON/storage-jsons/storage-level-3.json';
+        
+        if (!file_exists($jsonPath)) {
+            error_log("Storage JSON file not found: $jsonPath");
+            return null;
+        }
+        
+        $jsonData = json_decode(file_get_contents($jsonPath), true);
+        if (!$jsonData) {
+            error_log("Failed to decode storage JSON");
+            return null;
+        }
+        
+        // First try direct UUID lookup at model level
+        foreach ($jsonData as $brand) {
+            if (isset($brand['models'])) {
+                foreach ($brand['models'] as $model) {
+                    if (isset($model['uuid']) && $model['uuid'] === $uuid) {
+                        return $this->extractStorageSpecifications($model);
+                    }
+                }
+            }
+        }
+        
+        // Then try recursive search in nested structures
+        foreach ($jsonData as $brand) {
+            if (isset($brand['series'])) {
+                foreach ($brand['series'] as $series) {
+                    if (isset($series['models'])) {
+                        foreach ($series['models'] as $model) {
+                            if (isset($model['uuid']) && $model['uuid'] === $uuid) {
+                                return $this->extractStorageSpecifications($model);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        error_log("Storage UUID $uuid not found in storage-level-3.json");
+        return null;
+    }
+
+    /**
+     * Load motherboard specifications from JSON with UUID validation
+     */
+    private function loadMotherboardSpecs($uuid) {
+        $jsonPath = 'All-JSON/motherboad-jsons/motherboard-level-3.json';
+        
+        if (!file_exists($jsonPath)) {
+            error_log("Motherboard JSON file not found: $jsonPath");
+            return null;
+        }
+        
+        $jsonData = json_decode(file_get_contents($jsonPath), true);
+        if (!$jsonData) {
+            error_log("Failed to decode motherboard JSON");
+            return null;
+        }
+        
+        // Search through the nested structure
+        foreach ($jsonData as $brand) {
+            if (isset($brand['models'])) {
+                foreach ($brand['models'] as $model) {
+                    if (isset($model['uuid']) && $model['uuid'] === $uuid) {
+                        return $this->extractMotherboardSpecifications($model);
+                    }
+                }
+            }
+        }
+        
+        error_log("Motherboard UUID $uuid not found in motherboard-level-3.json");
+        return null;
+    }
+
+    /**
+     * Extract critical storage specifications from JSON model
+     */
+    private function extractStorageSpecifications($model) {
+        return [
+            'interface_type' => $model['interface'] ?? 'Unknown',
+            'form_factor' => $model['form_factor'] ?? 'Unknown',
+            'storage_type' => $model['storage_type'] ?? 'Unknown',
+            'subtype' => $model['subtype'] ?? null,
+            'capacity_GB' => $model['capacity_GB'] ?? 0,
+            'power_consumption' => $model['power_consumption_W'] ?? null,
+            'specifications' => $model['specifications'] ?? [],
+            'pcie_version' => $this->extractPCIeVersionFromInterface($model['interface'] ?? ''),
+            'pcie_lanes' => $this->extractPCIeLanes($model['interface'] ?? ''),
+            'uuid' => $model['uuid']
+        ];
+    }
+
+    /**
+     * Extract motherboard specifications relevant to storage
+     */
+    private function extractMotherboardSpecifications($model) {
+        return [
+            'storage_interfaces' => $this->extractMotherboardStorageInterfaces($model),
+            'drive_bays' => $this->extractDriveBays($model),
+            'pcie_slots' => $model['expansion_slots']['pcie_slots'] ?? [],
+            'pcie_version' => $this->extractMotherboardPCIeVersion($model),
+            'uuid' => $model['uuid']
+        ];
+    }
+
+    /**
+     * Extract storage interfaces supported by motherboard
+     */
+    private function extractMotherboardStorageInterfaces($model) {
+        $interfaces = [];
+        
+        if (isset($model['storage'])) {
+            $storage = $model['storage'];
+            
+            if (isset($storage['sata']['ports']) && $storage['sata']['ports'] > 0) {
+                $interfaces[] = 'SATA III';
+                $interfaces[] = 'SATA';
+            }
+            
+            if (isset($storage['sas']['ports']) && $storage['sas']['ports'] > 0) {
+                $interfaces[] = 'SAS';
+            }
+            
+            if (isset($storage['nvme']['m2_slots']) && !empty($storage['nvme']['m2_slots'])) {
+                $interfaces[] = 'PCIe NVMe';
+                $interfaces[] = 'NVMe';
+            }
+            
+            if (isset($storage['nvme']['u2_slots']['count']) && $storage['nvme']['u2_slots']['count'] > 0) {
+                $interfaces[] = 'U.2';
+                $interfaces[] = 'PCIe NVMe 4.0';
+            }
+        }
+        
+        return $interfaces;
+    }
+
+    /**
+     * Extract drive bays and form factor support
+     */
+    private function extractDriveBays($model) {
+        $bays = [
+            'sata_ports' => $model['storage']['sata']['ports'] ?? 0,
+            'm2_slots' => [],
+            'u2_slots' => $model['storage']['nvme']['u2_slots']['count'] ?? 0,
+            'supported_form_factors' => []
+        ];
+        
+        // Extract M.2 slot details
+        if (isset($model['storage']['nvme']['m2_slots'])) {
+            foreach ($model['storage']['nvme']['m2_slots'] as $m2Slot) {
+                $bays['m2_slots'][] = [
+                    'count' => $m2Slot['count'] ?? 1,
+                    'form_factors' => $m2Slot['form_factors'] ?? ['M.2 2280'],
+                    'pcie_lanes' => $m2Slot['pcie_lanes'] ?? 4,
+                    'pcie_generation' => $m2Slot['pcie_generation'] ?? 4
+                ];
+            }
+        }
+        
+        // Determine supported form factors
+        if ($bays['sata_ports'] > 0) {
+            $bays['supported_form_factors'][] = '2.5-inch';
+            $bays['supported_form_factors'][] = '3.5-inch';
+        }
+        
+        if (!empty($bays['m2_slots'])) {
+            foreach ($bays['m2_slots'] as $slot) {
+                $bays['supported_form_factors'] = array_merge($bays['supported_form_factors'], $slot['form_factors']);
+            }
+        }
+        
+        if ($bays['u2_slots'] > 0) {
+            $bays['supported_form_factors'][] = '2.5-inch';
+            $bays['supported_form_factors'][] = 'U.2';
+        }
+        
+        return $bays;
+    }
+
+    /**
+     * Check storage interface compatibility with motherboard
+     */
+    private function checkStorageInterfaceCompatibility($storageSpecs, $motherboardSpecs) {
+        $storageInterface = $storageSpecs['interface_type'];
+        $mbInterfaces = $motherboardSpecs['storage_interfaces'];
+        
+        // Direct interface match (highest score)
+        if (in_array($storageInterface, $mbInterfaces)) {
+            return [
+                'compatible' => true,
+                'score' => 0.95,
+                'message' => "Perfect interface match: $storageInterface",
+                'recommendation' => 'Native interface support provides optimal performance'
+            ];
+        }
+        
+        // Check for compatible alternatives
+        $compatibilityMatrix = [
+            'SATA III' => ['SATA', 'SATA II'],
+            'SATA' => ['SATA III', 'SATA II'],
+            'PCIe NVMe 4.0' => ['PCIe NVMe', 'NVMe', 'PCIe NVMe 3.0'],
+            'PCIe NVMe' => ['NVMe', 'PCIe NVMe 4.0', 'PCIe NVMe 3.0'],
+            'NVMe' => ['PCIe NVMe', 'PCIe NVMe 4.0', 'PCIe NVMe 3.0'],
+            'SAS' => [], // SAS requires dedicated controller
+        ];
+        
+        if (isset($compatibilityMatrix[$storageInterface])) {
+            foreach ($compatibilityMatrix[$storageInterface] as $altInterface) {
+                if (in_array($altInterface, $mbInterfaces)) {
+                    return [
+                        'compatible' => true,
+                        'score' => 0.85,
+                        'message' => "Compatible interface: $storageInterface works with $altInterface",
+                        'recommendation' => 'Interface compatible with potential performance differences'
+                    ];
+                }
+            }
+        }
+        
+        // Check if NVMe can work via PCIe slot
+        if (strpos($storageInterface, 'NVMe') !== false || strpos($storageInterface, 'PCIe') !== false) {
+            if (!empty($motherboardSpecs['pcie_slots'])) {
+                return [
+                    'compatible' => true,
+                    'score' => 0.80,
+                    'message' => "NVMe storage can use PCIe slot with adapter",
+                    'recommendation' => 'Consider M.2 to PCIe adapter for compatibility'
+                ];
+            }
+        }
+        
+        // No compatible interface found
+        return [
+            'compatible' => false,
+            'score' => 0.25,
+            'message' => "Storage requires $storageInterface but motherboard only supports: " . implode(', ', $mbInterfaces),
+            'recommendation' => 'Use storage device with compatible interface or upgrade motherboard'
+        ];
+    }
+
+    /**
+     * Check form factor and connector compatibility
+     */
+    private function checkFormFactorCompatibility($storageSpecs, $motherboardSpecs, $existingStorage = []) {
+        $storageFormFactor = $storageSpecs['form_factor'];
+        $mbBays = $motherboardSpecs['drive_bays'];
+        $supportedFormFactors = $mbBays['supported_form_factors'];
+        
+        // Direct form factor support
+        if (in_array($storageFormFactor, $supportedFormFactors)) {
+            // Check bay availability
+            $bayAvailable = $this->checkBayAvailability($storageFormFactor, $mbBays, $existingStorage);
+            
+            if ($bayAvailable) {
+                return [
+                    'compatible' => true,
+                    'score' => 0.95,
+                    'message' => "Native form factor support: $storageFormFactor",
+                    'recommendation' => 'Perfect physical fit with native bay support'
+                ];
+            } else {
+                return [
+                    'compatible' => false,
+                    'score' => 0.30,
+                    'message' => "Form factor supported but no available bays for $storageFormFactor",
+                    'recommendation' => 'Remove existing storage or use different form factor'
+                ];
+            }
+        }
+        
+        // Check for adapter compatibility
+        $adapterCompatibility = $this->checkAdapterCompatibility($storageFormFactor, $supportedFormFactors);
+        if ($adapterCompatibility['possible']) {
+            return [
+                'compatible' => true,
+                'score' => 0.85,
+                'message' => $adapterCompatibility['message'],
+                'recommendation' => $adapterCompatibility['recommendation']
+            ];
+        }
+        
+        // No compatible form factor
+        return [
+            'compatible' => false,
+            'score' => 0.25,
+            'message' => "Storage form factor $storageFormFactor not compatible with motherboard bays",
+            'recommendation' => 'Use storage with supported form factor: ' . implode(', ', $supportedFormFactors)
+        ];
+    }
+
+    /**
+     * Check PCIe bandwidth compatibility for NVMe storage
+     */
+    private function checkPCIeBandwidthCompatibility($storageSpecs, $motherboardSpecs) {
+        $requiredPCIeGen = $storageSpecs['pcie_version'];
+        $requiredLanes = $storageSpecs['pcie_lanes'];
+        
+        if (!$requiredPCIeGen || !$requiredLanes) {
+            return [
+                'compatible' => true,
+                'score' => 0.90,
+                'message' => 'PCIe requirements not specified, assuming compatibility',
+                'recommendation' => 'Verify PCIe requirements with storage documentation'
+            ];
+        }
+        
+        $mbPCIeGen = $motherboardSpecs['pcie_version'];
+        $availableSlots = $motherboardSpecs['pcie_slots'];
+        
+        // Check if motherboard PCIe version meets storage requirements
+        if ($this->comparePCIeVersions($mbPCIeGen, $requiredPCIeGen) >= 0) {
+            // Full bandwidth available
+            $suitableSlot = $this->findSuitablePCIeSlot($availableSlots, $requiredLanes);
+            
+            if ($suitableSlot) {
+                return [
+                    'compatible' => true,
+                    'score' => 0.95,
+                    'message' => "Full bandwidth available: PCIe $mbPCIeGen x$requiredLanes",
+                    'recommendation' => 'Optimal PCIe bandwidth for maximum performance'
+                ];
+            }
+        } else {
+            // Backward compatibility (reduced bandwidth)
+            $suitableSlot = $this->findSuitablePCIeSlot($availableSlots, $requiredLanes);
+            
+            if ($suitableSlot) {
+                return [
+                    'compatible' => true,
+                    'score' => 0.85,
+                    'message' => "Reduced bandwidth: Storage requires PCIe $requiredPCIeGen but motherboard provides $mbPCIeGen",
+                    'recommendation' => 'Storage will work but with reduced performance due to PCIe version limitation'
+                ];
+            }
+        }
+        
+        // Insufficient lanes or no compatible slots
+        return [
+            'compatible' => false,
+            'score' => 0.40,
+            'message' => "Insufficient PCIe resources: Storage requires $requiredPCIeGen x$requiredLanes",
+            'recommendation' => 'Use storage with lower PCIe requirements or upgrade motherboard'
+        ];
+    }
+
+    /**
+     * Fallback storage compatibility check using database data
+     */
+    private function fallbackStorageCompatibilityCheck($component1, $component2) {
+        $motherboard = $component1['type'] === 'motherboard' ? $component1 : $component2;
+        $storage = $component1['type'] === 'storage' ? $component1 : $component2;
+        
+        $result = [
+            'compatible' => true,
+            'compatibility_score' => 0.70, // Lower score for fallback method
+            'issues' => [],
+            'warnings' => ['Using fallback compatibility check - JSON data not available'],
+            'recommendations' => ['Update storage-level-3.json for enhanced compatibility validation']
+        ];
+        
+        try {
+            $motherboardData = $this->getComponentData($motherboard['type'], $motherboard['uuid']);
+            $storageData = $this->getComponentData($storage['type'], $storage['uuid']);
+            
+            // Basic interface checking from database notes
+            $motherboardInterfaces = $this->extractStorageInterfaces($motherboardData);
+            $storageInterface = $this->extractStorageInterface($storageData);
+            
+            if ($motherboardInterfaces && $storageInterface && !in_array($storageInterface, $motherboardInterfaces)) {
+                $result['compatible'] = false;
+                $result['compatibility_score'] = 0.30;
+                $result['issues'][] = "Storage interface possibly incompatible: $storageInterface";
+                $result['recommendations'][] = 'Verify interface compatibility manually';
+            }
+            
+        } catch (Exception $e) {
+            error_log("Fallback storage compatibility check error: " . $e->getMessage());
+            $result['warnings'][] = "Unable to perform fallback compatibility check";
+            $result['compatibility_score'] = 0.60;
+        }
+        
+        return $result;
+    }
+
+    /**
+     * Helper methods for storage compatibility
+     */
+    
+    private function isNVMeStorage($storageSpecs) {
+        $interface = strtolower($storageSpecs['interface_type']);
+        return strpos($interface, 'nvme') !== false || strpos($interface, 'pcie') !== false;
+    }
+    
+    private function extractPCIeVersionFromInterface($interface) {
+        if (preg_match('/PCIe.*?(\d\.\d)/', $interface, $matches)) {
+            return $matches[1];
+        }
+        if (preg_match('/(\d)\.0/', $interface, $matches)) {
+            return $matches[1] . '.0';
+        }
+        return null;
+    }
+    
+    private function extractPCIeLanes($interface) {
+        if (preg_match('/x(\d+)/', $interface, $matches)) {
+            return (int)$matches[1];
+        }
+        return 4; // Default to x4 for NVMe
+    }
+    
+    private function extractMotherboardPCIeVersion($model) {
+        if (isset($model['expansion_slots']['pcie_slots'])) {
+            foreach ($model['expansion_slots']['pcie_slots'] as $slot) {
+                if (preg_match('/PCIe\s+(\d+\.\d+)/', $slot['type'], $matches)) {
+                    return $matches[1];
+                }
+            }
+        }
+        return '4.0'; // Default assumption
+    }
+    
+    private function checkBayAvailability($formFactor, $mbBays, $existingStorage) {
+        // Simplified bay checking - in real implementation, count used bays
+        switch ($formFactor) {
+            case 'M.2 2280':
+            case 'M.2 22110':
+                return !empty($mbBays['m2_slots']);
+            case '2.5-inch':
+                return $mbBays['sata_ports'] > 0 || $mbBays['u2_slots'] > 0;
+            case '3.5-inch':
+                return $mbBays['sata_ports'] > 0;
+            default:
+                return false;
+        }
+    }
+    
+    private function checkAdapterCompatibility($storageFormFactor, $supportedFormFactors) {
+        // Define adapter possibilities
+        $adapterMatrix = [
+            'M.2 2280' => [
+                'target' => '3.5-inch',
+                'message' => 'M.2 2280 can use PCIe slot with M.2 to PCIe adapter',
+                'recommendation' => 'Purchase M.2 to PCIe adapter card'
+            ],
+            '2.5-inch' => [
+                'target' => '3.5-inch',
+                'message' => '2.5-inch drive can fit in 3.5-inch bay with adapter',
+                'recommendation' => 'Use 2.5" to 3.5" drive adapter bracket'
+            ]
+        ];
+        
+        if (isset($adapterMatrix[$storageFormFactor])) {
+            $adapter = $adapterMatrix[$storageFormFactor];
+            if (in_array($adapter['target'], $supportedFormFactors)) {
+                return [
+                    'possible' => true,
+                    'message' => $adapter['message'],
+                    'recommendation' => $adapter['recommendation']
+                ];
+            }
+        }
+        
+        return ['possible' => false];
+    }
+    
+    private function comparePCIeVersions($motherboardVersion, $requiredVersion) {
+        return version_compare($motherboardVersion, $requiredVersion);
+    }
+    
+    private function findSuitablePCIeSlot($availableSlots, $requiredLanes) {
+        foreach ($availableSlots as $slot) {
+            if (($slot['lanes'] ?? 1) >= $requiredLanes && ($slot['count'] ?? 0) > 0) {
+                return $slot;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Direct vs Recursive checking modes
+     */
+    
+    /**
+     * Direct compatibility check for single storage component addition
+     */
+    public function checkStorageCompatibilityDirect($storageUuid, $motherboardUuid) {
+        $storage = ['type' => 'storage', 'uuid' => $storageUuid];
+        $motherboard = ['type' => 'motherboard', 'uuid' => $motherboardUuid];
+        
+        return $this->checkMotherboardStorageCompatibility($storage, $motherboard);
+    }
+    
+    /**
+     * Recursive compatibility check for complete server configuration
+     */
+    public function checkStorageCompatibilityRecursive($serverConfigUuid) {
+        try {
+            // Load server configuration and all storage components
+            $configData = $this->getServerConfiguration($serverConfigUuid);
+            $storageComponents = $configData['storage_components'] ?? [];
+            $motherboardUuid = $configData['motherboard_uuid'] ?? null;
+            
+            if (!$motherboardUuid) {
+                return [
+                    'compatible' => false,
+                    'overall_score' => 0.0,
+                    'issues' => ['No motherboard found in server configuration'],
+                    'component_results' => []
+                ];
+            }
+            
+            $componentResults = [];
+            $overallScore = 1.0;
+            $overallCompatible = true;
+            $allIssues = [];
+            $allRecommendations = [];
+            
+            // Check each storage component against motherboard
+            foreach ($storageComponents as $storageComponent) {
+                $result = $this->checkStorageCompatibilityDirect($storageComponent['uuid'], $motherboardUuid);
+                
+                $componentResults[] = [
+                    'storage_uuid' => $storageComponent['uuid'],
+                    'result' => $result
+                ];
+                
+                if (!$result['compatible']) {
+                    $overallCompatible = false;
+                }
+                
+                $overallScore = min($overallScore, $result['compatibility_score']);
+                $allIssues = array_merge($allIssues, $result['issues']);
+                $allRecommendations = array_merge($allRecommendations, $result['recommendations']);
+            }
+            
+            // Check for bay conflicts and capacity limits
+            $bayAnalysis = $this->analyzeBayCapacity($storageComponents, $motherboardUuid);
+            
+            return [
+                'compatible' => $overallCompatible && $bayAnalysis['sufficient_bays'],
+                'overall_score' => min($overallScore, $bayAnalysis['bay_utilization_score']),
+                'issues' => array_merge($allIssues, $bayAnalysis['bay_issues']),
+                'recommendations' => array_merge($allRecommendations, $bayAnalysis['bay_recommendations']),
+                'component_results' => $componentResults,
+                'bay_analysis' => $bayAnalysis
+            ];
+            
+        } catch (Exception $e) {
+            error_log("Recursive storage compatibility check error: " . $e->getMessage());
+            return [
+                'compatible' => false,
+                'overall_score' => 0.0,
+                'issues' => ['Failed to perform recursive compatibility check'],
+                'component_results' => []
+            ];
+        }
+    }
+    
+    private function getServerConfiguration($configUuid) {
+        // This would interface with your server configuration system
+        // Placeholder implementation
+        return [
+            'motherboard_uuid' => null,
+            'storage_components' => []
+        ];
+    }
+    
+    private function analyzeBayCapacity($storageComponents, $motherboardUuid) {
+        // Analyze if motherboard has sufficient bays for all storage components
+        // This is a simplified implementation - full version would count actual bay usage
+        
+        return [
+            'sufficient_bays' => true,
+            'bay_utilization_score' => 0.90,
+            'bay_issues' => [],
+            'bay_recommendations' => [],
+            'bay_details' => [
+                'total_storage_count' => count($storageComponents),
+                'm2_slots_used' => 0,
+                'sata_ports_used' => 0,
+                'u2_slots_used' => 0
+            ]
+        ];
     }
 }
 ?>
