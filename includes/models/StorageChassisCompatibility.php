@@ -24,6 +24,16 @@ class StorageChassisCompatibility extends ComponentCompatibility {
      * Main validation method for storage components with chassis
      */
     public function validateStorageForConfiguration($configUUID, $storageUUID, $chassisUUID, $targetBay = null) {
+        // STORAGE COMPATIBILITY DISABLED - 2025-09-15 - ALWAYS RETURN COMPATIBLE
+        return [
+            'compatible' => true,
+            'compatibility_score' => 1.0,
+            'issues' => [],
+            'warnings' => ['Storage configuration validation has been disabled'],
+            'recommendations' => ['Storage compatibility validation is currently disabled']
+        ];
+
+        /* ORIGINAL CODE COMMENTED OUT FOR ROLLBACK
         try {
             // Step 1: Validate UUIDs
             $uuidValidation = $this->validateUUIDs($storageUUID, $chassisUUID);
@@ -36,18 +46,19 @@ class StorageChassisCompatibility extends ComponentCompatibility {
                     'recommendations' => ['Verify storage and chassis UUIDs exist in JSON specifications']
                 ];
             }
-            
+
             // Step 2: Direct storage-chassis compatibility
             $storageChassisResult = $this->validateStorageChassisCompatibility($storageUUID, $chassisUUID, $targetBay);
             if (!$storageChassisResult['compatible']) {
                 return $storageChassisResult;
             }
-            
+
             // Step 3: Get motherboard from configuration (if exists)
             $motherboardUUID = $this->getMotherboardFromConfiguration($configUUID);
             if ($motherboardUUID) {
                 // Step 4: Storage-motherboard compatibility
                 $storageMotherboardResult = $this->validateStorageMotherboardCompatibility($storageUUID, $motherboardUUID);
+        */
                 if (!$storageMotherboardResult['compatible']) {
                     return $storageMotherboardResult;
                 }
@@ -122,6 +133,16 @@ class StorageChassisCompatibility extends ComponentCompatibility {
      * Validate direct storage-chassis compatibility
      */
     public function validateStorageChassisCompatibility($storageUUID, $chassisUUID, $targetBay = null) {
+        // STORAGE COMPATIBILITY DISABLED - 2025-09-15 - ALWAYS RETURN COMPATIBLE
+        return [
+            'compatible' => true,
+            'compatibility_score' => 1.0,
+            'issues' => [],
+            'warnings' => ['Storage-chassis compatibility checks disabled'],
+            'recommendations' => ['Storage compatibility validation has been temporarily disabled']
+        ];
+
+        /* ORIGINAL CODE COMMENTED OUT FOR ROLLBACK
         // Get storage specifications
         $storageSpecs = $this->loadStorageSpecsByUUID($storageUUID);
         if (!$storageSpecs['found']) {
@@ -133,7 +154,7 @@ class StorageChassisCompatibility extends ComponentCompatibility {
                 'recommendations' => []
             ];
         }
-        
+
         // Get chassis specifications
         $chassisSpecs = $this->chassisManager->loadChassisSpecsByUUID($chassisUUID);
         if (!$chassisSpecs['found']) {
@@ -145,15 +166,15 @@ class StorageChassisCompatibility extends ComponentCompatibility {
                 'recommendations' => []
             ];
         }
-        
+
         $storage = $storageSpecs['specifications'];
         $chassis = $chassisSpecs['specifications'];
-        
+
         $issues = [];
         $warnings = [];
         $recommendations = [];
         $score = 1.0;
-        
+
         // 1. Form factor compatibility
         $formFactorResult = $this->checkFormFactorCompatibility($storage, $chassis);
         if (!$formFactorResult['compatible']) {
@@ -163,7 +184,7 @@ class StorageChassisCompatibility extends ComponentCompatibility {
             $warnings = array_merge($warnings, $formFactorResult['warnings']);
             $score *= 0.9; // Slight penalty for warnings
         }
-        
+
         // 2. Interface compatibility
         $interfaceResult = $this->checkInterfaceSupport($storage, $chassis);
         if (!$interfaceResult['compatible']) {
@@ -173,7 +194,7 @@ class StorageChassisCompatibility extends ComponentCompatibility {
             $warnings = array_merge($warnings, $interfaceResult['warnings']);
             $score *= 0.95;
         }
-        
+
         // 3. Bay availability (if target bay specified)
         if ($targetBay) {
             $bayResult = $this->checkBayAvailability($chassisUUID, $targetBay);
@@ -182,12 +203,12 @@ class StorageChassisCompatibility extends ComponentCompatibility {
                 $score = 0.0;
             }
         }
-        
+
         // Generate recommendations
         if (empty($issues) && !empty($warnings)) {
             $recommendations[] = "Consider storage alternatives for optimal compatibility";
         }
-        
+
         return [
             'compatible' => empty($issues),
             'compatibility_score' => $score,
@@ -195,12 +216,23 @@ class StorageChassisCompatibility extends ComponentCompatibility {
             'warnings' => $warnings,
             'recommendations' => $recommendations
         ];
+        */
     }
     
     /**
      * Validate storage-motherboard compatibility
      */
     public function validateStorageMotherboardCompatibility($storageUUID, $motherboardUUID) {
+        // STORAGE COMPATIBILITY DISABLED - 2025-09-15 - ALWAYS RETURN COMPATIBLE
+        return [
+            'compatible' => true,
+            'compatibility_score' => 1.0,
+            'issues' => [],
+            'warnings' => ['Storage-motherboard compatibility checks disabled'],
+            'recommendations' => ['Storage compatibility validation has been temporarily disabled']
+        ];
+
+        /* ORIGINAL CODE COMMENTED OUT FOR ROLLBACK
         // Get storage specifications
         $storageSpecs = $this->loadStorageSpecsByUUID($storageUUID);
         if (!$storageSpecs['found']) {
@@ -212,7 +244,7 @@ class StorageChassisCompatibility extends ComponentCompatibility {
                 'recommendations' => []
             ];
         }
-        
+
         // Get motherboard specifications
         $motherboardSpecs = $this->loadMotherboardSpecsByUUID($motherboardUUID);
         if (!$motherboardSpecs['found']) {
@@ -224,22 +256,22 @@ class StorageChassisCompatibility extends ComponentCompatibility {
                 'recommendations' => []
             ];
         }
-        
+
         $storage = $storageSpecs['specifications'];
         $motherboard = $motherboardSpecs['specifications'];
-        
+
         $issues = [];
         $warnings = [];
         $recommendations = [];
         $score = 1.0;
-        
+
         // 1. Connector compatibility
         $connectorResult = $this->checkConnectorCompatibility($storage, $motherboard);
         if (!$connectorResult['compatible']) {
             $issues[] = $connectorResult['message'];
             $score = 0.0;
         }
-        
+
         // 2. PCIe lane compatibility for NVMe
         $storageInterface = $this->extractStorageInterface($storage);
         if ($storageInterface['type'] === 'NVMe' || $storageInterface['type'] === 'PCIe') {
@@ -252,7 +284,7 @@ class StorageChassisCompatibility extends ComponentCompatibility {
                 $score *= 0.9;
             }
         }
-        
+
         return [
             'compatible' => empty($issues),
             'compatibility_score' => $score,
@@ -260,6 +292,7 @@ class StorageChassisCompatibility extends ComponentCompatibility {
             'warnings' => $warnings,
             'recommendations' => $recommendations
         ];
+        */
     }
     
     /**
@@ -379,20 +412,28 @@ class StorageChassisCompatibility extends ComponentCompatibility {
      * Interface support compatibility check
      */
     private function checkInterfaceSupport($storage, $chassis) {
+        // STORAGE COMPATIBILITY DISABLED - 2025-09-15 - ALWAYS RETURN COMPATIBLE
+        return [
+            'compatible' => true,
+            'message' => 'Storage interface compatibility checks disabled',
+            'warnings' => ['Interface compatibility validation has been disabled']
+        ];
+
+        /* ORIGINAL CODE COMMENTED OUT FOR ROLLBACK
         $storageInterface = $this->extractStorageInterface($storage);
         $backplaneSupport = $this->chassisManager->extractBackplaneSupport($chassis['uuid'] ?? '');
-        
+
         $interfaceType = $storageInterface['type'];
         $compatible = false;
         $message = '';
         $warnings = [];
-        
+
         switch ($interfaceType) {
             case 'SATA':
                 $compatible = $backplaneSupport['supports_sata'];
                 $message = $compatible ? 'SATA interface supported' : 'SATA interface not supported by chassis backplane';
                 break;
-                
+
             case 'SAS':
                 $compatible = $backplaneSupport['supports_sas'];
                 $message = $compatible ? 'SAS interface supported' : 'SAS interface not supported by chassis backplane';
@@ -401,7 +442,7 @@ class StorageChassisCompatibility extends ComponentCompatibility {
                     $warnings[] = 'SAS not supported but SATA is available - consider SATA alternative';
                 }
                 break;
-                
+
             case 'NVMe':
             case 'PCIe':
                 $compatible = $backplaneSupport['supports_nvme'];
@@ -414,17 +455,18 @@ class StorageChassisCompatibility extends ComponentCompatibility {
                     }
                 }
                 break;
-                
+
             default:
                 $compatible = false;
                 $message = "Unknown storage interface type: {$interfaceType}";
         }
-        
+
         return [
             'compatible' => $compatible,
             'message' => $message,
             'warnings' => $warnings
         ];
+        */
     }
     
     /**

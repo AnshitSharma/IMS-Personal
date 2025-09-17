@@ -434,12 +434,12 @@ function handleChassisValidateStorage($pdo, $baseFunctions, $storageChassisCompa
             'timestamp' => date('Y-m-d H:i:s')
         ]);
     }
-    
+
     $storageUUID = $_POST['storage_uuid'] ?? '';
     $chassisUUID = $_POST['chassis_uuid'] ?? '';
     $configUUID = $_POST['config_uuid'] ?? null;
     $targetBay = $_POST['target_bay'] ?? null;
-    
+
     if (empty($storageUUID) || empty($chassisUUID)) {
         http_response_code(400);
         return json_encode([
@@ -449,11 +449,26 @@ function handleChassisValidateStorage($pdo, $baseFunctions, $storageChassisCompa
             'timestamp' => date('Y-m-d H:i:s')
         ]);
     }
-    
+
+    // STORAGE COMPATIBILITY DISABLED - 2025-09-15 - ALWAYS RETURN COMPATIBLE
+    return json_encode([
+        'success' => true,
+        'authenticated' => true,
+        'message' => 'Storage compatibility validation disabled',
+        'data' => [
+            'compatible' => true,
+            'compatibility_score' => 1.0,
+            'validation_disabled' => true,
+            'reason' => 'Storage compatibility checks temporarily disabled'
+        ],
+        'timestamp' => date('Y-m-d H:i:s')
+    ]);
+
+    /* ORIGINAL CODE COMMENTED OUT FOR ROLLBACK
     $result = $storageChassisCompatibility->validateStorageForConfiguration(
         $configUUID, $storageUUID, $chassisUUID, $targetBay
     );
-    
+
     return json_encode([
         'success' => true,
         'authenticated' => true,
@@ -461,6 +476,7 @@ function handleChassisValidateStorage($pdo, $baseFunctions, $storageChassisCompa
         'data' => $result,
         'timestamp' => date('Y-m-d H:i:s')
     ]);
+    */
 }
 
 /**

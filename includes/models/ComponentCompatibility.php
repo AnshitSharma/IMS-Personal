@@ -319,9 +319,19 @@ class ComponentCompatibility {
      * Check Motherboard-Storage compatibility - ENHANCED WITH JSON VALIDATION
      */
     private function checkMotherboardStorageCompatibility($component1, $component2) {
+        // STORAGE COMPATIBILITY DISABLED - 2025-09-15 - ALWAYS RETURN COMPATIBLE
+        return [
+            'compatible' => true,
+            'compatibility_score' => 1.0,
+            'issues' => [],
+            'warnings' => ['Storage compatibility checks have been disabled'],
+            'recommendations' => ['Storage compatibility validation is currently disabled']
+        ];
+
+        /* ORIGINAL CODE COMMENTED OUT FOR ROLLBACK
         $motherboard = $component1['type'] === 'motherboard' ? $component1 : $component2;
         $storage = $component1['type'] === 'storage' ? $component1 : $component2;
-        
+
         $result = [
             'compatible' => true,
             'compatibility_score' => 1.0,
@@ -329,7 +339,7 @@ class ComponentCompatibility {
             'warnings' => [],
             'recommendations' => []
         ];
-        
+
         try {
             // Load storage specifications from JSON with UUID validation
             $storageSpecs = $this->loadStorageSpecs($storage['uuid']);
@@ -340,7 +350,8 @@ class ComponentCompatibility {
                 $result['warnings'][] = "Falling back to database Notes field parsing";
                 return $this->fallbackStorageCompatibilityCheck($component1, $component2);
             }
-            
+        */
+
             // Load motherboard specifications from JSON
             $motherboardSpecs = $this->loadMotherboardSpecs($motherboard['uuid']);
             if (!$motherboardSpecs) {
@@ -349,7 +360,7 @@ class ComponentCompatibility {
                 $result['issues'][] = "Motherboard UUID {$motherboard['uuid']} not found in motherboard-level-3.json";
                 return $result;
             }
-            
+
             // Interface Type Compatibility Check
             $interfaceResult = $this->checkStorageInterfaceCompatibility($storageSpecs, $motherboardSpecs);
             if (!$interfaceResult['compatible']) {
@@ -359,7 +370,7 @@ class ComponentCompatibility {
                 $result['recommendations'][] = $interfaceResult['recommendation'];
                 return $result;
             }
-            
+
             // Form Factor and Connector Validation
             $formFactorResult = $this->checkFormFactorCompatibility($storageSpecs, $motherboardSpecs);
             if (!$formFactorResult['compatible']) {
@@ -369,7 +380,7 @@ class ComponentCompatibility {
                 $result['recommendations'][] = $formFactorResult['recommendation'];
                 return $result;
             }
-            
+
             // PCIe Bandwidth Validation for NVMe storage
             if ($this->isNVMeStorage($storageSpecs)) {
                 $bandwidthResult = $this->checkPCIeBandwidthCompatibility($storageSpecs, $motherboardSpecs);
@@ -384,26 +395,27 @@ class ComponentCompatibility {
                     $result['recommendations'][] = $bandwidthResult['recommendation'];
                 }
             }
-            
+
             // Calculate final compatibility score
             $result['compatibility_score'] = min(
                 $interfaceResult['score'],
                 $formFactorResult['score'],
                 isset($bandwidthResult) ? $bandwidthResult['score'] : 1.0
             );
-            
+
             // Add performance recommendations if score is below optimal
             if ($result['compatibility_score'] < 0.9) {
                 $result['recommendations'][] = 'Consider alternative storage options for optimal compatibility';
             }
-            
+
         } catch (Exception $e) {
             error_log("Enhanced Motherboard-Storage compatibility check error: " . $e->getMessage());
             $result['warnings'][] = "Detailed compatibility check failed, using fallback method";
             return $this->fallbackStorageCompatibilityCheck($component1, $component2);
         }
-        
+
         return $result;
+        */
     }
     
     /**
@@ -468,9 +480,19 @@ class ComponentCompatibility {
      * Check Storage-Caddy compatibility
      */
     private function checkStorageCaddyCompatibility($component1, $component2) {
+        // STORAGE COMPATIBILITY DISABLED - 2025-09-15 - ALWAYS RETURN COMPATIBLE
+        return [
+            'compatible' => true,
+            'compatibility_score' => 1.0,
+            'issues' => [],
+            'warnings' => ['Storage-caddy compatibility checks have been disabled'],
+            'recommendations' => ['Storage compatibility validation is currently disabled']
+        ];
+
+        /* ORIGINAL CODE COMMENTED OUT FOR ROLLBACK
         $storage = $component1['type'] === 'storage' ? $component1 : $component2;
         $caddy = $component1['type'] === 'caddy' ? $component1 : $component2;
-        
+
         $result = [
             'compatible' => true,
             'compatibility_score' => 1.0,
@@ -478,39 +500,40 @@ class ComponentCompatibility {
             'warnings' => [],
             'recommendations' => []
         ];
-        
+
         try {
             $storageData = $this->getComponentData($storage['type'], $storage['uuid']);
             $caddyData = $this->getComponentData($caddy['type'], $caddy['uuid']);
-            
+
             // Form factor compatibility
             $storageFormFactor = $this->extractStorageFormFactor($storageData);
             $caddySupportedFormFactors = $this->extractSupportedFormFactors($caddyData);
-            
+
             if ($storageFormFactor && $caddySupportedFormFactors && !in_array($storageFormFactor, $caddySupportedFormFactors)) {
                 $result['compatible'] = false;
                 $result['compatibility_score'] = 0.0;
                 $result['issues'][] = "Storage form factor ($storageFormFactor) not supported by caddy";
                 return $result;
             }
-            
+
             // Interface compatibility
             $storageInterface = $this->extractStorageInterface($storageData);
             $caddySupportedInterfaces = $this->extractSupportedInterfaces($caddyData);
-            
+
             if ($storageInterface && $caddySupportedInterfaces && !in_array($storageInterface, $caddySupportedInterfaces)) {
                 $result['compatible'] = false;
                 $result['compatibility_score'] = 0.0;
                 $result['issues'][] = "Storage interface ($storageInterface) not supported by caddy";
                 return $result;
             }
-            
+
         } catch (Exception $e) {
             error_log("Storage-Caddy compatibility check error: " . $e->getMessage());
             $result['warnings'][] = "Unable to perform detailed compatibility check";
         }
-        
+
         return $result;
+        */
     }
     
     /**
@@ -2770,9 +2793,18 @@ class ComponentCompatibility {
      * Check storage interface compatibility with motherboard
      */
     private function checkStorageInterfaceCompatibility($storageSpecs, $motherboardSpecs) {
+        // STORAGE COMPATIBILITY DISABLED - 2025-09-15 - ALWAYS RETURN COMPATIBLE
+        return [
+            'compatible' => true,
+            'score' => 1.0,
+            'message' => 'Storage interface compatibility checks disabled',
+            'recommendation' => 'Storage interface validation has been disabled'
+        ];
+
+        /* ORIGINAL CODE COMMENTED OUT FOR ROLLBACK
         $storageInterface = $storageSpecs['interface_type'];
         $mbInterfaces = $motherboardSpecs['storage_interfaces'];
-        
+
         // Direct interface match (highest score)
         if (in_array($storageInterface, $mbInterfaces)) {
             return [
@@ -2782,7 +2814,7 @@ class ComponentCompatibility {
                 'recommendation' => 'Native interface support provides optimal performance'
             ];
         }
-        
+
         // Check for compatible alternatives
         $compatibilityMatrix = [
             'SATA III' => ['SATA', 'SATA II'],
@@ -2792,7 +2824,7 @@ class ComponentCompatibility {
             'NVMe' => ['PCIe NVMe', 'PCIe NVMe 4.0', 'PCIe NVMe 3.0'],
             'SAS' => [], // SAS requires dedicated controller
         ];
-        
+
         if (isset($compatibilityMatrix[$storageInterface])) {
             foreach ($compatibilityMatrix[$storageInterface] as $altInterface) {
                 if (in_array($altInterface, $mbInterfaces)) {
@@ -2805,7 +2837,7 @@ class ComponentCompatibility {
                 }
             }
         }
-        
+
         // Check if NVMe can work via PCIe slot
         if (strpos($storageInterface, 'NVMe') !== false || strpos($storageInterface, 'PCIe') !== false) {
             if (!empty($motherboardSpecs['pcie_slots'])) {
@@ -2817,7 +2849,7 @@ class ComponentCompatibility {
                 ];
             }
         }
-        
+
         // No compatible interface found
         return [
             'compatible' => false,
@@ -2825,6 +2857,7 @@ class ComponentCompatibility {
             'message' => "Storage requires $storageInterface but motherboard only supports: " . implode(', ', $mbInterfaces),
             'recommendation' => 'Use storage device with compatible interface or upgrade motherboard'
         ];
+        */
     }
 
     /**
@@ -2936,9 +2969,19 @@ class ComponentCompatibility {
      * Fallback storage compatibility check using database data
      */
     private function fallbackStorageCompatibilityCheck($component1, $component2) {
+        // STORAGE COMPATIBILITY DISABLED - 2025-09-15 - ALWAYS RETURN COMPATIBLE
+        return [
+            'compatible' => true,
+            'compatibility_score' => 1.0,
+            'issues' => [],
+            'warnings' => ['Storage compatibility checks have been disabled'],
+            'recommendations' => ['Storage compatibility validation is currently disabled']
+        ];
+
+        /* ORIGINAL CODE COMMENTED OUT FOR ROLLBACK
         $motherboard = $component1['type'] === 'motherboard' ? $component1 : $component2;
         $storage = $component1['type'] === 'storage' ? $component1 : $component2;
-        
+
         $result = [
             'compatible' => true,
             'compatibility_score' => 0.70, // Lower score for fallback method
@@ -2946,29 +2989,30 @@ class ComponentCompatibility {
             'warnings' => ['Using fallback compatibility check - JSON data not available'],
             'recommendations' => ['Update storage-level-3.json for enhanced compatibility validation']
         ];
-        
+
         try {
             $motherboardData = $this->getComponentData($motherboard['type'], $motherboard['uuid']);
             $storageData = $this->getComponentData($storage['type'], $storage['uuid']);
-            
+
             // Basic interface checking from database notes
             $motherboardInterfaces = $this->extractStorageInterfaces($motherboardData);
             $storageInterface = $this->extractStorageInterface($storageData);
-            
+
             if ($motherboardInterfaces && $storageInterface && !in_array($storageInterface, $motherboardInterfaces)) {
                 $result['compatible'] = false;
                 $result['compatibility_score'] = 0.30;
                 $result['issues'][] = "Storage interface possibly incompatible: $storageInterface";
                 $result['recommendations'][] = 'Verify interface compatibility manually';
             }
-            
+
         } catch (Exception $e) {
             error_log("Fallback storage compatibility check error: " . $e->getMessage());
             $result['warnings'][] = "Unable to perform fallback compatibility check";
             $result['compatibility_score'] = 0.60;
         }
-        
+
         return $result;
+        */
     }
 
     /**
