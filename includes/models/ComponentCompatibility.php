@@ -350,7 +350,6 @@ class ComponentCompatibility {
                 $result['warnings'][] = "Falling back to database Notes field parsing";
                 return $this->fallbackStorageCompatibilityCheck($component1, $component2);
             }
-        */
 
             // Load motherboard specifications from JSON
             $motherboardSpecs = $this->loadMotherboardSpecs($motherboard['uuid']);
@@ -408,14 +407,8 @@ class ComponentCompatibility {
                 $result['recommendations'][] = 'Consider alternative storage options for optimal compatibility';
             }
 
-        } catch (Exception $e) {
-            error_log("Enhanced Motherboard-Storage compatibility check error: " . $e->getMessage());
-            $result['warnings'][] = "Detailed compatibility check failed, using fallback method";
-            return $this->fallbackStorageCompatibilityCheck($component1, $component2);
-        }
-
         return $result;
-        */
+        END ORIGINAL CODE COMMENT */
     }
     
     /**

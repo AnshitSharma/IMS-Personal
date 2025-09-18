@@ -5,6 +5,7 @@ require_once __DIR__ . '/../../includes/models/ServerBuilder.php';
 require_once __DIR__ . '/../../includes/models/ServerConfiguration.php';
 require_once __DIR__ . '/../../includes/models/CompatibilityEngine.php';
 
+
 header('Content-Type: application/json');
 
 // Initialize database connection and authentication
@@ -384,7 +385,14 @@ function handleAddComponent($serverBuilder, $user) {
         error_log("Missing required parameters");
         send_json_response(0, 1, 400, "Configuration UUID, component type, and component UUID are required");
     }
-    
+
+    // Basic component type validation
+    $validComponentTypes = ['cpu', 'motherboard', 'ram', 'storage', 'nic', 'caddy'];
+    if (!in_array($componentType, $validComponentTypes)) {
+        send_json_response(0, 1, 400, "Invalid component type. Valid types: " . implode(', ', $validComponentTypes));
+    }
+
+
     try {
         // Load the configuration
         $config = ServerConfiguration::loadByUuid($pdo, $configUuid);
@@ -397,14 +405,25 @@ function handleAddComponent($serverBuilder, $user) {
             send_json_response(0, 1, 403, "Insufficient permissions to modify this configuration");
         }
         
-        // Get component details and validate availability
-        $componentDetails = getComponentDetails($pdo, $componentType, $componentUuid);
-        if (!$componentDetails) {
-            send_json_response(0, 1, 404, "Component not found", [
+        // EXISTING: Component existence validation (MODIFY to use new function)
+        $componentValidation = validateComponentExists($componentType, $componentUuid);
+        if (!$componentValidation['exists']) {
+            send_json_response(0, 1, 404, $componentValidation['message'], [
                 'component_type' => $componentType,
                 'component_uuid' => $componentUuid
             ]);
         }
+
+        if (!$componentValidation['available']) {
+            send_json_response(0, 1, 400, "Component is not available", [
+                'component_status' => $componentValidation['component']['Status'],
+                'component_type' => $componentType,
+                'component_uuid' => $componentUuid
+            ]);
+        }
+
+        // Get component details for legacy compatibility
+        $componentDetails = $componentValidation['component'];
         
         // FIXED: Enhanced availability check with ServerUUID context
         $componentStatus = (int)$componentDetails['Status'];
@@ -457,7 +476,7 @@ function handleAddComponent($serverBuilder, $user) {
                 'suggested_alternatives' => getSuggestedAlternatives($pdo, $componentType, $componentUuid)
             ]);
         }
-        
+            
         // ENHANCED: Step 1 - Comprehensive validation before component addition
         try {
             // Check if ComponentCompatibility class exists before loading
@@ -563,15 +582,6 @@ function handleAddComponent($serverBuilder, $user) {
             // Simple success response - avoid complex operations that could fail
             error_log("Component added successfully: $componentType/$componentUuid to config $configUuid");
             
-            // Get basic configuration summary if possible
-            $summary = null;
-            try {
-                $summary = $serverBuilder->getConfigurationSummary($configUuid);
-            } catch (Exception $e) {
-                error_log("Warning: Could not get configuration summary: " . $e->getMessage());
-                $summary = ['error' => 'Summary unavailable'];
-            }
-            
             // Build response data
             $responseData = [
                 'component_added' => [
@@ -582,7 +592,6 @@ function handleAddComponent($serverBuilder, $user) {
                     'original_status' => $statusMessage ?? 'Unknown',
                     'server_uuid_updated' => $configUuid
                 ],
-                'configuration_summary' => $summary,
                 'timestamp' => date('Y-m-d H:i:s')
             ];
             
@@ -658,7 +667,7 @@ function handleAddComponent($serverBuilder, $user) {
             // Add specific error details based on error type
             switch ($errorType) {
                 case 'json_not_found':
-                    $enhancedErrorDetails['suggested_action'] = 'Verify component exists in JSON specifications database';
+                    $enhancedErrorDetails['suggested_action'] = 'Verify component exists in JSON specifications ';
                     $enhancedErrorDetails['technical_details'] = 'Component UUID not found in corresponding JSON file';
                     break;
                     
@@ -742,15 +751,12 @@ function handleRemoveComponent($serverBuilder, $user) {
         $result = $serverBuilder->removeComponent($configUuid, $componentType, $componentUuid);
         
         if ($result['success']) {
-            $summary = $serverBuilder->getConfigurationSummary($configUuid);
-            
             send_json_response(1, 1, 200, "Component removed successfully", [
                 'component_removed' => [
                     'type' => $componentType,
                     'uuid' => $componentUuid,
                     'server_uuid_cleared' => true
-                ],
-                'configuration_summary' => $summary
+                ]
             ]);
         } else {
             send_json_response(0, 1, 400, $result['message'] ?? "Failed to remove component");
@@ -1003,29 +1009,38 @@ function handleDeleteConfiguration($serverBuilder, $user) {
  */
 function handleGetAvailableComponents($user) {
     global $pdo;
-    
+
+    $configUuid = $_GET['config_uuid'] ?? $_POST['config_uuid'] ?? '';
     $componentType = $_GET['component_type'] ?? $_POST['component_type'] ?? '';
-    $includeInUse = filter_var($_GET['include_in_use'] ?? $_POST['include_in_use'] ?? false, FILTER_VALIDATE_BOOLEAN);
+    $availableOnly = filter_var($_GET['available_only'] ?? $_POST['available_only'] ?? true, FILTER_VALIDATE_BOOLEAN);
     $limit = (int)($_GET['limit'] ?? 50);
-    
+
+
     if (empty($componentType)) {
         send_json_response(0, 1, 400, "Component type is required");
     }
-    
+
     try {
-        // Respect the include_in_use parameter strictly
-        $availableOnly = !$includeInUse;
+        // Continue with existing component listing logic
         $components = getAvailableComponents($pdo, $componentType, $availableOnly, $limit);
         $count = getComponentCount($pdo, $componentType);
-        
-        send_json_response(1, 1, 200, "Available components retrieved successfully", [
+
+        $responseData = [
             'component_type' => $componentType,
             'components' => $components,
             'counts' => $count,
-            'include_in_use' => $includeInUse,
+            'available_only' => $availableOnly,
             'total_returned' => count($components)
-        ]);
-        
+        ];
+
+        // Add configuration context if provided
+        if ($configUuid) {
+            $responseData['configuration_summary'] = $configSummary;
+            $responseData['allowed_types'] = $allowedTypes;
+        }
+
+        send_json_response(1, 1, 200, "Available components retrieved successfully", $responseData);
+
     } catch (Exception $e) {
         error_log("Error getting available components: " . $e->getMessage());
         send_json_response(0, 1, 500, "Failed to get available components: " . $e->getMessage());
@@ -1467,19 +1482,19 @@ function createConfigurationHistoryTable($pdo) {
 function getComponentDetails($pdo, $componentType, $componentUuid) {
     $tableMap = [
         'cpu' => 'cpuinventory',
-        'ram' => 'raminventory', 
+        'ram' => 'raminventory',
         'storage' => 'storageinventory',
         'motherboard' => 'motherboardinventory',
         'nic' => 'nicinventory',
         'caddy' => 'caddyinventory'
     ];
-    
+
     if (!isset($tableMap[$componentType])) {
         return null;
     }
-    
+
     $table = $tableMap[$componentType];
-    
+
     try {
         $stmt = $pdo->prepare("SELECT * FROM $table WHERE UUID = ?");
         $stmt->execute([$componentUuid]);
@@ -1524,7 +1539,7 @@ function getSuggestedAlternatives($pdo, $componentType, $excludeUuid, $limit = 5
     $tableMap = [
         'cpu' => 'cpuinventory',
         'ram' => 'raminventory',
-        'storage' => 'storageinventory', 
+        'storage' => 'storageinventory',
         'motherboard' => 'motherboardinventory',
         'nic' => 'nicinventory',
         'caddy' => 'caddyinventory'
@@ -2862,5 +2877,42 @@ if (!function_exists('hasPermission')) {
             return false;
         }
     }
+}
+
+
+
+/**
+ * Validate component exists and get details
+ */
+function validateComponentExists($componentType, $componentUuid) {
+    global $pdo;
+
+    $tableName = getComponentTableName($componentType);
+    if (!$tableName) {
+        return [
+            'exists' => false,
+            'message' => 'Invalid component type',
+            'component_type' => $componentType
+        ];
+    }
+
+    $stmt = $pdo->prepare("SELECT Status, UUID, SerialNumber, Notes FROM $tableName WHERE UUID = ?");
+    $stmt->execute([$componentUuid]);
+    $component = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if (!$component) {
+        return [
+            'exists' => false,
+            'message' => 'Component not found in inventory',
+            'component_type' => $componentType,
+            'component_uuid' => $componentUuid
+        ];
+    }
+
+    return [
+        'exists' => true,
+        'component' => $component,
+        'available' => $component['Status'] == 1
+    ];
 }
 ?>

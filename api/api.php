@@ -1198,15 +1198,16 @@ function performGlobalSearch($pdo, $query, $limit, $user) {
  */
 function getComponentTableName($type) {
     $tableMap = [
+        'chassis' => 'chassisinventory',
         'cpu' => 'cpuinventory',
-        'ram' => 'raminventory', 
+        'ram' => 'raminventory',
         'storage' => 'storageinventory',
         'motherboard' => 'motherboardinventory',
         'nic' => 'nicinventory',
         'caddy' => 'caddyinventory',
         'pciecard' => 'pciecardinventory'
     ];
-    
+
     return $tableMap[$type] ?? $type;
 }
 
