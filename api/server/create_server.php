@@ -102,23 +102,9 @@ function handleInitializeServerCreation() {
             $location, $rackPosition, $notes, $user['id']
         ]);
         
-        // Get initial component options based on starting preference
+        // Initialize with chassis options first (required for new order)
         $initialOptions = [];
-        
-        if ($startWith === 'any' || $startWith === 'cpu') {
-            $initialOptions['cpu'] = getAvailableComponents($pdo, 'cpu');
-        }
-        
-        if ($startWith === 'any' || $startWith === 'motherboard') {
-            $initialOptions['motherboard'] = getAvailableComponents($pdo, 'motherboard');
-        }
-        
-        if ($startWith === 'any') {
-            $initialOptions['ram'] = getAvailableComponents($pdo, 'ram');
-            $initialOptions['storage'] = getAvailableComponents($pdo, 'storage');
-            $initialOptions['nic'] = getAvailableComponents($pdo, 'nic');
-            $initialOptions['caddy'] = getAvailableComponents($pdo, 'caddy');
-        }
+        $initialOptions['chassis'] = getAvailableComponents($pdo, 'chassis');
         
         // Log the initialization with enhanced metadata
         logServerBuildAction($pdo, $configUuid, 'initialize', null, null, [
@@ -141,11 +127,12 @@ function handleInitializeServerCreation() {
             'notes' => $notes,
             'starting_options' => $initialOptions,
             'workflow_step' => 1,
-            'next_recommended' => $startWith === 'cpu' ? 'motherboard' : ($startWith === 'motherboard' ? 'cpu' : 'any'),
+            'next_recommended' => 'chassis',
             'progress' => [
-                'total_steps' => 6, // CPU, MB, RAM, Storage, NIC, Validation
+                'total_steps' => 7, // Chassis, MB, CPU, RAM, Storage, NIC, Validation
                 'completed_steps' => 0,
-                'current_step' => 'component_selection'
+                'current_step' => 'chassis_selection',
+                'required_order' => ['chassis', 'motherboard', 'cpu', 'ram', 'storage', 'nic']
             ]
         ]);
         

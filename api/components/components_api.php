@@ -29,6 +29,7 @@ if (preg_match('/^([a-z]+)-(get|add|update|delete|list)$/', $action, $matches)) 
 
 // Map component types to database tables
 $tableMap = [
+    'chassis' => 'chassisinventory',
     'cpu' => 'cpuinventory',
     'ram' => 'raminventory',
     'storage' => 'storageinventory',

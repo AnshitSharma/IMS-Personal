@@ -66,13 +66,19 @@ class ChassisManager {
             }
             
             // Search through manufacturers and series
+            $uuidsFound = [];
             foreach ($data['chassis_specifications']['manufacturers'] as $manufacturer) {
                 if (!isset($manufacturer['series'])) continue;
-                
+
                 foreach ($manufacturer['series'] as $series) {
                     if (!isset($series['models'])) continue;
-                    
+
                     foreach ($series['models'] as $model) {
+                        // Debug: collect all UUIDs found
+                        if (isset($model['uuid'])) {
+                            $uuidsFound[] = $model['uuid'];
+                        }
+
                         if (isset($model['uuid']) && $model['uuid'] === $uuid) {
                             return [
                                 'found' => true,
@@ -84,6 +90,7 @@ class ChassisManager {
                     }
                 }
             }
+
             
             return [
                 'found' => false,
@@ -99,101 +106,30 @@ class ChassisManager {
     }
     
     /**
-     * Get available bays for a chassis configuration
+     * Validate chassis availability in database
      */
-    public function getAvailableBays($chassisUUID, $configUUID = null, $pdo = null) {
-        $chassisSpecs = $this->loadChassisSpecsByUUID($chassisUUID);
-        if (!$chassisSpecs['found']) {
-            return [
-                'success' => false,
-                'error' => $chassisSpecs['error'],
-                'available_bays' => []
-            ];
-        }
-        
-        $specs = $chassisSpecs['specifications'];
-        $totalBays = [];
-        
-        // Parse bay configuration from chassis specs
-        if (isset($specs['drive_bays']['bay_configuration'])) {
-            foreach ($specs['drive_bays']['bay_configuration'] as $bayConfig) {
-                $bayType = $bayConfig['bay_type'];
-                $count = $bayConfig['count'];
-                
-                for ($i = 1; $i <= $count; $i++) {
-                    $totalBays[] = [
-                        'bay_id' => $bayType . '_bay_' . $i,
-                        'bay_type' => $bayType,
-                        'position' => $bayConfig['position'] ?? 'internal',
-                        'hot_swap' => $bayConfig['hot_swap'] ?? false,
-                        'tool_less' => $bayConfig['tool_less'] ?? false
-                    ];
-                }
-            }
-        }
-        
-        // If PDO is provided and configUUID is specified, check assigned bays
-        $assignedBays = [];
-        if ($pdo && $configUUID) {
-            try {
-                $stmt = $pdo->prepare("SELECT bay_assignment FROM storage_chassis_mapping WHERE config_uuid = ? AND chassis_uuid = ?");
-                $stmt->execute([$configUUID, $chassisUUID]);
-                $assignedBays = $stmt->fetchAll(PDO::FETCH_COLUMN);
-            } catch (Exception $e) {
-                // Log error but continue
-                error_log("Error fetching assigned bays: " . $e->getMessage());
-            }
-        }
-        
-        // Filter out assigned bays
-        $availableBays = array_filter($totalBays, function($bay) use ($assignedBays) {
-            return !in_array($bay['bay_id'], $assignedBays);
-        });
-        
-        return [
-            'success' => true,
-            'total_bays' => count($totalBays),
-            'assigned_bays' => count($assignedBays),
-            'available_bays' => array_values($availableBays)
-        ];
-    }
-    
-    /**
-     * Get assigned bays for a configuration
-     */
-    public function getAssignedBays($configUUID, $chassisUUID = null, $pdo = null) {
-        if (!$pdo) {
-            return [
-                'success' => false,
-                'error' => 'Database connection required',
-                'assigned_bays' => []
-            ];
-        }
-        
+    public function validateChassisAvailability($uuid, $pdo) {
         try {
-            $sql = "SELECT storage_uuid, chassis_uuid, bay_assignment, bay_type, connection_type, pcie_lanes 
-                    FROM storage_chassis_mapping WHERE config_uuid = ?";
-            $params = [$configUUID];
-            
-            if ($chassisUUID) {
-                $sql .= " AND chassis_uuid = ?";
-                $params[] = $chassisUUID;
+            $stmt = $pdo->prepare("SELECT Status FROM chassisinventory WHERE UUID = ? LIMIT 1");
+            $stmt->execute([$uuid]);
+            $result = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$result) {
+                return [
+                    'available' => false,
+                    'error' => 'Chassis not found in inventory'
+                ];
             }
-            
-            $stmt = $pdo->prepare($sql);
-            $stmt->execute($params);
-            $assignedBays = $stmt->fetchAll(PDO::FETCH_ASSOC);
-            
+
             return [
-                'success' => true,
-                'assigned_bays' => $assignedBays
+                'available' => $result['Status'] == 1,
+                'status' => $result['Status'],
+                'error' => $result['Status'] != 1 ? 'Chassis is not available (Status: ' . $result['Status'] . ')' : null
             ];
-            
         } catch (Exception $e) {
             return [
-                'success' => false,
-                'error' => $e->getMessage(),
-                'assigned_bays' => []
+                'available' => false,
+                'error' => 'Database error: ' . $e->getMessage()
             ];
         }
     }
@@ -210,110 +146,23 @@ class ChassisManager {
     }
     
     /**
-     * Get bay configuration details
+     * Get chassis specifications for display
      */
-    public function getBayConfiguration($chassisUUID) {
+    public function getChassisSpecifications($chassisUUID) {
         $chassisSpecs = $this->loadChassisSpecsByUUID($chassisUUID);
         if (!$chassisSpecs['found']) {
             return [
                 'success' => false,
                 'error' => $chassisSpecs['error'],
-                'bay_configuration' => []
+                'specifications' => null
             ];
         }
-        
-        $specs = $chassisSpecs['specifications'];
-        $bayConfiguration = $specs['drive_bays']['bay_configuration'] ?? [];
-        
+
         return [
             'success' => true,
-            'total_bays' => $specs['drive_bays']['total_bays'] ?? 0,
-            'bay_configuration' => $bayConfiguration,
-            'backplane' => $specs['backplane'] ?? [],
-            'motherboard_compatibility' => $specs['motherboard_compatibility'] ?? []
-        ];
-    }
-    
-    /**
-     * Extract form factor compatibility from chassis
-     */
-    public function extractChassisBayTypes($chassisUUID) {
-        $chassisSpecs = $this->loadChassisSpecsByUUID($chassisUUID);
-        if (!$chassisSpecs['found']) {
-            return [];
-        }
-        
-        $bayTypes = [];
-        $specs = $chassisSpecs['specifications'];
-        
-        if (isset($specs['drive_bays']['bay_configuration'])) {
-            foreach ($specs['drive_bays']['bay_configuration'] as $config) {
-                $bayTypes[] = $config['bay_type'];
-            }
-        }
-        
-        return array_unique($bayTypes);
-    }
-    
-    /**
-     * Extract backplane support information
-     */
-    public function extractBackplaneSupport($chassisUUID) {
-        $chassisSpecs = $this->loadChassisSpecsByUUID($chassisUUID);
-        if (!$chassisSpecs['found']) {
-            return [
-                'supports_sata' => false,
-                'supports_sas' => false,
-                'supports_nvme' => false,
-                'interface' => 'unknown'
-            ];
-        }
-        
-        $backplane = $chassisSpecs['specifications']['backplane'] ?? [];
-        
-        return [
-            'supports_sata' => $backplane['supports_sata'] ?? false,
-            'supports_sas' => $backplane['supports_sas'] ?? false,
-            'supports_nvme' => $backplane['supports_nvme'] ?? false,
-            'interface' => $backplane['interface'] ?? 'unknown',
-            'connector_type' => $backplane['connector_type'] ?? 'unknown',
-            'nvme_lanes_per_bay' => $backplane['nvme_lanes_per_bay'] ?? null
-        ];
-    }
-    
-    /**
-     * Extract required motherboard connectors
-     */
-    public function extractRequiredConnectors($chassisUUID) {
-        $chassisSpecs = $this->loadChassisSpecsByUUID($chassisUUID);
-        if (!$chassisSpecs['found']) {
-            return [];
-        }
-        
-        $connectivity = $chassisSpecs['specifications']['connectivity'] ?? [];
-        return $connectivity['required_motherboard_connectors'] ?? [];
-    }
-    
-    /**
-     * Extract motherboard compatibility requirements
-     */
-    public function extractMotherboardCompatibility($chassisUUID) {
-        $chassisSpecs = $this->loadChassisSpecsByUUID($chassisUUID);
-        if (!$chassisSpecs['found']) {
-            return [
-                'form_factors' => [],
-                'mounting_points' => null,
-                'motherboard_models' => []
-            ];
-        }
-        
-        $compatibility = $chassisSpecs['specifications']['motherboard_compatibility'] ?? [];
-        
-        return [
-            'form_factors' => $compatibility['form_factors'] ?? [],
-            'mounting_points' => $compatibility['mounting_points'] ?? null,
-            'motherboard_models' => $compatibility['motherboard_models'] ?? [],
-            'max_motherboard_size' => $compatibility['max_motherboard_size'] ?? null
+            'specifications' => $chassisSpecs['specifications'],
+            'manufacturer' => $chassisSpecs['manufacturer'],
+            'series_name' => $chassisSpecs['series_name']
         ];
     }
     

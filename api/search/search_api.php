@@ -28,6 +28,7 @@ if (empty($query)) {
 
 // Table mapping
 $tableMap = [
+    'chassis' => 'chassisinventory',
     'cpu' => 'cpuinventory',
     'ram' => 'raminventory',
     'storage' => 'storageinventory',

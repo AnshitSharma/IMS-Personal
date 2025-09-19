@@ -571,6 +571,7 @@ class ComponentCompatibility {
      */
     private function getJSONFilePaths() {
         return [
+            'chassis' => __DIR__ . '/../../All-JSON/chasis-jsons/chasis-level-3.json',
             'cpu' => __DIR__ . '/../../All-JSON/cpu-jsons/Cpu-details-level-3.json',
             'motherboard' => __DIR__ . '/../../All-JSON/motherboad-jsons/motherboard-level-3.json',
             'ram' => __DIR__ . '/../../All-JSON/Ram-jsons/ram_detail.json',

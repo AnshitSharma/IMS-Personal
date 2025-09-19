@@ -387,7 +387,7 @@ function handleAddComponent($serverBuilder, $user) {
     }
 
     // Basic component type validation
-    $validComponentTypes = ['cpu', 'motherboard', 'ram', 'storage', 'nic', 'caddy'];
+    $validComponentTypes = ['chassis', 'cpu', 'motherboard', 'ram', 'storage', 'nic', 'caddy'];
     if (!in_array($componentType, $validComponentTypes)) {
         send_json_response(0, 1, 400, "Invalid component type. Valid types: " . implode(', ', $validComponentTypes));
     }
@@ -1105,7 +1105,7 @@ function handleGetCompatible($serverBuilder, $user) {
     }
     
     // Validate component type
-    $validComponentTypes = ['cpu', 'ram', 'storage', 'nic', 'caddy'];
+    $validComponentTypes = ['chassis', 'cpu', 'motherboard', 'ram', 'storage', 'nic', 'caddy'];
     if (!in_array($componentType, $validComponentTypes)) {
         send_json_response(0, 1, 400, "Invalid component type. Must be one of: " . implode(', ', $validComponentTypes));
     }

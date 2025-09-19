@@ -39,6 +39,61 @@ class CompatibilityEngine extends ComponentCompatibility {
     }
 
     /**
+     * Validate chassis exists in JSON and database with same pattern as other components
+     */
+    public function validateChassisExistsInJSON($chassisUuid) {
+        try {
+            // Use ChassisManager for proper chassis JSON validation
+            require_once __DIR__ . '/ChassisManager.php';
+            $chassisManager = new ChassisManager();
+
+            // Check JSON existence using ChassisManager
+            $chassisSpecs = $chassisManager->loadChassisSpecsByUUID($chassisUuid);
+
+            if (!$chassisSpecs['found']) {
+                return [
+                    'success' => false,
+                    'error' => "Chassis UUID $chassisUuid not found in chassis JSON specifications: " . $chassisSpecs['error'],
+                    'error_type' => 'json_not_found'
+                ];
+            }
+
+            // Check database existence and availability
+            $stmt = $this->pdo->prepare("SELECT Status FROM chassisinventory WHERE UUID = ? LIMIT 1");
+            $stmt->execute([$chassisUuid]);
+            $result = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$result) {
+                return [
+                    'success' => false,
+                    'error' => "Chassis UUID $chassisUuid not found in inventory database",
+                    'error_type' => 'database_not_found'
+                ];
+            }
+
+            if ($result['Status'] != 1) {
+                return [
+                    'success' => false,
+                    'error' => "Chassis is not available (Status: {$result['Status']})",
+                    'error_type' => 'not_available'
+                ];
+            }
+
+            return [
+                'success' => true,
+                'message' => 'Chassis is valid and available'
+            ];
+
+        } catch (Exception $e) {
+            return [
+                'success' => false,
+                'error' => 'Validation error: ' . $e->getMessage(),
+                'error_type' => 'system_error'
+            ];
+        }
+    }
+
+    /**
      * Get compatible components for a base component
      */
     public function getCompatibleComponents($baseComponent, $targetType, $availableOnly = true) {

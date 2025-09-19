@@ -15,7 +15,7 @@ $componentType = isset($_GET['type']) ? $_GET['type'] : '';
 $componentId = isset($_GET['id']) ? $_GET['id'] : '';
 
 // Validate component type
-$validTypes = ['cpu', 'ram', 'storage', 'motherboard', 'nic', 'caddy'];
+$validTypes = ['chassis', 'cpu', 'ram', 'storage', 'motherboard', 'nic', 'caddy'];
 if (!in_array($componentType, $validTypes)) {
     http_response_code(400);
     echo "Invalid component type";
@@ -24,6 +24,7 @@ if (!in_array($componentType, $validTypes)) {
 
 // Table mapping
 $tableMap = [
+    'chassis' => 'chassisinventory',
     'cpu' => 'cpuinventory',
     'ram' => 'raminventory',
     'storage' => 'storageinventory',

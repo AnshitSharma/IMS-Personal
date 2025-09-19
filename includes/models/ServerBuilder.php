@@ -8,6 +8,7 @@ class ServerBuilder {
     public function __construct($pdo) {
         $this->pdo = $pdo;
         $this->componentTables = [
+            'chassis' => 'chassisinventory',
             'cpu' => 'cpuinventory',
             'ram' => 'raminventory',
             'storage' => 'storageinventory',
@@ -63,6 +64,12 @@ class ServerBuilder {
                 ];
             }
             
+            // Phase 1.5: Validate component addition order
+            $orderValidation = $this->validateComponentAdditionOrder($configUuid, $componentType);
+            if (!$orderValidation['success']) {
+                return $orderValidation;
+            }
+
             // Phase 2: Check for duplicate component FIRST with cleanup
             if ($this->isDuplicateComponent($configUuid, $componentUuid)) {
                 // Check if this is an orphaned record (component exists in config table but not properly assigned)
@@ -87,23 +94,45 @@ class ServerBuilder {
             }
             
             // Phase 3: Validate component exists in JSON specifications
+            $compatibility = null; // Initialize for later phases
             try {
-                require_once __DIR__ . '/ComponentCompatibility.php';
-                if (!class_exists('ComponentCompatibility')) {
-                    error_log("ComponentCompatibility class not found after require_once");
-                    return [
-                        'success' => false,
-                        'message' => "Component validation system not available"
-                    ];
-                }
-                $compatibility = new ComponentCompatibility($this->pdo);
-                
-                $existsResult = $compatibility->validateComponentExistsInJSON($componentType, $componentUuid);
-                if (!$existsResult) {
-                    return [
-                        'success' => false,
-                        'message' => "Component $componentUuid not found in $componentType JSON specifications database"
-                    ];
+                // Special handling for chassis - use ChassisManager directly
+                if ($componentType === 'chassis') {
+                    require_once __DIR__ . '/ChassisManager.php';
+                    $chassisManager = new ChassisManager();
+
+                    $chassisResult = $chassisManager->loadChassisSpecsByUUID($componentUuid);
+                    if (!$chassisResult['found']) {
+                        return [
+                            'success' => false,
+                            'message' => "Chassis $componentUuid not found in JSON specifications: " . ($chassisResult['error'] ?? 'Unknown error')
+                        ];
+                    }
+
+                    // Create compatibility object for other validation phases
+                    require_once __DIR__ . '/ComponentCompatibility.php';
+                    if (class_exists('ComponentCompatibility')) {
+                        $compatibility = new ComponentCompatibility($this->pdo);
+                    }
+                } else {
+                    // Use ComponentCompatibility for other components
+                    require_once __DIR__ . '/ComponentCompatibility.php';
+                    if (!class_exists('ComponentCompatibility')) {
+                        error_log("ComponentCompatibility class not found after require_once");
+                        return [
+                            'success' => false,
+                            'message' => "Component validation system not available"
+                        ];
+                    }
+                    $compatibility = new ComponentCompatibility($this->pdo);
+
+                    $existsResult = $compatibility->validateComponentExistsInJSON($componentType, $componentUuid);
+                    if (!$existsResult) {
+                        return [
+                            'success' => false,
+                            'message' => "Component $componentUuid not found in $componentType JSON specifications database"
+                        ];
+                    }
                 }
             } catch (Exception $compatError) {
                 error_log("Error loading ComponentCompatibility: " . $compatError->getMessage());
@@ -121,7 +150,10 @@ class ServerBuilder {
                 ];
             }
             
-            // Phase 5: CPU-specific validations BEFORE adding
+            // Phase 5: Chassis-specific validations BEFORE adding
+            // Validation already done in Phase 3 for chassis, skip here
+
+            // Phase 5.1: CPU-specific validations BEFORE adding
             if ($componentType === 'cpu' && isset($compatibility)) {
                 try {
                     $cpuValidation = $this->validateCPUAddition($configUuid, $componentUuid, $compatibility);
@@ -421,10 +453,19 @@ class ServerBuilder {
             $updateValues = [];
             
             switch ($componentType) {
+                case 'chassis':
+                    if ($action === 'add') {
+                        $updateFields[] = "chassis_uuid = ?";
+                        $updateValues[] = $componentUuid;
+                    } elseif ($action === 'remove') {
+                        $updateFields[] = "chassis_uuid = NULL";
+                    }
+                    break;
+
                 case 'cpu':
                     $this->updateCpuConfiguration($configUuid, $componentUuid, $quantity, $action);
                     break;
-                    
+
                 case 'motherboard':
                     if ($action === 'add') {
                         $updateFields[] = "motherboard_uuid = ?";
@@ -1501,7 +1542,81 @@ class ServerBuilder {
      * Check if component can only have single instance in configuration
      */
     private function isSingleInstanceComponent($componentType) {
-        return in_array($componentType, ['motherboard']);
+        return in_array($componentType, ['chassis', 'motherboard']);
+    }
+
+    /**
+     * Validate component addition order
+     */
+    private function validateComponentAdditionOrder($configUuid, $componentType) {
+        // Define the required order
+        $componentOrder = [
+            'chassis' => 0,
+            'motherboard' => 1,
+            'cpu' => 2,
+            'ram' => 3,
+            'storage' => 4,
+            'nic' => 5,
+            'caddy' => 6
+        ];
+
+        // Get the current order index for the component being added
+        $currentComponentOrder = $componentOrder[$componentType] ?? 999;
+
+        // Get existing components in the configuration
+        $stmt = $this->pdo->prepare("
+            SELECT DISTINCT component_type
+            FROM server_configuration_components
+            WHERE config_uuid = ?
+        ");
+        $stmt->execute([$configUuid]);
+        $existingComponents = $stmt->fetchAll(PDO::FETCH_COLUMN);
+
+        // Check if chassis exists (required for all components)
+        $hasChasis = in_array('chassis', $existingComponents);
+
+        // Chassis can always be added first
+        if ($componentType === 'chassis') {
+            if ($hasChasis) {
+                return [
+                    'success' => false,
+                    'message' => 'Chassis already exists in this configuration. Remove existing chassis first.'
+                ];
+            }
+            return ['success' => true];
+        }
+
+        // All other components require chassis
+        if (!$hasChasis) {
+            return [
+                'success' => false,
+                'message' => 'Chassis must be added first before any other components'
+            ];
+        }
+
+        // Check motherboard requirement for CPU
+        if ($componentType === 'cpu') {
+            $hasMotherboard = in_array('motherboard', $existingComponents);
+            if (!$hasMotherboard) {
+                return [
+                    'success' => false,
+                    'message' => 'Motherboard must be added before CPU'
+                ];
+            }
+        }
+
+        // Check CPU requirement for RAM
+        if ($componentType === 'ram') {
+            $hasCpu = in_array('cpu', $existingComponents);
+            if (!$hasCpu) {
+                return [
+                    'success' => false,
+                    'message' => 'CPU must be added before RAM'
+                ];
+            }
+        }
+
+        return ['success' => true];
     }
     
     /**
