@@ -57,13 +57,13 @@ class ServerConfiguration {
             $stmt = $pdo->prepare("SELECT * FROM server_configurations WHERE config_uuid = ?");
             $stmt->execute([$configUuid]);
             $data = $stmt->fetch(PDO::FETCH_ASSOC);
-            
+
             if ($data) {
                 return new self($pdo, $data);
             }
-            
+
             return null;
-            
+
         } catch (Exception $e) {
             error_log("Error loading server configuration: " . $e->getMessage());
             return null;

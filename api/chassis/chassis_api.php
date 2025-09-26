@@ -18,11 +18,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 require_once '../../includes/db_config.php';
 require_once '../../includes/BaseFunctions.php';
 require_once '../../includes/models/ChassisManager.php';
-require_once '../../includes/models/StorageChassisCompatibility.php';
 
 $baseFunctions = new BaseFunctions($pdo);
 $chassisManager = new ChassisManager();
-$storageChassisCompatibility = new StorageChassisCompatibility($pdo);
 
 // Authentication check
 $authResult = $baseFunctions->authenticate();
@@ -56,9 +54,6 @@ try {
             echo handleChassisDelete($pdo, $baseFunctions);
             break;
             
-        case 'chassis-validate-storage':
-            echo handleChassisValidateStorage($pdo, $baseFunctions, $storageChassisCompatibility);
-            break;
             
         case 'chassis-get-available-bays':
             echo handleGetAvailableBays($pdo, $baseFunctions, $chassisManager);
@@ -421,63 +416,7 @@ function handleChassisDelete($pdo, $baseFunctions) {
     ]);
 }
 
-/**
- * Validate storage compatibility with chassis
- */
-function handleChassisValidateStorage($pdo, $baseFunctions, $storageChassisCompatibility) {
-    if (!$baseFunctions->hasPermission('chassis.validate')) {
-        http_response_code(403);
-        return json_encode([
-            'success' => false,
-            'authenticated' => true,
-            'message' => 'Permission denied: chassis.validate required',
-            'timestamp' => date('Y-m-d H:i:s')
-        ]);
-    }
 
-    $storageUUID = $_POST['storage_uuid'] ?? '';
-    $chassisUUID = $_POST['chassis_uuid'] ?? '';
-    $configUUID = $_POST['config_uuid'] ?? null;
-    $targetBay = $_POST['target_bay'] ?? null;
-
-    if (empty($storageUUID) || empty($chassisUUID)) {
-        http_response_code(400);
-        return json_encode([
-            'success' => false,
-            'authenticated' => true,
-            'message' => 'Storage UUID and Chassis UUID are required',
-            'timestamp' => date('Y-m-d H:i:s')
-        ]);
-    }
-
-    // STORAGE COMPATIBILITY DISABLED - 2025-09-15 - ALWAYS RETURN COMPATIBLE
-    return json_encode([
-        'success' => true,
-        'authenticated' => true,
-        'message' => 'Storage compatibility validation disabled',
-        'data' => [
-            'compatible' => true,
-            'compatibility_score' => 1.0,
-            'validation_disabled' => true,
-            'reason' => 'Storage compatibility checks temporarily disabled'
-        ],
-        'timestamp' => date('Y-m-d H:i:s')
-    ]);
-
-    /* ORIGINAL CODE COMMENTED OUT FOR ROLLBACK
-    $result = $storageChassisCompatibility->validateStorageForConfiguration(
-        $configUUID, $storageUUID, $chassisUUID, $targetBay
-    );
-
-    return json_encode([
-        'success' => true,
-        'authenticated' => true,
-        'message' => 'Storage-chassis compatibility validation completed',
-        'data' => $result,
-        'timestamp' => date('Y-m-d H:i:s')
-    ]);
-    */
-}
 
 /**
  * Get available bays for chassis

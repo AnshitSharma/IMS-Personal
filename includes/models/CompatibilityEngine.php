@@ -22,16 +22,28 @@ class CompatibilityEngine extends ComponentCompatibility {
         $type1 = strtolower($component1['type']);
         $type2 = strtolower($component2['type']);
 
-        // STORAGE COMPATIBILITY DISABLED - SKIP ANY STORAGE-RELATED CHECKS
+        // Storage compatibility handled by new JSON-driven validation
         if ($type1 === 'storage' || $type2 === 'storage') {
-            return [
-                'compatible' => true,
-                'compatibility_score' => 1.0,
-                'failures' => [],
-                'warnings' => ['Storage compatibility checks have been disabled'],
-                'recommendations' => ['Storage compatibility validation is currently disabled'],
-                'applied_rules' => ['storage_compatibility_disabled']
-            ];
+            // Determine which is storage and which is chassis
+            $storageComponent = ($type1 === 'storage') ? $component1 : $component2;
+            $chassisComponent = ($type1 === 'chassis') ? $component1 : $component2;
+
+            // Only validate storage-chassis compatibility
+            if ($type1 === 'storage' && $type2 === 'chassis') {
+                return $this->validateStorageCompatibility($storageComponent['uuid'], $chassisComponent['uuid']);
+            } elseif ($type1 === 'chassis' && $type2 === 'storage') {
+                return $this->validateStorageCompatibility($storageComponent['uuid'], $chassisComponent['uuid']);
+            } else {
+                // Storage-to-storage or storage-to-other component (not chassis)
+                return [
+                    'compatible' => true,
+                    'compatibility_score' => 1.0,
+                    'failures' => [],
+                    'warnings' => ['Storage compatibility only validated against chassis'],
+                    'recommendations' => [],
+                    'applied_rules' => ['storage_non_chassis_bypass']
+                ];
+            }
         }
 
         // Use parent ComponentCompatibility for non-storage checks
@@ -99,8 +111,10 @@ class CompatibilityEngine extends ComponentCompatibility {
     public function getCompatibleComponents($baseComponent, $targetType, $availableOnly = true) {
         $targetType = strtolower($targetType);
 
-        // STORAGE COMPATIBILITY DISABLED - RETURN ALL STORAGE AS COMPATIBLE
+        // Storage compatibility uses new JSON-driven validation
         if ($targetType === 'storage' || strtolower($baseComponent['type']) === 'storage') {
+            // Storage compatibility filtering requires chassis context
+            // For now, return all available storage - compatibility is checked during addition
             return $this->getAllComponents($targetType, $availableOnly);
         }
 
@@ -248,6 +262,501 @@ class CompatibilityEngine extends ComponentCompatibility {
             'recommendations' => []
         ];
     }
+
+
+    /**
+     * Validate storage exists in JSON and database - Task 2.1
+     */
+    public function validateStorageExistsInJSON($storageUuid) {
+        try {
+            // Check storage-level-3.json which contains actual storage inventory with UUIDs
+            $jsonPath = __DIR__ . '/../../All-JSON/storage-jsons/storage-level-3.json';
+            if (!file_exists($jsonPath)) {
+                return [
+                    'success' => false,
+                    'error' => 'Storage inventory JSON file not found',
+                    'error_type' => 'json_file_missing'
+                ];
+            }
+
+            $jsonContent = file_get_contents($jsonPath);
+            $storageData = json_decode($jsonContent, true);
+
+            if (json_last_error() !== JSON_ERROR_NONE) {
+                return [
+                    'success' => false,
+                    'error' => 'Storage JSON file is malformed: ' . json_last_error_msg(),
+                    'error_type' => 'json_malformed'
+                ];
+            }
+
+            // Search for storage UUID in the storage-level-3.json structure
+            $found = false;
+            $storageSpecs = null;
+
+            // The structure is an array of brands, each with series containing models
+            if (is_array($storageData)) {
+                foreach ($storageData as $brand) {
+                    if (isset($brand['models']) && is_array($brand['models'])) {
+                        foreach ($brand['models'] as $model) {
+                            if (isset($model['uuid']) && $model['uuid'] === $storageUuid) {
+                                $found = true;
+                                $storageSpecs = $model;
+                                break 2; // Break out of both loops
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (!$found) {
+                return [
+                    'success' => false,
+                    'error' => "Storage UUID $storageUuid not found in storage specifications",
+                    'error_type' => 'json_not_found'
+                ];
+            }
+
+            // Check database existence and availability
+            $stmt = $this->pdo->prepare("SELECT Status FROM storageinventory WHERE UUID = ? LIMIT 1");
+            $stmt->execute([$storageUuid]);
+            $result = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$result) {
+                return [
+                    'success' => false,
+                    'error' => "Storage UUID $storageUuid not found in inventory database",
+                    'error_type' => 'database_not_found'
+                ];
+            }
+
+            if ($result['Status'] != 1) {
+                return [
+                    'success' => false,
+                    'error' => "Storage device is not available (Status: {$result['Status']})",
+                    'error_type' => 'not_available'
+                ];
+            }
+
+            return [
+                'success' => true,
+                'message' => 'Storage is valid and available',
+                'specifications' => $storageSpecs
+            ];
+
+        } catch (Exception $e) {
+            return [
+                'success' => false,
+                'error' => 'Validation error: ' . $e->getMessage(),
+                'error_type' => 'system_error'
+            ];
+        }
+    }
+
+    /**
+     * Get storage specifications from JSON - Task 2.2
+     */
+    public function getStorageSpecifications($storageUuid) {
+        try {
+            $validation = $this->validateStorageExistsInJSON($storageUuid);
+
+            if (!$validation['success']) {
+                return $validation;
+            }
+
+            $specifications = $validation['specifications'] ?? [];
+
+            // Extract key specifications from storage-level-3.json structure
+            $interface = $specifications['interface'] ?? 'Unknown';
+            $formFactor = $specifications['form_factor'] ?? 'Unknown';
+            $driveType = $specifications['storage_type'] ?? $specifications['subtype'] ?? 'Unknown';
+            $powerConsumption = $specifications['power_consumption_W'] ?? [];
+
+            return [
+                'success' => true,
+                'specifications' => [
+                    'interface' => $interface,
+                    'form_factor' => $formFactor,
+                    'drive_type' => $driveType,
+                    'power_consumption' => $powerConsumption,
+                    'full_specs' => $specifications
+                ]
+            ];
+
+        } catch (Exception $e) {
+            return [
+                'success' => false,
+                'error' => 'Failed to get storage specifications: ' . $e->getMessage(),
+                'error_type' => 'system_error'
+            ];
+        }
+    }
+
+    /**
+     * Get chassis specifications from JSON - Task 3.1
+     */
+    public function getChassisSpecifications($chassisUuid) {
+        try {
+            // Use ChassisManager for proper chassis JSON validation
+            require_once __DIR__ . '/ChassisManager.php';
+            $chassisManager = new ChassisManager();
+
+            $chassisSpecs = $chassisManager->loadChassisSpecsByUUID($chassisUuid);
+
+            if (!$chassisSpecs['found']) {
+                return [
+                    'success' => false,
+                    'error' => "Chassis UUID $chassisUuid not found in chassis JSON specifications: " . $chassisSpecs['error'],
+                    'error_type' => 'json_not_found'
+                ];
+            }
+
+            $specs = $chassisSpecs['specifications'];
+
+            // Extract drive bay configuration
+            $driveBays = $specs['drive_bays'] ?? [];
+            $backplane = $specs['backplane'] ?? [];
+
+            return [
+                'success' => true,
+                'specifications' => [
+                    'drive_bays' => $driveBays,
+                    'backplane' => $backplane,
+                    'full_specs' => $specs
+                ]
+            ];
+
+        } catch (Exception $e) {
+            return [
+                'success' => false,
+                'error' => 'Failed to get chassis specifications: ' . $e->getMessage(),
+                'error_type' => 'system_error'
+            ];
+        }
+    }
+
+    /**
+     * Validate storage form factor compatibility - Task 3.2
+     */
+    public function validateStorageFormFactor($storageSpecs, $chassisSpecs) {
+        try {
+            $storageFormFactor = $storageSpecs['form_factor'] ?? 'Unknown';
+            $driveBays = $chassisSpecs['drive_bays'] ?? [];
+            $bayConfiguration = $driveBays['bay_configuration'] ?? [];
+
+            $compatibleBays = [];
+            $caddyRequired = false;
+            $incompatible = false;
+
+            foreach ($bayConfiguration as $bayConfig) {
+                $bayType = $bayConfig['bay_type'] ?? '';
+                $bayCount = $bayConfig['count'] ?? 0;
+
+                // Form factor compatibility rules
+                if ($storageFormFactor === '2.5-inch' || $storageFormFactor === '2.5_inch') {
+                    if ($bayType === '2.5_inch' || $bayType === '2.5-inch') {
+                        $compatibleBays[] = [
+                            'bay_type' => $bayType,
+                            'count' => $bayCount,
+                            'caddy_required' => false,
+                            'direct_fit' => true
+                        ];
+                    } elseif ($bayType === '3.5_inch' || $bayType === '3.5-inch') {
+                        $compatibleBays[] = [
+                            'bay_type' => $bayType,
+                            'count' => $bayCount,
+                            'caddy_required' => true,
+                            'caddy_type' => '2.5 inch caddy',
+                            'direct_fit' => false
+                        ];
+                        $caddyRequired = true;
+                    }
+                } elseif ($storageFormFactor === '3.5-inch' || $storageFormFactor === '3.5_inch') {
+                    if ($bayType === '3.5_inch' || $bayType === '3.5-inch') {
+                        $compatibleBays[] = [
+                            'bay_type' => $bayType,
+                            'count' => $bayCount,
+                            'caddy_required' => false,
+                            'direct_fit' => true
+                        ];
+                    } elseif ($bayType === '2.5_inch' || $bayType === '2.5-inch') {
+                        $incompatible = true;
+                    }
+                } elseif ($storageFormFactor === 'M.2') {
+                    // M.2 requires special slots or adapters
+                    if ($bayType === 'M.2') {
+                        $compatibleBays[] = [
+                            'bay_type' => $bayType,
+                            'count' => $bayCount,
+                            'caddy_required' => false,
+                            'direct_fit' => true
+                        ];
+                    } else {
+                        // M.2 in other bays requires adapter
+                        $compatibleBays[] = [
+                            'bay_type' => $bayType,
+                            'count' => $bayCount,
+                            'caddy_required' => true,
+                            'caddy_type' => 'M.2 adapter',
+                            'direct_fit' => false
+                        ];
+                        $caddyRequired = true;
+                    }
+                }
+            }
+
+            if (empty($compatibleBays) || $incompatible) {
+                return [
+                    'compatible' => false,
+                    'reason' => "Storage form factor $storageFormFactor is not compatible with available chassis bays",
+                    'available_bays' => $bayConfiguration
+                ];
+            }
+
+            return [
+                'compatible' => true,
+                'compatible_bays' => $compatibleBays,
+                'caddy_required' => $caddyRequired,
+                'form_factor_match' => !$caddyRequired
+            ];
+
+        } catch (Exception $e) {
+            return [
+                'compatible' => false,
+                'reason' => 'Form factor validation error: ' . $e->getMessage()
+            ];
+        }
+    }
+
+    /**
+     * Validate storage interface compatibility - Task 4.1
+     */
+    public function validateStorageInterface($storageSpecs, $chassisSpecs) {
+        try {
+            $storageInterface = $storageSpecs['interface'] ?? 'Unknown';
+            $backplane = $chassisSpecs['backplane'] ?? [];
+
+            $supportsNvme = $backplane['supports_nvme'] ?? false;
+            $supportsSata = $backplane['supports_sata'] ?? false;
+            $supportsSas = $backplane['supports_sas'] ?? false;
+
+            $compatible = false;
+            $adapterRequired = false;
+            $adapterMessage = '';
+
+            // Interface compatibility rules
+            $normalizedInterface = strtolower($storageInterface);
+
+            if (strpos($normalizedInterface, 'nvme') !== false || strpos($normalizedInterface, 'pcie') !== false) {
+                if ($supportsNvme) {
+                    $compatible = true;
+                } else {
+                    $adapterRequired = true;
+                    $adapterMessage = 'Add NVMe adapter card to motherboard before adding NVMe drive';
+                }
+            } elseif (strpos($normalizedInterface, 'sata') !== false) {
+                if ($supportsSata) {
+                    $compatible = true;
+                } else {
+                    return [
+                        'compatible' => false,
+                        'reason' => "Chassis backplane does not support SATA interface",
+                        'storage_interface' => $storageInterface,
+                        'backplane_support' => $backplane
+                    ];
+                }
+            } elseif (strpos($normalizedInterface, 'sas') !== false) {
+                if ($supportsSas) {
+                    $compatible = true;
+                } else {
+                    return [
+                        'compatible' => false,
+                        'reason' => "Chassis backplane does not support SAS interface",
+                        'storage_interface' => $storageInterface,
+                        'backplane_support' => $backplane
+                    ];
+                }
+            } else {
+                return [
+                    'compatible' => false,
+                    'reason' => "Unknown storage interface: $storageInterface",
+                    'storage_interface' => $storageInterface
+                ];
+            }
+
+            if ($adapterRequired) {
+                return [
+                    'compatible' => true,
+                    'adapter_required' => true,
+                    'adapter_message' => $adapterMessage,
+                    'storage_interface' => $storageInterface,
+                    'backplane_support' => $backplane
+                ];
+            }
+
+            return [
+                'compatible' => $compatible,
+                'adapter_required' => false,
+                'storage_interface' => $storageInterface,
+                'backplane_support' => $backplane
+            ];
+
+        } catch (Exception $e) {
+            return [
+                'compatible' => false,
+                'reason' => 'Interface validation error: ' . $e->getMessage()
+            ];
+        }
+    }
+
+    /**
+     * Determine caddy requirements - Task 5.1 & 5.2
+     */
+    public function determineCaddyRequirement($storageSpecs, $chassisSpecs) {
+        try {
+            $formFactorResult = $this->validateStorageFormFactor($storageSpecs, $chassisSpecs);
+
+            if (!$formFactorResult['compatible']) {
+                return [
+                    'caddy_required' => false,
+                    'reason' => 'Storage is not compatible with chassis',
+                    'incompatible' => true
+                ];
+            }
+
+            $caddyRequired = $formFactorResult['caddy_required'] ?? false;
+            $compatibleBays = $formFactorResult['compatible_bays'] ?? [];
+
+            if (!$caddyRequired) {
+                return [
+                    'caddy_required' => false,
+                    'message' => 'No caddy required - storage fits directly in chassis bays'
+                ];
+            }
+
+            $caddyMessages = [];
+            foreach ($compatibleBays as $bay) {
+                if ($bay['caddy_required']) {
+                    $caddyType = $bay['caddy_type'] ?? 'appropriate caddy';
+                    if ($caddyType === '2.5 inch caddy') {
+                        $caddyMessages[] = "Add 2.5 inch caddy before adding this storage device";
+                    } elseif ($caddyType === 'M.2 adapter') {
+                        $caddyMessages[] = "Add M.2 adapter before adding this storage device";
+                    } else {
+                        $caddyMessages[] = "Add $caddyType before adding this storage device";
+                    }
+                }
+            }
+
+            return [
+                'caddy_required' => true,
+                'caddy_messages' => array_unique($caddyMessages),
+                'compatible_bays' => $compatibleBays
+            ];
+
+        } catch (Exception $e) {
+            return [
+                'caddy_required' => false,
+                'reason' => 'Caddy requirement error: ' . $e->getMessage()
+            ];
+        }
+    }
+
+    /**
+     * Complete storage compatibility validation - Combines all validation steps
+     */
+    public function validateStorageCompatibility($storageUuid, $chassisUuid) {
+        try {
+            // Step 1: UUID Validation
+            $storageValidation = $this->validateStorageExistsInJSON($storageUuid);
+            if (!$storageValidation['success']) {
+                return [
+                    'compatible' => false,
+                    'step_failed' => 'storage_validation',
+                    'error' => $storageValidation['error'],
+                    'error_type' => $storageValidation['error_type']
+                ];
+            }
+
+            // Step 2: Chassis Validation
+            $chassisValidation = $this->validateChassisExistsInJSON($chassisUuid);
+            if (!$chassisValidation['success']) {
+                return [
+                    'compatible' => false,
+                    'step_failed' => 'chassis_validation',
+                    'error' => $chassisValidation['error'],
+                    'error_type' => $chassisValidation['error_type']
+                ];
+            }
+
+            // Step 3: Get Specifications
+            $storageSpecs = $this->getStorageSpecifications($storageUuid);
+            $chassisSpecs = $this->getChassisSpecifications($chassisUuid);
+
+            if (!$storageSpecs['success'] || !$chassisSpecs['success']) {
+                return [
+                    'compatible' => false,
+                    'step_failed' => 'specification_extraction',
+                    'storage_specs_error' => !$storageSpecs['success'] ? $storageSpecs['error'] : null,
+                    'chassis_specs_error' => !$chassisSpecs['success'] ? $chassisSpecs['error'] : null
+                ];
+            }
+
+            // Step 4: Form Factor Validation
+            $formFactorResult = $this->validateStorageFormFactor(
+                $storageSpecs['specifications'],
+                $chassisSpecs['specifications']
+            );
+
+            // Step 5: Interface Validation
+            $interfaceResult = $this->validateStorageInterface(
+                $storageSpecs['specifications'],
+                $chassisSpecs['specifications']
+            );
+
+            // Step 6: Caddy Requirements
+            $caddyResult = $this->determineCaddyRequirement(
+                $storageSpecs['specifications'],
+                $chassisSpecs['specifications']
+            );
+
+
+            // Overall compatibility
+            $compatible = $formFactorResult['compatible'] && $interfaceResult['compatible'];
+
+            $nextSteps = [];
+
+            if ($interfaceResult['adapter_required'] ?? false) {
+                $nextSteps[] = $interfaceResult['adapter_message'];
+            }
+
+            if ($caddyResult['caddy_required'] ?? false) {
+                $nextSteps = array_merge($nextSteps, $caddyResult['caddy_messages'] ?? []);
+            }
+
+            if ($compatible && empty($nextSteps)) {
+                $nextSteps[] = "Storage device can be added directly to the chassis";
+            }
+
+            return [
+                'compatible' => $compatible,
+                'form_factor_result' => $formFactorResult,
+                'interface_result' => $interfaceResult,
+                'caddy_result' => $caddyResult,
+                'next_steps' => $nextSteps,
+                'storage_specifications' => $storageSpecs['specifications'],
+                'chassis_specifications' => $chassisSpecs['specifications']
+            ];
+
+        } catch (Exception $e) {
+            return [
+                'compatible' => false,
+                'step_failed' => 'system_error',
+                'error' => 'Storage compatibility validation failed: ' . $e->getMessage()
+            ];
+        }
+    }
+
 
     /**
      * Helper method to get all components of a type

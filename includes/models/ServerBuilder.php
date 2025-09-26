@@ -64,10 +64,10 @@ class ServerBuilder {
                 ];
             }
             
-            // Phase 1.5: Validate component addition order
-            $orderValidation = $this->validateComponentAdditionOrder($configUuid, $componentType);
-            if (!$orderValidation['success']) {
-                return $orderValidation;
+            // Phase 1.5: Validate compatibility with existing components (flexible order)
+            $compatibilityValidation = $this->validateComponentCompatibility($configUuid, $componentType, $componentUuid);
+            if (!$compatibilityValidation['success']) {
+                return $compatibilityValidation;
             }
 
             // Phase 2: Check for duplicate component FIRST with cleanup
@@ -115,7 +115,7 @@ class ServerBuilder {
                         $compatibility = new ComponentCompatibility($this->pdo);
                     }
                 } else {
-                    // Use ComponentCompatibility for other components
+                    // Use ComponentCompatibility for all other components (including storage)
                     require_once __DIR__ . '/ComponentCompatibility.php';
                     if (!class_exists('ComponentCompatibility')) {
                         error_log("ComponentCompatibility class not found after require_once");
@@ -126,19 +126,27 @@ class ServerBuilder {
                     }
                     $compatibility = new ComponentCompatibility($this->pdo);
 
-                    $existsResult = $compatibility->validateComponentExistsInJSON($componentType, $componentUuid);
-                    if (!$existsResult) {
-                        return [
-                            'success' => false,
-                            'message' => "Component $componentUuid not found in $componentType JSON specifications database"
-                        ];
+                    // Skip JSON validation for storage - it will be handled in compatibility checking
+                    if ($componentType !== 'storage') {
+                        $existsResult = $compatibility->validateComponentExistsInJSON($componentType, $componentUuid);
+                        if (!$existsResult) {
+                            return [
+                                'success' => false,
+                                'message' => "Component $componentUuid not found in $componentType JSON specifications database"
+                            ];
+                        }
                     }
                 }
             } catch (Exception $compatError) {
-                error_log("Error loading ComponentCompatibility: " . $compatError->getMessage());
-                error_log("File: " . __DIR__ . '/ComponentCompatibility.php exists: ' . (file_exists(__DIR__ . '/ComponentCompatibility.php') ? 'yes' : 'no'));
-                // Skip JSON validation if ComponentCompatibility fails to load
-                error_log("Skipping JSON validation due to compatibility system error");
+                error_log("Error in component validation for type '$componentType': " . $compatError->getMessage());
+                error_log("Stack trace: " . $compatError->getTraceAsString());
+                error_log("ComponentCompatibility.php exists: " . (file_exists(__DIR__ . '/ComponentCompatibility.php') ? 'yes' : 'no'));
+                error_log("CompatibilityEngine.php exists: " . (file_exists(__DIR__ . '/CompatibilityEngine.php') ? 'yes' : 'no'));
+                // Return error instead of skipping
+                return [
+                    'success' => false,
+                    'message' => 'Component validation error: ' . $compatError->getMessage()
+                ];
             }
             
             // Phase 4: Get component details from inventory
@@ -153,18 +161,8 @@ class ServerBuilder {
             // Phase 5: Chassis-specific validations BEFORE adding
             // Validation already done in Phase 3 for chassis, skip here
 
-            // Phase 5.1: CPU-specific validations BEFORE adding
-            if ($componentType === 'cpu' && isset($compatibility)) {
-                try {
-                    $cpuValidation = $this->validateCPUAddition($configUuid, $componentUuid, $compatibility);
-                    if (!$cpuValidation['success']) {
-                        return $cpuValidation;
-                    }
-                } catch (Exception $cpuError) {
-                    error_log("Error in CPU validation: " . $cpuError->getMessage());
-                    // Continue without CPU validation
-                }
-            }
+            // Phase 5.1: Skip legacy CPU validation - flexible system handles compatibility
+            // CPU can now be added in any order with proper compatibility checking
             
             // Phase 5.5: RAM-specific validations BEFORE adding
             $ramValidationResults = null;
@@ -951,17 +949,17 @@ class ServerBuilder {
             // Phase 1: Validate all components exist in JSON
             foreach ($components as $component) {
                 $existsResult = $compatibility->validateComponentExistsInJSON(
-                    $component['component_type'], 
+                    $component['component_type'],
                     $component['component_uuid']
                 );
-                
+
                 $checkResult = [
                     'component_type' => $component['component_type'],
                     'component_uuid' => $component['component_uuid'],
                     'exists_in_json' => $existsResult,
                     'status' => $existsResult ? 'pass' : 'fail'
                 ];
-                
+
                 if (!$existsResult) {
                     $enhancedValidation['is_valid'] = false;
                     $enhancedValidation['issues'][] = "Component {$component['component_uuid']} ({$component['component_type']}) not found in JSON specifications database";
@@ -1473,38 +1471,14 @@ class ServerBuilder {
                     break;
                     
                 case 'ram':
-                    $motherboardSpecs = $this->getConfigurationMotherboardSpecs($configUuid);
-                    if ($motherboardSpecs['found']) {
-                        $typeResult = $compatibility->validateRAMTypeCompatibility($componentUuid, $motherboardSpecs['limits']);
-                        if (!$typeResult['compatible']) {
-                            return [
-                                'success' => false,
-                                'message' => $typeResult['error']
-                            ];
-                        }
-                        
-                        $slotResult = $compatibility->validateRAMSlotAvailability($configUuid, $motherboardSpecs['limits']);
-                        if (!$slotResult['available']) {
-                            return [
-                                'success' => false,
-                                'message' => $slotResult['error']
-                            ];
-                        }
-                    }
+                    // Skip legacy RAM validation - flexible system handles compatibility
+                    break;
                     break;
                     
                 case 'nic':
-                    $motherboardSpecs = $this->getConfigurationMotherboardSpecs($configUuid);
-                    if ($motherboardSpecs['found']) {
-                        $nicResult = $compatibility->validateNICPCIeCompatibility($componentUuid, $configUuid, $motherboardSpecs['limits']);
-                        if (!$nicResult['compatible']) {
-                            return [
-                                'success' => false,
-                                'message' => $nicResult['error']
-                            ];
-                        }
-                    }
+                    // Skip legacy NIC validation - flexible system handles compatibility
                     break;
+
             }
             
             return ['success' => true];
@@ -1548,75 +1522,78 @@ class ServerBuilder {
     /**
      * Validate component addition order
      */
-    private function validateComponentAdditionOrder($configUuid, $componentType) {
-        // Define the required order
-        $componentOrder = [
-            'chassis' => 0,
-            'motherboard' => 1,
-            'cpu' => 2,
-            'ram' => 3,
-            'storage' => 4,
-            'nic' => 5,
-            'caddy' => 6
-        ];
+    private function validateComponentCompatibility($configUuid, $componentType, $componentUuid) {
+        try {
+            // Get existing components in the configuration
+            $stmt = $this->pdo->prepare("
+                SELECT component_type, component_uuid
+                FROM server_configuration_components
+                WHERE config_uuid = ?
+            ");
+            $stmt->execute([$configUuid]);
+            $existingComponents = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-        // Get the current order index for the component being added
-        $currentComponentOrder = $componentOrder[$componentType] ?? 999;
-
-        // Get existing components in the configuration
-        $stmt = $this->pdo->prepare("
-            SELECT DISTINCT component_type
-            FROM server_configuration_components
-            WHERE config_uuid = ?
-        ");
-        $stmt->execute([$configUuid]);
-        $existingComponents = $stmt->fetchAll(PDO::FETCH_COLUMN);
-
-        // Check if chassis exists (required for all components)
-        $hasChasis = in_array('chassis', $existingComponents);
-
-        // Chassis can always be added first
-        if ($componentType === 'chassis') {
-            if ($hasChasis) {
-                return [
-                    'success' => false,
-                    'message' => 'Chassis already exists in this configuration. Remove existing chassis first.'
-                ];
+            // If no existing components, allow any component to be added first
+            if (empty($existingComponents)) {
+                return ['success' => true, 'message' => 'First component can be any type'];
             }
-            return ['success' => true];
-        }
 
-        // All other components require chassis
-        if (!$hasChasis) {
+            // Special handling for chassis - only one chassis allowed per configuration
+            if ($componentType === 'chassis') {
+                $hasChasis = false;
+                foreach ($existingComponents as $existing) {
+                    if ($existing['component_type'] === 'chassis') {
+                        $hasChasis = true;
+                        break;
+                    }
+                }
+                if ($hasChasis) {
+                    return [
+                        'success' => false,
+                        'message' => 'Chassis already exists in this configuration. Remove existing chassis first.'
+                    ];
+                }
+                return ['success' => true, 'message' => 'Chassis can be added'];
+            }
+
+            // Check compatibility with each existing component
+            require_once __DIR__ . '/ComponentCompatibility.php';
+            $compatibility = new ComponentCompatibility($this->pdo);
+
+            $newComponent = [
+                'type' => $componentType,
+                'uuid' => $componentUuid
+            ];
+
+            foreach ($existingComponents as $existing) {
+                $existingComponent = [
+                    'type' => $existing['component_type'],
+                    'uuid' => $existing['component_uuid']
+                ];
+
+                // Check compatibility between new component and each existing one
+                $compatResult = $compatibility->checkComponentPairCompatibility($newComponent, $existingComponent);
+
+                // If any incompatibility found, reject the addition
+                if (!$compatResult['compatible']) {
+                    return [
+                        'success' => false,
+                        'message' => "Component $componentUuid is not compatible with existing " .
+                                   $existing['component_type'] . " (" . $existing['component_uuid'] . "). " .
+                                   implode(', ', $compatResult['issues'] ?? [])
+                    ];
+                }
+            }
+
+            return ['success' => true, 'message' => 'Component is compatible with existing configuration'];
+
+        } catch (Exception $e) {
+            error_log("Error validating component compatibility: " . $e->getMessage());
             return [
                 'success' => false,
-                'message' => 'Chassis must be added first before any other components'
+                'message' => 'Error validating component compatibility: ' . $e->getMessage()
             ];
         }
-
-        // Check motherboard requirement for CPU
-        if ($componentType === 'cpu') {
-            $hasMotherboard = in_array('motherboard', $existingComponents);
-            if (!$hasMotherboard) {
-                return [
-                    'success' => false,
-                    'message' => 'Motherboard must be added before CPU'
-                ];
-            }
-        }
-
-        // Check CPU requirement for RAM
-        if ($componentType === 'ram') {
-            $hasCpu = in_array('cpu', $existingComponents);
-            if (!$hasCpu) {
-                return [
-                    'success' => false,
-                    'message' => 'CPU must be added before RAM'
-                ];
-            }
-        }
-
-        return ['success' => true];
     }
     
     /**
@@ -2537,31 +2514,8 @@ class ServerBuilder {
                 ];
             }
             
-            // Phase 2: Get motherboard specifications for compatibility checking
-            $motherboardSpecs = null;
-            if ($componentType !== 'motherboard') {
-                $specsResult = $this->getConfigurationMotherboardSpecs($configUuid);
-                if (!$specsResult['found']) {
-                    return [
-                        'success' => false,
-                        'message' => $specsResult['error'],
-                        'error_type' => 'no_motherboard'
-                    ];
-                }
-                $motherboardSpecs = $specsResult['limits'];
-            }
-            
-            // Phase 3: Component-specific compatibility validation
-            $compatibilityResult = $this->validateComponentCompatibility($componentType, $componentUuid, $configUuid, $motherboardSpecs, $compatibility);
-            
-            if (!$compatibilityResult['compatible']) {
-                return [
-                    'success' => false,
-                    'message' => $compatibilityResult['error'],
-                    'error_type' => 'compatibility_failure',
-                    'details' => $compatibilityResult['details']
-                ];
-            }
+            // Phase 2: Skip legacy motherboard requirement - flexible validation already handled above
+            // New flexible system allows any component order with proper compatibility checking
             
             // Phase 4: Proceed with original addComponent logic
             $result = $this->addComponent($configUuid, $componentType, $componentUuid, $options);
@@ -2587,7 +2541,7 @@ class ServerBuilder {
     /**
      * Validate component compatibility based on type
      */
-    private function validateComponentCompatibility($componentType, $componentUuid, $configUuid, $motherboardSpecs, $compatibility) {
+    private function validateComponentCompatibilityLegacy($componentType, $componentUuid, $configUuid, $motherboardSpecs, $compatibility) {
         switch ($componentType) {
             case 'motherboard':
                 // For motherboard, validate it exists and can be parsed
@@ -2721,16 +2675,46 @@ class ServerBuilder {
     }
 
     /**
-     * Validate Storage compatibility
+     * Validate Storage compatibility using new JSON-driven system
      */
     private function validateStorageCompatibility($storageUuid, $configUuid, $motherboardSpecs, $compatibility) {
-        $result = $compatibility->validateStorageInterfaceCompatibility($storageUuid, $motherboardSpecs);
-        
-        return [
-            'compatible' => $result['compatible'],
-            'error' => $result['error'],
-            'details' => $result['details']
-        ];
+        try {
+            // Get chassis UUID from the server configuration components
+            $stmt = $this->pdo->prepare("
+                SELECT component_uuid
+                FROM server_configuration_components
+                WHERE config_uuid = ? AND component_type = 'chassis'
+                LIMIT 1
+            ");
+            $stmt->execute([$configUuid]);
+            $configResult = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$configResult || !$configResult['component_uuid']) {
+                return [
+                    'compatible' => false,
+                    'error' => 'No chassis configured for this server. Add a chassis before adding storage components.',
+                    'details' => ['validation' => 'no_chassis']
+                ];
+            }
+
+            $chassisUuid = $configResult['component_uuid'];
+
+            // Use new JSON-driven storage validation
+            $result = $compatibility->validateStorageCompatibility($storageUuid, $chassisUuid);
+
+            return [
+                'compatible' => $result['compatible'],
+                'error' => $result['compatible'] ? null : $result['error'],
+                'details' => $result
+            ];
+
+        } catch (Exception $e) {
+            return [
+                'compatible' => false,
+                'error' => 'Storage validation error: ' . $e->getMessage(),
+                'details' => ['validation' => 'system_error']
+            ];
+        }
     }
 
     /**
