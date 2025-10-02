@@ -1,0 +1,886 @@
+[
+  {
+    "component_subtype": "HBA Card",
+    "brand": "Broadcom",
+    "series": "HBA 9400",
+    "generation": "9400-16i",
+    "family": "HBA 9400-16i",
+    "models": [
+      {
+        "model": "LSI 9400-16i",
+        "part_number": "05-50008-00",
+        "interface": "PCIe 3.0 x8",
+        "data_rate": "12Gb/s per lane",
+        "internal_ports": 16,
+        "external_ports": 0,
+        "connector_type": "SFF-8643 (Mini SAS HD)",
+        "max_devices": 1024,
+        "form_factor": "Low Profile/Standard Height",
+        "dimensions_mm": {
+          "length": 167,
+          "width": 69,
+          "height": 14.5
+        },
+        "power_consumption": {
+          "typical_W": 14.8,
+          "max_W": 16.5
+        },
+        "operating_conditions": {
+          "temperature_range": "0°C to 55°C",
+          "humidity": "8% to 90% non-condensing",
+          "altitude": "0 to 3000m"
+        },
+        "inventory": {
+          "quantity_available": 12,
+          "quantity_reserved": 3,
+          "location": "Datacenter A, Rack C2",
+          "rack_position": "Storage Unit 8",
+          "status": "Available",
+          "condition": "New",
+          "purchase_date": "2024-03-15",
+          "warranty_expiration": "2027-03-15",
+          "serial_numbers": [],
+          "sys_score": ""
+        },
+        "compatible_motherboards": [
+          {
+            "brand": "Supermicro",
+            "models": ["X13DRG-H", "X13DRi-N", "X12DPG-QT6"]
+          },
+          {
+            "brand": "ASUS",
+            "models": ["Pro WS W790E-SAGE SE", "Pro WS WRX80E-SAGE SE WIFI"]
+          },
+          {
+            "brand": "GIGABYTE",
+            "models": ["MZ93-FS0", "MC63-4S0"]
+          }
+        ],
+        "compatible_servers": [
+          {
+            "brand": "Dell",
+            "models": ["PowerEdge R760", "PowerEdge R7625"]
+          },
+          {
+            "brand": "HPE",
+            "models": ["ProLiant DL380 Gen11", "ProLiant DL385 Gen11"]
+          },
+          {
+            "brand": "Supermicro",
+            "models": ["SuperServer 1029U-TR4", "AS-2145GH-TNRT"]
+          }
+        ],
+        "slot_compatibility": {
+          "required_slot": "PCIe x8 or x16",
+          "low_profile_bracket": true,
+          "power_requirements": "PCIe slot power only"
+        },
+        "UUID": "hba-9400-16i-001-abcd1234"
+      },
+      {
+        "model": "LSI 9400-8i",
+        "part_number": "05-50008-01",
+        "interface": "PCIe 3.0 x8",
+        "data_rate": "12Gb/s per lane",
+        "internal_ports": 8,
+        "external_ports": 0,
+        "connector_type": "SFF-8643 (Mini SAS HD)",
+        "max_devices": 512,
+        "form_factor": "Low Profile/Standard Height",
+        "dimensions_mm": {
+          "length": 167,
+          "width": 69,
+          "height": 14.5
+        },
+        "power_consumption": {
+          "typical_W": 12.5,
+          "max_W": 14.2
+        },
+        "operating_conditions": {
+          "temperature_range": "0°C to 55°C",
+          "humidity": "8% to 90% non-condensing",
+          "altitude": "0 to 3000m"
+        },
+        "inventory": {
+          "quantity_available": 18,
+          "quantity_reserved": 4,
+          "location": "Datacenter A, Rack C2",
+          "rack_position": "Storage Unit 9",
+          "status": "Available",
+          "condition": "New",
+          "purchase_date": "2024-03-20",
+          "warranty_expiration": "2027-03-20",
+          "serial_numbers": [],
+          "sys_score": ""
+        },
+        "compatible_motherboards": [
+          {
+            "brand": "Supermicro",
+            "models": ["X13DRG-H", "X13DRi-N", "X12DPG-QT6"]
+          },
+          {
+            "brand": "ASUS",
+            "models": ["Pro WS W790E-SAGE SE", "Pro WS WRX80E-SAGE SE WIFI"]
+          }
+        ],
+        "compatible_servers": [
+          {
+            "brand": "Dell",
+            "models": ["PowerEdge R760", "PowerEdge R7625"]
+          },
+          {
+            "brand": "HPE",
+            "models": ["ProLiant DL380 Gen11", "ProLiant DL385 Gen11"]
+          }
+        ],
+        "slot_compatibility": {
+          "required_slot": "PCIe x8 or x16",
+          "low_profile_bracket": true,
+          "power_requirements": "PCIe slot power only"
+        },
+        "UUID": "hba-9400-8i-001-efgh5678"
+      }
+    ]
+  },
+  {
+    "component_subtype": "NVMe Adaptor",
+    "brand": "Supermicro",
+    "series": "M.2 to PCIe",
+    "generation": "AOM-SNG-4M2P",
+    "family": "Quad M.2 NVMe",
+    "models": [
+      {
+        "model": "AOM-SNG-4M2P",
+        "part_number": "MCP-220-00142-0N",
+        "interface": "PCIe 3.0 x16",
+        "m2_slots": 4,
+        "m2_form_factors": ["2242", "2260", "2280", "22110"],
+        "max_capacity_per_slot": "8TB",
+        "total_max_capacity": "32TB",
+        "form_factor": "HHHL (Half Height Half Length)",
+        "dimensions_mm": {
+          "length": 167,
+          "width": 69,
+          "height": 14.5
+        },
+        "power_consumption": {
+          "idle_W": 2.5,
+          "typical_W": 15,
+          "max_W": 25
+        },
+        "operating_conditions": {
+          "temperature_range": "0°C to 55°C",
+          "humidity": "8% to 90% non-condensing",
+          "altitude": "0 to 3000m"
+        },
+        "performance": {
+          "max_sequential_read": "13000 MB/s",
+          "max_sequential_write": "12000 MB/s",
+          "max_iops_read": "1200000",
+          "max_iops_write": "1100000"
+        },
+        "inventory": {
+          "quantity_available": 15,
+          "quantity_reserved": 3,
+          "location": "Datacenter A, Rack D1",
+          "rack_position": "Storage Unit 5",
+          "status": "Available",
+          "condition": "New",
+          "purchase_date": "2024-04-10",
+          "warranty_expiration": "2027-04-10",
+          "serial_numbers": [],
+          "sys_score": ""
+        },
+        "compatible_motherboards": [
+          {
+            "brand": "Supermicro",
+            "models": ["X13DRG-H", "X13DRi-N", "H13DSU-iN"]
+          },
+          {
+            "brand": "ASUS",
+            "models": ["Pro WS W790E-SAGE SE", "Pro WS WRX80E-SAGE SE WIFI"]
+          },
+          {
+            "brand": "GIGABYTE",
+            "models": ["MZ93-FS0", "MC63-4S0"]
+          }
+        ],
+        "compatible_servers": [
+          {
+            "brand": "Dell",
+            "models": ["PowerEdge R760", "PowerEdge R7625"]
+          },
+          {
+            "brand": "HPE",
+            "models": ["ProLiant DL380 Gen11", "ProLiant DL385 Gen11"]
+          },
+          {
+            "brand": "Supermicro",
+            "models": ["SuperServer 1029U-TR4", "AS-2145GH-TNRT"]
+          }
+        ],
+        "slot_compatibility": {
+          "required_slot": "PCIe x16",
+          "low_profile_bracket": false,
+          "power_requirements": "PCIe slot power + optional 6-pin"
+        },
+        "UUID": "nvme-adaptor-4m2p-001-ijkl9012"
+      },
+      {
+        "model": "AOM-SNG-2M2P",
+        "part_number": "MCP-220-00141-0N",
+        "interface": "PCIe 3.0 x8",
+        "m2_slots": 2,
+        "m2_form_factors": ["2242", "2260", "2280"],
+        "max_capacity_per_slot": "8TB",
+        "total_max_capacity": "16TB",
+        "form_factor": "HHHL (Half Height Half Length)",
+        "dimensions_mm": {
+          "length": 167,
+          "width": 69,
+          "height": 14.5
+        },
+        "power_consumption": {
+          "idle_W": 1.5,
+          "typical_W": 8,
+          "max_W": 15
+        },
+        "operating_conditions": {
+          "temperature_range": "0°C to 55°C",
+          "humidity": "8% to 90% non-condensing",
+          "altitude": "0 to 3000m"
+        },
+        "performance": {
+          "max_sequential_read": "6500 MB/s",
+          "max_sequential_write": "6000 MB/s",
+          "max_iops_read": "600000",
+          "max_iops_write": "550000"
+        },
+        "inventory": {
+          "quantity_available": 22,
+          "quantity_reserved": 3,
+          "location": "Datacenter A, Rack D1",
+          "rack_position": "Storage Unit 6",
+          "status": "Available",
+          "condition": "New",
+          "purchase_date": "2024-04-05",
+          "warranty_expiration": "2027-04-05",
+          "serial_numbers": [],
+          "sys_score": ""
+        },
+        "compatible_motherboards": [
+          {
+            "brand": "Supermicro",
+            "models": ["X13DRG-H", "X13DRi-N", "H13DSU-iN"]
+          },
+          {
+            "brand": "ASUS",
+            "models": ["Pro WS W790E-SAGE SE"]
+          }
+        ],
+        "compatible_servers": [
+          {
+            "brand": "Dell",
+            "models": ["PowerEdge R760", "PowerEdge R7625"]
+          },
+          {
+            "brand": "HPE",
+            "models": ["ProLiant DL380 Gen11"]
+          }
+        ],
+        "slot_compatibility": {
+          "required_slot": "PCIe x8 or x16",
+          "low_profile_bracket": false,
+          "power_requirements": "PCIe slot power only"
+        },
+        "UUID": "nvme-adaptor-2m2p-001-mnop3456"
+      }
+    ]
+  },
+  {
+    "component_subtype": "Riser Card",
+    "brand": "Supermicro",
+    "series": "RSC Riser Cards",
+    "generation": "Multiple Form Factors",
+    "family": "1U and 2U Riser Cards",
+    "models": [
+      {
+        "model": "RSC-R1UU-E8R",
+        "part_number": "CSE-815TQ-R500WB",
+        "interface": "PCIe 3.0/4.0",
+        "pcie_slots": 1,
+        "slot_type": "x8",
+        "form_factor": "1U Low Profile",
+        "cable_type": "Flexible PCIe",
+        "cable_length": "150mm",
+        "low_profile_only": true,
+        "dimensions_mm": {
+          "length": 120,
+          "width": 80,
+          "height": 15
+        },
+        "operating_conditions": {
+          "temperature_range": "0°C to 60°C",
+          "humidity": "8% to 90% non-condensing",
+          "altitude": "0 to 3000m"
+        },
+        "electrical_specs": {
+          "signal_integrity": "PCIe 4.0 compliant",
+          "insertion_loss": "<3dB @ 8GHz",
+          "return_loss": ">10dB @ 8GHz"
+        },
+        "inventory": {
+          "quantity_available": 28,
+          "quantity_reserved": 4,
+          "location": "Datacenter B, Rack A1",
+          "rack_position": "Storage Unit 12",
+          "status": "Available",
+          "condition": "New",
+          "purchase_date": "2024-05-01",
+          "warranty_expiration": "2027-05-01",
+          "serial_numbers": [],
+          "sys_score": ""
+        },
+        "compatible_motherboards": [
+          {
+            "brand": "Supermicro",
+            "models": ["X13DRG-H", "X13DRi-N", "X12DPG-QT6"]
+          },
+          {
+            "brand": "ASUS",
+            "models": ["Pro WS W790E-SAGE SE"]
+          }
+        ],
+        "compatible_servers": [
+          {
+            "brand": "Supermicro",
+            "models": ["SuperServer 815TQ-R500WB", "SuperServer 815TQ-R700WB"]
+          },
+          {
+            "brand": "Dell",
+            "models": ["PowerEdge R230", "PowerEdge R330"]
+          }
+        ],
+        "compatible_chassis": [
+          {
+            "brand": "Supermicro",
+            "models": ["CSE-815TQ", "CSE-815TQC", "CSE-813MFTQC"]
+          }
+        ],
+        "slot_compatibility": {
+          "motherboard_connection": "PCIe x8 or x16 slot",
+          "expansion_slot": "1x PCIe x8 low profile",
+          "power_passthrough": true
+        },
+        "UUID": "riser-1u-e8r-001-qrst7890"
+      },
+      {
+        "model": "RSC-R1UU-2E8R",
+        "part_number": "CSE-815TQ-R500WB-2E8R",
+        "interface": "PCIe 3.0/4.0",
+        "pcie_slots": 2,
+        "slot_type": "x8",
+        "form_factor": "1U Low Profile",
+        "cable_type": "Flexible PCIe",
+        "cable_length": "150mm",
+        "low_profile_only": true,
+        "dimensions_mm": {
+          "length": 180,
+          "width": 80,
+          "height": 15
+        },
+        "operating_conditions": {
+          "temperature_range": "0°C to 60°C",
+          "humidity": "8% to 90% non-condensing",
+          "altitude": "0 to 3000m"
+        },
+        "electrical_specs": {
+          "signal_integrity": "PCIe 4.0 compliant",
+          "insertion_loss": "<3dB @ 8GHz",
+          "return_loss": ">10dB @ 8GHz"
+        },
+        "inventory": {
+          "quantity_available": 24,
+          "quantity_reserved": 4,
+          "location": "Datacenter B, Rack A1",
+          "rack_position": "Storage Unit 13",
+          "status": "Available",
+          "condition": "New",
+          "purchase_date": "2024-05-05",
+          "warranty_expiration": "2027-05-05",
+          "serial_numbers": [],
+          "sys_score": ""
+        },
+        "compatible_motherboards": [
+          {
+            "brand": "Supermicro",
+            "models": ["X13DRG-H", "X13DRi-N"]
+          },
+          {
+            "brand": "ASUS",
+            "models": ["Pro WS W790E-SAGE SE"]
+          }
+        ],
+        "compatible_servers": [
+          {
+            "brand": "Supermicro",
+            "models": ["SuperServer 815TQ-R500WB", "SuperServer 815TQ-R700WB"]
+          }
+        ],
+        "compatible_chassis": [
+          {
+            "brand": "Supermicro",
+            "models": ["CSE-815TQ", "CSE-815TQC"]
+          }
+        ],
+        "slot_compatibility": {
+          "motherboard_connection": "PCIe x16 slot",
+          "expansion_slots": "2x PCIe x8 low profile",
+          "power_passthrough": true
+        },
+        "UUID": "riser-1u-2e8r-001-uvwx4567"
+      },
+      {
+        "model": "RSC-R2UU-E16R",
+        "part_number": "CSE-825TQ-R720LPB-E16R",
+        "interface": "PCIe 3.0/4.0",
+        "pcie_slots": 1,
+        "slot_type": "x16",
+        "form_factor": "2U Standard Height",
+        "cable_type": "Flexible PCIe",
+        "cable_length": "200mm",
+        "low_profile_only": false,
+        "dimensions_mm": {
+          "length": 180,
+          "width": 120,
+          "height": 75
+        },
+        "operating_conditions": {
+          "temperature_range": "0°C to 60°C",
+          "humidity": "8% to 90% non-condensing",
+          "altitude": "0 to 3000m"
+        },
+        "electrical_specs": {
+          "signal_integrity": "PCIe 4.0 compliant",
+          "insertion_loss": "<3dB @ 8GHz",
+          "return_loss": ">10dB @ 8GHz"
+        },
+        "inventory": {
+          "quantity_available": 16,
+          "quantity_reserved": 4,
+          "location": "Datacenter B, Rack B2",
+          "rack_position": "Storage Unit 15",
+          "status": "Available",
+          "condition": "New",
+          "purchase_date": "2024-05-10",
+          "warranty_expiration": "2027-05-10",
+          "serial_numbers": [],
+          "sys_score": ""
+        },
+        "compatible_motherboards": [
+          {
+            "brand": "Supermicro",
+            "models": ["X13DRG-H", "X13DRi-N", "H13DSU-iN"]
+          },
+          {
+            "brand": "ASUS",
+            "models": ["Pro WS W790E-SAGE SE", "Pro WS WRX80E-SAGE SE WIFI"]
+          }
+        ],
+        "compatible_servers": [
+          {
+            "brand": "Supermicro",
+            "models": ["SuperServer 825TQ-R720LPB", "SuperServer 825TQ-R740LPB"]
+          },
+          {
+            "brand": "Dell",
+            "models": ["PowerEdge R740", "PowerEdge R750"]
+          }
+        ],
+        "compatible_chassis": [
+          {
+            "brand": "Supermicro",
+            "models": ["CSE-825TQ", "CSE-825TQC", "CSE-826BE1C"]
+          }
+        ],
+        "slot_compatibility": {
+          "motherboard_connection": "PCIe x16 slot",
+          "expansion_slot": "1x PCIe x16 standard height",
+          "power_passthrough": true,
+          "supports_gpu": true
+        },
+        "UUID": "riser-2u-e16r-001-yzab8901"
+      }
+    ]
+  },
+  {
+    "component_subtype": "GPU",
+    "brand": "NVIDIA",
+    "series": "Data Center GPUs",
+    "generation": "Hopper",
+    "family": "H100 Series",
+    "models": [
+      {
+        "model": "H100 PCIe",
+        "architecture": "Hopper GH100",
+        "manufacturing_process": "4nm TSMC",
+        "release_year": 2022,
+        "interface_requirements": {
+          "pcie_version": "5.0",
+          "pcie_lanes": 16,
+          "pcie_slot_type": "x16 (electrical)",
+          "minimum_pcie_version": "4.0",
+          "backward_compatible": true,
+          "slot_height": "Full Height, Full Length",
+          "slot_width": "Dual Slot",
+          "form_factors_supported": ["PCIe", "SXM5", "HGX"]
+        },
+        "power_requirements": {
+          "idle_power": "50W",
+          "typical_power": "350W",
+          "maximum_power": "700W",
+          "pcie_power_draw": "75W + External connectors",
+          "external_power_required": true,
+          "power_connectors": {
+            "pcie": "2x 8-pin or 1x 16-pin (12VHPWR)",
+            "sxm": "Motherboard supplied",
+            "total_pins": 16
+          },
+          "power_efficiency": "4+ TFLOPS per Watt"
+        },
+        "form_factor": "PCIe x16 Dual Slot",
+        "memory_specs": {
+          "capacity": "80GB",
+          "type": "HBM3",
+          "bandwidth": "2000 GB/s",
+          "bus_width": "5120-bit",
+          "ecc_support": true
+        },
+        "compute_specifications": {
+          "cuda_cores": 16896,
+          "tensor_cores": "4th Gen (512)",
+          "rt_cores": 0,
+          "base_clock": "1230 MHz",
+          "boost_clock": "1980 MHz",
+          "memory_clock": "2619 MHz"
+        },
+        "performance_specs": {
+          "fp32_performance": "51 TFLOPS",
+          "tensor_performance": {
+            "fp16": "1979 TFLOPS",
+            "bf16": "1979 TFLOPS",
+            "int8": "3958 TOPS",
+            "int4": "7916 TOPS",
+            "fp8": "3958 TFLOPS"
+          },
+          "memory_bandwidth": "2000 GB/s",
+          "nvlink_bandwidth": "900 GB/s bidirectional"
+        },
+        "connectivity": {
+          "nvlink": {
+            "version": "4.0",
+            "links": 18,
+            "topology_support": ["All-to-all", "Switch", "Hybrid"]
+          },
+          "pcie_lanes_used": 16,
+          "multi_gpu_support": {
+            "sli_support": false,
+            "nvlink_scaling": "Up to 8 GPUs",
+            "mig_support": true,
+            "mig_instances": "Up to 7 instances"
+          }
+        },
+        "cooling_requirements": {
+          "thermal_design_power": "350W",
+          "cooling_solution": "Active cooling required",
+          "airflow_required": "300 CFM minimum",
+          "case_temperature_max": "83°C",
+          "thermal_throttling": "Yes"
+        },
+        "dimensions_mm": {
+          "length": 267,
+          "width": 112,
+          "height": 40
+        },
+        "operating_conditions": {
+          "temperature_range": "0°C to +30°C (at sea level)",
+          "storage_temperature": "-40°C to +70°C",
+          "humidity": "10% to 90% non-condensing",
+          "altitude": "0 to 3048m operating"
+        },
+        "inventory": {
+          "quantity_available": 0,
+          "quantity_reserved": 0,
+          "location": "N/A",
+          "rack_position": "N/A",
+          "status": "Out of Stock",
+          "condition": "New",
+          "purchase_date": "",
+          "warranty_expiration": "",
+          "serial_numbers": [],
+          "sys_score": ""
+        },
+        "compatible_motherboards": [
+          {
+            "brand": "Supermicro",
+            "models": ["X13DRG-H", "X13DRi-N", "H13DSU-iN"]
+          },
+          {
+            "brand": "ASUS",
+            "models": ["Pro WS W790E-SAGE SE", "Pro WS WRX80E-SAGE SE WIFI"]
+          },
+          {
+            "brand": "GIGABYTE",
+            "models": ["MZ93-FS0", "MC63-4S0"]
+          }
+        ],
+        "compatible_servers": [
+          {
+            "brand": "Dell",
+            "models": ["PowerEdge R760", "PowerEdge R7625"]
+          },
+          {
+            "brand": "HPE",
+            "models": ["ProLiant DL380 Gen11", "ProLiant DL385 Gen11"]
+          },
+          {
+            "brand": "Supermicro",
+            "models": ["SuperServer 1029U-TR4", "AS-2145GH-TNRT"]
+          }
+        ],
+        "slot_compatibility": {
+          "required_slot": "PCIe x16",
+          "low_profile_bracket": false,
+          "power_requirements": "2x 8-pin PCIe or 1x 16-pin 12VHPWR"
+        },
+        "UUID": "h100-pcie-01ab-cdef-0123-456789abcdef"
+      }
+    ]
+  },
+  {
+    "component_subtype": "GPU",
+    "brand": "NVIDIA",
+    "series": "Data Center GPUs",
+    "generation": "Ampere",
+    "family": "A100 Series",
+    "models": [
+      {
+        "model": "A100 PCIe 40GB",
+        "architecture": "Ampere",
+        "interface": "PCIe 4.0",
+        "memory": "40GB HBM2e",
+        "memory_bandwidth": "1.6TB/s",
+        "form_factor": "PCIe x16 Dual Slot",
+        "power_consumption": "300W",
+        "dimensions_mm": {
+          "length": 267,
+          "width": 112,
+          "height": 40
+        },
+        "operating_conditions": {
+          "temperature_range": "0°C to +30°C",
+          "humidity": "10% to 90% non-condensing"
+        },
+        "inventory": {
+          "quantity_available": 18,
+          "quantity_reserved": 0,
+          "location": "Datacenter A, Rack G1",
+          "rack_position": "GPU Unit 1",
+          "status": "Available",
+          "condition": "New",
+          "purchase_date": "2024-02-15",
+          "warranty_expiration": "2027-02-15",
+          "serial_numbers": [],
+          "sys_score": ""
+        },
+        "features": [
+          "Multi-Instance GPU",
+          "NVLink 3.0",
+          "Sparsity",
+          "PCIe Gen4"
+        ],
+        "compatible_motherboards": [
+          {
+            "brand": "Supermicro",
+            "models": ["X13DRG-H", "X13DRi-N"]
+          },
+          {
+            "brand": "ASUS",
+            "models": ["Pro WS W790E-SAGE SE"]
+          }
+        ],
+        "slot_compatibility": {
+          "required_slot": "PCIe x16",
+          "low_profile_bracket": false,
+          "power_requirements": "2x 8-pin PCIe"
+        },
+        "UUID": "a100-pcie-40gb-1234-abcd-5678-ef0123456789"
+      },
+      {
+        "model": "A100 PCIe 80GB",
+        "architecture": "Ampere",
+        "interface": "PCIe 4.0",
+        "memory": "80GB HBM2e",
+        "memory_bandwidth": "2TB/s",
+        "form_factor": "PCIe x16 Dual Slot",
+        "power_consumption": "300W",
+        "dimensions_mm": {
+          "length": 267,
+          "width": 112,
+          "height": 40
+        },
+        "operating_conditions": {
+          "temperature_range": "0°C to +30°C",
+          "humidity": "10% to 90% non-condensing"
+        },
+        "inventory": {
+          "quantity_available": 12,
+          "quantity_reserved": 0,
+          "location": "Datacenter A, Rack G1",
+          "rack_position": "GPU Unit 2",
+          "status": "Available",
+          "condition": "New",
+          "purchase_date": "2024-03-01",
+          "warranty_expiration": "2027-03-01",
+          "serial_numbers": [],
+          "sys_score": ""
+        },
+        "features": [
+          "Multi-Instance GPU",
+          "NVLink 3.0",
+          "Sparsity",
+          "PCIe Gen4"
+        ],
+        "compatible_motherboards": [
+          {
+            "brand": "Supermicro",
+            "models": ["X13DRG-H", "X13DRi-N"]
+          },
+          {
+            "brand": "ASUS",
+            "models": ["Pro WS W790E-SAGE SE"]
+          }
+        ],
+        "slot_compatibility": {
+          "required_slot": "PCIe x16",
+          "low_profile_bracket": false,
+          "power_requirements": "2x 8-pin PCIe"
+        },
+        "UUID": "a100-pcie-80gb-5678-efab-9012-cdef01234567"
+      }
+    ]
+  },
+  {
+    "component_subtype": "GPU",
+    "brand": "AMD",
+    "series": "Instinct Accelerators",
+    "generation": "CDNA 3",
+    "family": "MI300 Series",
+    "models": [
+      {
+        "model": "MI300X",
+        "architecture": "CDNA 3",
+        "interface": "PCIe 5.0",
+        "memory": "192GB HBM3",
+        "memory_bandwidth": "5.3TB/s",
+        "form_factor": "OAM",
+        "power_consumption": "750W",
+        "dimensions_mm": {
+          "length": 300,
+          "width": 120,
+          "height": 50
+        },
+        "operating_conditions": {
+          "temperature_range": "0°C to +35°C",
+          "humidity": "10% to 90% non-condensing"
+        },
+        "inventory": {
+          "quantity_available": 4,
+          "quantity_reserved": 0,
+          "location": "Datacenter B, Rack H1",
+          "rack_position": "GPU Unit 1",
+          "status": "Available",
+          "condition": "New",
+          "purchase_date": "2024-06-01",
+          "warranty_expiration": "2027-06-01",
+          "serial_numbers": [],
+          "sys_score": ""
+        },
+        "features": [
+          "Infinity Cache",
+          "ROCm",
+          "Mixed Precision",
+          "ECC Memory"
+        ],
+        "compatible_motherboards": [
+          {
+            "brand": "Supermicro",
+            "models": ["H13DSU-iN"]
+          },
+          {
+            "brand": "ASUS",
+            "models": ["Pro WS WRX80E-SAGE SE WIFI"]
+          }
+        ],
+        "slot_compatibility": {
+          "required_slot": "OAM Socket",
+          "low_profile_bracket": false,
+          "power_requirements": "OAM Power Delivery"
+        },
+        "UUID": "mi300x-oam-90ab-cdef-1234-567890abcdef01"
+      },
+      {
+        "model": "MI300A",
+        "architecture": "CDNA 3",
+        "interface": "PCIe 5.0",
+        "memory": "128GB HBM3",
+        "memory_bandwidth": "5.3TB/s",
+        "form_factor": "OAM",
+        "power_consumption": "760W",
+        "dimensions_mm": {
+          "length": 300,
+          "width": 120,
+          "height": 50
+        },
+        "operating_conditions": {
+          "temperature_range": "0°C to +35°C",
+          "humidity": "10% to 90% non-condensing"
+        },
+        "inventory": {
+          "quantity_available": 2,
+          "quantity_reserved": 0,
+          "location": "Datacenter B, Rack H1",
+          "rack_position": "GPU Unit 2",
+          "status": "Available",
+          "condition": "New",
+          "purchase_date": "2024-06-15",
+          "warranty_expiration": "2027-06-15",
+          "serial_numbers": [],
+          "sys_score": ""
+        },
+        "features": [
+          "Integrated CPU+GPU",
+          "Infinity Cache",
+          "ROCm",
+          "Unified Memory"
+        ],
+        "compatible_motherboards": [
+          {
+            "brand": "Supermicro",
+            "models": ["H13DSU-iN"]
+          },
+          {
+            "brand": "ASUS",
+            "models": ["Pro WS WRX80E-SAGE SE WIFI"]
+          }
+        ],
+        "slot_compatibility": {
+          "required_slot": "OAM Socket",
+          "low_profile_bracket": false,
+          "power_requirements": "OAM Power Delivery"
+        },
+        "UUID": "mi300a-oam-cdef-0123-4567-89abcdef0123"
+      }
+    ]
+  }
+]

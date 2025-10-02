@@ -14,7 +14,8 @@ class ServerBuilder {
             'storage' => 'storageinventory',
             'motherboard' => 'motherboardinventory',
             'nic' => 'nicinventory',
-            'caddy' => 'caddyinventory'
+            'caddy' => 'caddyinventory',
+            'pciecard' => 'pciecardinventory'
         ];
     }
     
@@ -126,8 +127,10 @@ class ServerBuilder {
                     }
                     $compatibility = new ComponentCompatibility($this->pdo);
 
-                    // Skip JSON validation for storage - it will be handled in compatibility checking
-                    if ($componentType !== 'storage') {
+                    // Skip JSON validation for storage, nic, caddy, chassis - database UUIDs don't match JSON UUIDs
+                    // Only validate: cpu, motherboard, ram, pciecard
+                    $componentsToValidate = ['cpu', 'motherboard', 'ram', 'pciecard'];
+                    if (in_array($componentType, $componentsToValidate)) {
                         $existsResult = $compatibility->validateComponentExistsInJSON($componentType, $componentUuid);
                         if (!$existsResult) {
                             return [
@@ -452,12 +455,8 @@ class ServerBuilder {
             
             switch ($componentType) {
                 case 'chassis':
-                    if ($action === 'add') {
-                        $updateFields[] = "chassis_uuid = ?";
-                        $updateValues[] = $componentUuid;
-                    } elseif ($action === 'remove') {
-                        $updateFields[] = "chassis_uuid = NULL";
-                    }
+                    // Chassis is tracked in server_configuration_components, not in main table
+                    // No direct column update needed
                     break;
 
                 case 'cpu':

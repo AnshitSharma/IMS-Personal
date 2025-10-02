@@ -387,7 +387,7 @@ function handleAddComponent($serverBuilder, $user) {
     }
 
     // Basic component type validation
-    $validComponentTypes = ['chassis', 'cpu', 'motherboard', 'ram', 'storage', 'nic', 'caddy'];
+    $validComponentTypes = ['chassis', 'cpu', 'motherboard', 'ram', 'storage', 'nic', 'caddy', 'pciecard'];
     if (!in_array($componentType, $validComponentTypes)) {
         send_json_response(0, 1, 400, "Invalid component type. Valid types: " . implode(', ', $validComponentTypes));
     }
@@ -508,7 +508,100 @@ function handleAddComponent($serverBuilder, $user) {
             error_log("Enhanced validation error (non-critical): " . $e->getMessage());
             // Don't fail the entire operation for validation errors - continue with basic validation
         }
-        
+
+        // NEW: PCIe slot validation for PCIe cards and NICs
+        $assignedSlot = null;
+        if ($componentType === 'pciecard' || $componentType === 'nic') {
+            try {
+                require_once __DIR__ . '/../../includes/models/PCIeSlotTracker.php';
+                require_once __DIR__ . '/../../includes/models/ComponentDataService.php';
+
+                $slotTracker = new PCIeSlotTracker($pdo);
+
+                // Step 1: Check if motherboard exists in configuration
+                $stmt = $pdo->prepare("
+                    SELECT component_uuid
+                    FROM server_configuration_components
+                    WHERE config_uuid = ? AND component_type = 'motherboard'
+                    LIMIT 1
+                ");
+                $stmt->execute([$configUuid]);
+                $motherboardResult = $stmt->fetch(PDO::FETCH_ASSOC);
+
+                if (!$motherboardResult) {
+                    send_json_response(0, 1, 400,
+                        "Cannot add PCIe card/NIC: No motherboard in configuration. Add motherboard first.",
+                        [
+                            'component_type' => $componentType,
+                            'component_uuid' => $componentUuid,
+                            'recommendation' => 'Add a motherboard to the configuration before adding PCIe cards or NICs'
+                        ]
+                    );
+                }
+
+                // Step 2: Get component specifications to determine slot size
+                try {
+                    $componentDataService = ComponentDataService::getInstance();
+                    $cardSpecs = $componentDataService->getComponentSpecifications($componentType, $componentUuid, $componentDetails);
+                } catch (Exception $specError) {
+                    error_log("WARNING: Error loading PCIe card specs: " . $specError->getMessage());
+                    $cardSpecs = null;
+                }
+
+                if (!$cardSpecs) {
+                    error_log("WARNING: Could not load PCIe card specs for $componentUuid - proceeding without slot validation");
+                    // Continue without slot validation if specs not found
+                } else {
+                    // Step 3: Extract PCIe slot size from specifications
+                    $cardSlotSize = extractPCIeSlotSizeFromSpecs($cardSpecs);
+
+                    if (!$cardSlotSize) {
+                        error_log("WARNING: Could not determine PCIe slot size for $componentUuid - proceeding without slot validation");
+                    } else {
+                        error_log("PCIe card $componentUuid requires $cardSlotSize slot");
+
+                        // Step 4: Check if card can fit in available slots
+                        if (!$slotTracker->canFitCard($configUuid, $cardSlotSize)) {
+                            $availability = $slotTracker->getSlotAvailability($configUuid);
+
+                            send_json_response(0, 1, 400,
+                                "No available PCIe slots for $cardSlotSize card",
+                                [
+                                    'component_type' => $componentType,
+                                    'component_uuid' => $componentUuid,
+                                    'required_slot' => $cardSlotSize,
+                                    'available_slots' => $availability['available_slots'],
+                                    'used_slots' => array_keys($availability['used_slots']),
+                                    'total_slots' => $availability['total_slots'],
+                                    'recommendation' => "Remove existing PCIe card/NIC or use a component with different slot size"
+                                ]
+                            );
+                        }
+
+                        // Step 5: Assign optimal slot (smallest compatible slot first)
+                        $assignedSlot = $slotTracker->assignSlot($configUuid, $cardSlotSize);
+
+                        if (!$assignedSlot) {
+                            send_json_response(0, 1, 500, "Failed to assign PCIe slot", [
+                                'component_uuid' => $componentUuid,
+                                'error' => 'Slot assignment failed unexpectedly'
+                            ]);
+                        }
+
+                        // Override slot_position with auto-assigned slot
+                        $slotPosition = $assignedSlot;
+
+                        error_log("Assigned PCIe card $componentUuid to slot: $assignedSlot");
+                    }
+                }
+
+            } catch (Exception $pcieError) {
+                error_log("PCIe slot validation error: " . $pcieError->getMessage());
+                // Log error but continue - don't fail on validation errors
+                error_log("Continuing without PCIe slot validation due to error");
+            }
+        }
+
         // Use original component addition method
         $result = $serverBuilder->addComponent($configUuid, $componentType, $componentUuid, [
             'quantity' => $quantity,
@@ -533,6 +626,22 @@ function handleAddComponent($serverBuilder, $user) {
                 ],
                 'timestamp' => date('Y-m-d H:i:s')
             ];
+
+            // Add PCIe slot assignment info if applicable
+            if ($assignedSlot && ($componentType === 'pciecard' || $componentType === 'nic')) {
+                $responseData['pcie_slot_assignment'] = [
+                    'slot_assigned' => $assignedSlot,
+                    'slot_type' => extractSlotTypeFromSlotId($assignedSlot)
+                ];
+
+                // Get updated slot availability
+                if (isset($slotTracker)) {
+                    $updatedAvailability = $slotTracker->getSlotAvailability($configUuid);
+                    if ($updatedAvailability['success']) {
+                        $responseData['pcie_slot_assignment']['remaining_slots'] = $updatedAvailability['available_slots'];
+                    }
+                }
+            }
             
             // Enhanced RAM compatibility response structure as specified in Important-fix
             if ($componentType === 'ram' && isset($result['warnings']) && isset($result['compatibility_details'])) {
@@ -1008,9 +1117,40 @@ function handleValidateConfiguration($serverBuilder, $user) {
         if ($config->get('created_by') != $user['id'] && !hasPermission($pdo, 'server.view_all', $user['id'])) {
             send_json_response(0, 1, 403, "Insufficient permissions to validate this configuration");
         }
-        
+
         $validation = $serverBuilder->validateConfiguration($configUuid);
-        
+
+        // NEW: Add PCIe slot validation
+        try {
+            require_once __DIR__ . '/../../includes/models/PCIeSlotTracker.php';
+            $slotTracker = new PCIeSlotTracker($pdo);
+
+            $pcieValidation = $slotTracker->validateAllSlots($configUuid);
+
+            // Add PCIe slot validation to the overall validation results
+            $validation['pcie_slots'] = $pcieValidation;
+
+            // If PCIe validation failed, mark overall validation as failed
+            if (!$pcieValidation['valid']) {
+                $validation['valid'] = false;
+                if (!isset($validation['errors'])) {
+                    $validation['errors'] = [];
+                }
+                $validation['errors'] = array_merge(
+                    $validation['errors'],
+                    $pcieValidation['errors']
+                );
+            }
+
+        } catch (Exception $pcieError) {
+            error_log("PCIe slot validation error: " . $pcieError->getMessage());
+            // Add warning but don't fail entire validation
+            if (!isset($validation['warnings'])) {
+                $validation['warnings'] = [];
+            }
+            $validation['warnings'][] = "PCIe slot validation could not be completed: " . $pcieError->getMessage();
+        }
+
         send_json_response(1, 1, 200, "Configuration validation completed", [
             'config_uuid' => $configUuid,
             'validation' => $validation
@@ -1044,7 +1184,7 @@ function handleGetCompatible($serverBuilder, $user) {
     }
     
     // Validate component type
-    $validComponentTypes = ['chassis', 'cpu', 'motherboard', 'ram', 'storage', 'nic', 'caddy'];
+    $validComponentTypes = ['chassis', 'cpu', 'motherboard', 'ram', 'storage', 'nic', 'caddy', 'pciecard'];
     if (!in_array($componentType, $validComponentTypes)) {
         send_json_response(0, 1, 400, "Invalid component type. Must be one of: " . implode(', ', $validComponentTypes));
     }
@@ -1085,7 +1225,8 @@ function handleGetCompatible($serverBuilder, $user) {
                 'storage' => 'storageinventory',
                 'motherboard' => 'motherboardinventory',
                 'nic' => 'nicinventory',
-                'caddy' => 'caddyinventory'
+                'caddy' => 'caddyinventory',
+                'pciecard' => 'pciecardinventory'
             ];
 
             $table = $tableMap[$existing['component_type']];
@@ -1110,7 +1251,8 @@ function handleGetCompatible($serverBuilder, $user) {
             'storage' => 'storageinventory',
             'motherboard' => 'motherboardinventory',
             'nic' => 'nicinventory',
-            'caddy' => 'caddyinventory'
+            'caddy' => 'caddyinventory',
+            'pciecard' => 'pciecardinventory'
         ];
         
         $table = $tableMap[$componentType];
@@ -1205,6 +1347,25 @@ function handleGetCompatible($serverBuilder, $user) {
                         $compatibilityScore = $chassisCompatResult['compatibility_score'];
                         // Use concise compatibility summary instead of verbose details
                         $compatibilityReasons = [$chassisCompatResult['compatibility_summary'] ?? 'Compatibility check completed'];
+                    } elseif ($componentType === 'pciecard') {
+                        // Use specialized PCIe card compatibility checking
+                        $pcieCompatResult = $compatibility->checkPCIeDecentralizedCompatibility(
+                            ['uuid' => $component['UUID']], $existingComponentsData
+                        );
+                        $isCompatible = $pcieCompatResult['compatible'];
+                        $compatibilityScore = $pcieCompatResult['compatibility_score'];
+                        // Use concise compatibility summary instead of verbose details
+                        $compatibilityReasons = [$pcieCompatResult['compatibility_summary'] ?? 'Compatibility check completed'];
+                    } elseif ($componentType === 'nic') {
+                        // Use specialized PCIe compatibility checking for NICs
+                        // NICs are treated as PCIe devices when checking slot availability
+                        $nicCompatResult = $compatibility->checkPCIeDecentralizedCompatibility(
+                            ['uuid' => $component['UUID']], $existingComponentsData, 'nic'
+                        );
+                        $isCompatible = $nicCompatResult['compatible'];
+                        $compatibilityScore = $nicCompatResult['compatibility_score'];
+                        // Use concise compatibility summary instead of verbose details
+                        $compatibilityReasons = [$nicCompatResult['compatibility_summary'] ?? 'Compatibility check completed'];
                     } else {
                         // Check compatibility with each existing component for other types
                         foreach ($existingComponentsData as $existingComp) {
@@ -2967,7 +3128,7 @@ function validateComponentExists($componentType, $componentUuid) {
         ];
     }
 
-    $stmt = $pdo->prepare("SELECT Status, UUID, SerialNumber, Notes FROM $tableName WHERE UUID = ?");
+    $stmt = $pdo->prepare("SELECT Status, UUID, SerialNumber, Notes, ServerUUID FROM $tableName WHERE UUID = ?");
     $stmt->execute([$componentUuid]);
     $component = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -3322,5 +3483,46 @@ function generateCompatibilitySuggestions($componentType, $existingComponents) {
     }
 
     return $suggestions;
+}
+
+/**
+ * Extract PCIe slot size from component specifications
+ *
+ * @param array $specs Component specifications from JSON
+ * @return string|null Slot size (x1, x4, x8, x16) or null
+ */
+function extractPCIeSlotSizeFromSpecs($specs) {
+    // Check interface field (most common)
+    $interface = $specs['interface'] ?? '';
+    if (preg_match('/x(\d+)/i', $interface, $matches)) {
+        return 'x' . $matches[1];
+    }
+
+    // Check slot_type field
+    $slotType = $specs['slot_type'] ?? '';
+    if (preg_match('/x(\d+)/i', $slotType, $matches)) {
+        return 'x' . $matches[1];
+    }
+
+    // Check pcie_interface field
+    $pcieInterface = $specs['pcie_interface'] ?? '';
+    if (preg_match('/x(\d+)/i', $pcieInterface, $matches)) {
+        return 'x' . $matches[1];
+    }
+
+    return null;
+}
+
+/**
+ * Extract slot type from slot ID
+ *
+ * @param string $slotId Slot identifier (e.g., "pcie_x16_slot_1")
+ * @return string|null Slot type (e.g., "x16") or null
+ */
+function extractSlotTypeFromSlotId($slotId) {
+    if (preg_match('/pcie_(x\d+)_slot_/', $slotId, $matches)) {
+        return $matches[1];
+    }
+    return null;
 }
 ?>

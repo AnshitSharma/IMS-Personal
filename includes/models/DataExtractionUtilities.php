@@ -14,7 +14,8 @@ class DataExtractionUtilities {
         'motherboard' => __DIR__ . '/../../All-JSON/motherboad-jsons/motherboard-level-3.json',
         'chassis' => __DIR__ . '/../../All-JSON/chasis-jsons/chasis-level-3.json',
         'cpu' => __DIR__ . '/../../All-JSON/cpu-jsons/Cpu-details-level-3.json',
-        'ram' => __DIR__ . '/../../All-JSON/Ram-jsons/ram_detail.json'
+        'ram' => __DIR__ . '/../../All-JSON/Ram-jsons/ram_detail.json',
+        'pciecard' => __DIR__ . '/../../All-JSON/pci-jsons/pci-level-3.json'
     ];
     
     /**
@@ -70,6 +71,8 @@ class DataExtractionUtilities {
                 return $this->findCpuInData($data, $uuid);
             case 'ram':
                 return $this->findRamInData($data, $uuid);
+            case 'pciecard':
+                return $this->findPCIeCardInData($data, $uuid);
             default:
                 return null;
         }
@@ -170,10 +173,28 @@ class DataExtractionUtilities {
                 }
             }
         }
-        
+
         return null;
     }
-    
+
+    /**
+     * Find PCIe card in PCI data structure
+     */
+    private function findPCIeCardInData($data, $uuid) {
+        // PCIe JSON structure: array of categories with models
+        foreach ($data as $category) {
+            if (isset($category['models'])) {
+                foreach ($category['models'] as $model) {
+                    if (isset($model['UUID']) && $model['UUID'] === $uuid) {
+                        return $model;
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
     /**
      * Extract storage form factor
      */
