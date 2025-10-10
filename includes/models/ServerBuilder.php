@@ -1,10 +1,11 @@
 <?php
 
 class ServerBuilder {
-    
+
     private $pdo;
     private $componentTables;
-    
+    private $dataUtils;
+
     public function __construct($pdo) {
         $this->pdo = $pdo;
         $this->componentTables = [
@@ -17,6 +18,10 @@ class ServerBuilder {
             'caddy' => 'caddyinventory',
             'pciecard' => 'pciecardinventory'
         ];
+
+        // Initialize DataExtractionUtilities for JSON spec lookups
+        require_once __DIR__ . '/DataExtractionUtilities.php';
+        $this->dataUtils = new DataExtractionUtilities($pdo);
     }
     
     /**
@@ -681,19 +686,25 @@ class ServerBuilder {
     private function updateConfigurationMetrics($configUuid) {
         try {
             $details = $this->getConfigurationSummary($configUuid);
-            
+
             $totalPower = 0;
             foreach ($details['components'] ?? [] as $type => $components) {
                 foreach ($components as $component) {
-                    if (isset($component['details'])) {
-                        $power = $this->calculateComponentPower($type, $component['details']);
-                        $totalPower += $power * ($component['quantity'] ?? 1);
+                    // Fetch component specs from JSON using UUID
+                    $componentUuid = $component['uuid'] ?? null;
+                    if (!$componentUuid) {
+                        continue;
                     }
+
+                    $power = $this->calculateComponentPowerFromJSON($type, $componentUuid);
+                    $totalPower += $power * ($component['quantity'] ?? 1);
                 }
             }
-            
+
             $totalPowerWithOverhead = $totalPower * 1.2;
-            
+
+            error_log("Power calculation for $configUuid: Base={$totalPower}W, WithOverhead={$totalPowerWithOverhead}W");
+
             // Calculate compatibility score
             $compatibilityScore = null;
             if (class_exists('CompatibilityEngine')) {
@@ -704,10 +715,10 @@ class ServerBuilder {
                     error_log("Error calculating compatibility: " . $e->getMessage());
                 }
             }
-            
+
             // Update the configuration
             $this->updateConfigurationCalculatedFields($configUuid, $totalPowerWithOverhead, $compatibilityScore);
-            
+
         } catch (Exception $e) {
             error_log("Error updating configuration metrics: " . $e->getMessage());
         }
@@ -1790,35 +1801,158 @@ class ServerBuilder {
     }
     
     /**
-     * Calculate component power consumption from specifications
+     * Calculate component power consumption from JSON specifications
+     */
+    private function calculateComponentPowerFromJSON($componentType, $componentUuid) {
+        // Default power estimates by component type (watts)
+        $defaultPower = [
+            'cpu' => 150,
+            'ram' => 8,
+            'storage' => 15,
+            'motherboard' => 50,
+            'nic' => 25,
+            'caddy' => 5,
+            'pciecard' => 30,
+            'chassis' => 0  // Chassis doesn't consume power directly
+        ];
+
+        try {
+            // Fetch component specs from JSON files
+            $specs = null;
+            switch ($componentType) {
+                case 'cpu':
+                    $specs = $this->dataUtils->getCPUByUUID($componentUuid);
+                    if ($specs && isset($specs['tdp_W'])) {
+                        return (int)$specs['tdp_W'];
+                    }
+                    break;
+
+                case 'ram':
+                    $specs = $this->dataUtils->getRAMByUUID($componentUuid);
+                    // RAM power consumption is typically 3-8W per module
+                    // DDR5 consumes more than DDR4
+                    if ($specs) {
+                        $type = strtolower($specs['memory_type'] ?? '');
+                        if (strpos($type, 'ddr5') !== false) {
+                            return 8; // DDR5: ~8W per module
+                        } elseif (strpos($type, 'ddr4') !== false) {
+                            return 5; // DDR4: ~5W per module
+                        } elseif (strpos($type, 'ddr3') !== false) {
+                            return 4; // DDR3: ~4W per module
+                        }
+                    }
+                    return 8; // Default DDR5
+
+                case 'storage':
+                    $specs = $this->dataUtils->getStorageByUUID($componentUuid);
+                    if ($specs) {
+                        $interface = strtolower($specs['interface'] ?? '');
+                        $formFactor = strtolower($specs['form_factor'] ?? '');
+
+                        // NVMe M.2: 5-10W active, 3-5W idle (average 7W)
+                        if (strpos($interface, 'nvme') !== false && strpos($formFactor, 'm.2') !== false) {
+                            return 7;
+                        }
+                        // NVMe U.2: 10-15W active, 5-8W idle (average 10W)
+                        elseif (strpos($interface, 'nvme') !== false && strpos($formFactor, 'u.2') !== false) {
+                            return 10;
+                        }
+                        // SAS HDD: 10-12W active, 6-8W idle (average 10W)
+                        elseif (strpos($interface, 'sas') !== false) {
+                            return 10;
+                        }
+                        // SATA SSD: 2-5W active, 1-2W idle (average 3W)
+                        elseif (strpos($interface, 'sata') !== false && strpos($formFactor, 'ssd') !== false) {
+                            return 3;
+                        }
+                        // SATA HDD: 6-10W active, 4-6W idle (average 8W)
+                        elseif (strpos($interface, 'sata') !== false) {
+                            return 8;
+                        }
+                    }
+                    return 15; // Default
+
+                case 'motherboard':
+                    // Motherboards typically consume 40-80W depending on complexity
+                    return 60; // Average estimate
+
+                case 'nic':
+                    $specs = $this->dataUtils->getNICByUUID($componentUuid);
+                    if ($specs) {
+                        $speed = $specs['speed'] ?? '';
+                        // 10GbE NICs: ~20-30W
+                        // 25GbE NICs: ~25-35W
+                        // 1GbE NICs: ~5-10W
+                        if (strpos($speed, '25') !== false) {
+                            return 30;
+                        } elseif (strpos($speed, '10') !== false) {
+                            return 25;
+                        } elseif (strpos($speed, '1') !== false) {
+                            return 8;
+                        }
+                    }
+                    return 25; // Default
+
+                case 'pciecard':
+                    $specs = $this->dataUtils->getPCIeCardByUUID($componentUuid);
+                    if ($specs && isset($specs['tdp_W'])) {
+                        return (int)$specs['tdp_W'];
+                    }
+                    // Estimate based on card type
+                    $cardType = strtolower($specs['type'] ?? '');
+                    if (strpos($cardType, 'gpu') !== false) {
+                        return 75; // Mid-range GPU
+                    } elseif (strpos($cardType, 'raid') !== false || strpos($cardType, 'hba') !== false) {
+                        return 25; // RAID/HBA controllers
+                    }
+                    return 30; // Default PCIe card
+
+                case 'caddy':
+                    return 0; // Caddies don't consume power
+
+                case 'chassis':
+                    return 0; // Chassis doesn't consume power (fans calculated separately)
+            }
+
+        } catch (Exception $e) {
+            error_log("Error calculating power for $componentType ($componentUuid): " . $e->getMessage());
+        }
+
+        // Return default if unable to calculate
+        return $defaultPower[$componentType] ?? 50;
+    }
+
+    /**
+     * DEPRECATED: Calculate component power consumption from database Notes field
+     * Kept for backwards compatibility but replaced by calculateComponentPowerFromJSON
      */
     private function calculateComponentPower($componentType, $componentDetails) {
         // Default power estimates by component type (watts)
         $defaultPower = [
-            'cpu' => 150,        
-            'ram' => 8,          
-            'storage' => 15,     
-            'motherboard' => 50, 
-            'nic' => 25,         
-            'caddy' => 5         
+            'cpu' => 150,
+            'ram' => 8,
+            'storage' => 15,
+            'motherboard' => 50,
+            'nic' => 25,
+            'caddy' => 5
         ];
-        
+
         $basePower = $defaultPower[$componentType] ?? 50;
-        
+
         try {
             // Try to extract power from Notes field or component specifications
             $notes = $componentDetails['Notes'] ?? '';
-            
+
             // Look for power consumption patterns in notes
             if (preg_match('/(\d+)\s*W(?:att)?s?/i', $notes, $matches)) {
                 return (int)$matches[1];
             }
-            
+
             // Look for TDP patterns
             if (preg_match('/TDP[:\s]*(\d+)\s*W/i', $notes, $matches)) {
                 return (int)$matches[1];
             }
-            
+
             // Component-specific power calculation
             switch ($componentType) {
                 case 'cpu':
@@ -1828,7 +1962,7 @@ class ServerBuilder {
                         $basePower = min(300, $cores * 2.5); // Rough estimate: 2.5W per core, max 300W
                     }
                     break;
-                    
+
                 case 'ram':
                     // Try to extract memory size
                     if (preg_match('/(\d+)\s*GB/i', $notes, $matches)) {

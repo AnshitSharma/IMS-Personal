@@ -17,33 +17,22 @@ class CompatibilityEngine extends ComponentCompatibility {
 
     /**
      * Check compatibility between two components
+     * DEPRECATED: Storage compatibility now handled by StorageConnectionValidator in FlexibleCompatibilityValidator
      */
     public function checkCompatibility($component1, $component2) {
         $type1 = strtolower($component1['type']);
         $type2 = strtolower($component2['type']);
 
-        // Storage compatibility handled by new JSON-driven validation
+        // Storage compatibility - DEPRECATED, use FlexibleCompatibilityValidator instead
         if ($type1 === 'storage' || $type2 === 'storage') {
-            // Determine which is storage and which is chassis
-            $storageComponent = ($type1 === 'storage') ? $component1 : $component2;
-            $chassisComponent = ($type1 === 'chassis') ? $component1 : $component2;
-
-            // Only validate storage-chassis compatibility
-            if ($type1 === 'storage' && $type2 === 'chassis') {
-                return $this->validateStorageCompatibility($storageComponent['uuid'], $chassisComponent['uuid']);
-            } elseif ($type1 === 'chassis' && $type2 === 'storage') {
-                return $this->validateStorageCompatibility($storageComponent['uuid'], $chassisComponent['uuid']);
-            } else {
-                // Storage-to-storage or storage-to-other component (not chassis)
-                return [
-                    'compatible' => true,
-                    'compatibility_score' => 1.0,
-                    'failures' => [],
-                    'warnings' => ['Storage compatibility only validated against chassis'],
-                    'recommendations' => [],
-                    'applied_rules' => ['storage_non_chassis_bypass']
-                ];
-            }
+            return [
+                'compatible' => true,
+                'compatibility_score' => 1.0,
+                'failures' => [],
+                'warnings' => ['Storage compatibility validated by FlexibleCompatibilityValidator'],
+                'recommendations' => [],
+                'applied_rules' => ['storage_deferred_to_flexible_validator']
+            ];
         }
 
         // Use parent ComponentCompatibility for non-storage checks
@@ -663,98 +652,19 @@ class CompatibilityEngine extends ComponentCompatibility {
     }
 
     /**
-     * Complete storage compatibility validation - Combines all validation steps
+     * Complete storage compatibility validation - DEPRECATED
+     * Now handled by StorageConnectionValidator in FlexibleCompatibilityValidator
+     * Kept for backward compatibility but returns simplified result
      */
     public function validateStorageCompatibility($storageUuid, $chassisUuid) {
-        try {
-            // Step 1: UUID Validation
-            $storageValidation = $this->validateStorageExistsInJSON($storageUuid);
-            if (!$storageValidation['success']) {
-                return [
-                    'compatible' => false,
-                    'step_failed' => 'storage_validation',
-                    'error' => $storageValidation['error'],
-                    'error_type' => $storageValidation['error_type']
-                ];
-            }
-
-            // Step 2: Chassis Validation
-            $chassisValidation = $this->validateChassisExistsInJSON($chassisUuid);
-            if (!$chassisValidation['success']) {
-                return [
-                    'compatible' => false,
-                    'step_failed' => 'chassis_validation',
-                    'error' => $chassisValidation['error'],
-                    'error_type' => $chassisValidation['error_type']
-                ];
-            }
-
-            // Step 3: Get Specifications
-            $storageSpecs = $this->getStorageSpecifications($storageUuid);
-            $chassisSpecs = $this->getChassisSpecifications($chassisUuid);
-
-            if (!$storageSpecs['success'] || !$chassisSpecs['success']) {
-                return [
-                    'compatible' => false,
-                    'step_failed' => 'specification_extraction',
-                    'storage_specs_error' => !$storageSpecs['success'] ? $storageSpecs['error'] : null,
-                    'chassis_specs_error' => !$chassisSpecs['success'] ? $chassisSpecs['error'] : null
-                ];
-            }
-
-            // Step 4: Form Factor Validation
-            $formFactorResult = $this->validateStorageFormFactor(
-                $storageSpecs['specifications'],
-                $chassisSpecs['specifications']
-            );
-
-            // Step 5: Interface Validation
-            $interfaceResult = $this->validateStorageInterface(
-                $storageSpecs['specifications'],
-                $chassisSpecs['specifications']
-            );
-
-            // Step 6: Caddy Requirements
-            $caddyResult = $this->determineCaddyRequirement(
-                $storageSpecs['specifications'],
-                $chassisSpecs['specifications']
-            );
-
-
-            // Overall compatibility
-            $compatible = $formFactorResult['compatible'] && $interfaceResult['compatible'];
-
-            $nextSteps = [];
-
-            if ($interfaceResult['adapter_required'] ?? false) {
-                $nextSteps[] = $interfaceResult['adapter_message'];
-            }
-
-            if ($caddyResult['caddy_required'] ?? false) {
-                $nextSteps = array_merge($nextSteps, $caddyResult['caddy_messages'] ?? []);
-            }
-
-            if ($compatible && empty($nextSteps)) {
-                $nextSteps[] = "Storage device can be added directly to the chassis";
-            }
-
-            return [
-                'compatible' => $compatible,
-                'form_factor_result' => $formFactorResult,
-                'interface_result' => $interfaceResult,
-                'caddy_result' => $caddyResult,
-                'next_steps' => $nextSteps,
-                'storage_specifications' => $storageSpecs['specifications'],
-                'chassis_specifications' => $chassisSpecs['specifications']
-            ];
-
-        } catch (Exception $e) {
-            return [
-                'compatible' => false,
-                'step_failed' => 'system_error',
-                'error' => 'Storage compatibility validation failed: ' . $e->getMessage()
-            ];
-        }
+        // DEPRECATED: Defer to FlexibleCompatibilityValidator for accurate validation
+        return [
+            'compatible' => true,
+            'compatibility_score' => 1.0,
+            'warnings' => ['Storage validation now handled by FlexibleCompatibilityValidator with comprehensive checks'],
+            'deprecated' => true,
+            'recommendation' => 'Use FlexibleCompatibilityValidator::validateComponentAddition() for storage validation'
+        ];
     }
 
 

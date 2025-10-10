@@ -70,7 +70,7 @@
         "subtype": "M.2 NVMe SSD",
         "form_factor": "M.2 2280",
         "interface": "NVMe PCIe 4.0",
-        "capacity_GB": 2000,
+        "capacity_GB": 20,
         "specifications": {
           "read_speed_MBps": 7000,
           "write_speed_MBps": 5000

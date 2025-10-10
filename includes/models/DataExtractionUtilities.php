@@ -586,12 +586,61 @@ class DataExtractionUtilities {
     }
     
     /**
+     * Get storage by UUID (wrapper for findComponentByUuid)
+     */
+    public function getStorageByUUID($uuid) {
+        return $this->findComponentByUuid('storage', $uuid);
+    }
+
+    /**
+     * Get chassis specifications (wrapper)
+     */
+    public function getChassisSpecifications($uuid) {
+        return $this->findComponentByUuid('chassis', $uuid);
+    }
+
+    /**
+     * Get PCIe card by UUID (wrapper for findComponentByUuid)
+     */
+    public function getPCIeCardByUUID($uuid) {
+        return $this->findComponentByUuid('pciecard', $uuid);
+    }
+
+    /**
+     * Get motherboard by UUID (wrapper for findComponentByUuid)
+     */
+    public function getMotherboardByUUID($uuid) {
+        return $this->findComponentByUuid('motherboard', $uuid);
+    }
+
+    /**
+     * Get CPU by UUID (wrapper for findComponentByUuid)
+     */
+    public function getCPUByUUID($uuid) {
+        return $this->findComponentByUuid('cpu', $uuid);
+    }
+
+    /**
+     * Get RAM by UUID (wrapper for findComponentByUuid)
+     */
+    public function getRAMByUUID($uuid) {
+        return $this->findComponentByUuid('ram', $uuid);
+    }
+
+    /**
+     * Get NIC by UUID (wrapper for findComponentByUuid)
+     */
+    public function getNICByUUID($uuid) {
+        return $this->findComponentByUuid('pciecard', $uuid);
+    }
+
+    /**
      * Clear JSON cache
      */
     public function clearCache() {
         $this->jsonCache = [];
     }
-    
+
     /**
      * Get cache statistics
      */
@@ -607,8 +656,158 @@ class DataExtractionUtilities {
                 ];
             }
         }
-        
+
         return $stats;
+    }
+
+    /**
+     * Extract memory types from component specs (CPU or Motherboard)
+     */
+    public function extractMemoryTypes($specs) {
+        if (isset($specs['memory_types']) && is_array($specs['memory_types'])) {
+            return $specs['memory_types'];
+        }
+
+        if (isset($specs['memory']['type'])) {
+            return is_array($specs['memory']['type']) ? $specs['memory']['type'] : [$specs['memory']['type']];
+        }
+
+        return ['DDR4']; // Default fallback
+    }
+
+    /**
+     * Extract maximum memory frequency
+     */
+    public function extractMaxMemoryFrequency($specs) {
+        if (isset($specs['memory']['max_frequency_MHz'])) {
+            return $specs['memory']['max_frequency_MHz'];
+        }
+
+        if (isset($specs['max_memory_frequency'])) {
+            return $specs['max_memory_frequency'];
+        }
+
+        return 3200; // Default fallback
+    }
+
+    /**
+     * Extract maximum memory capacity
+     */
+    public function extractMaxMemoryCapacity($specs) {
+        if (isset($specs['max_memory_capacity_TB'])) {
+            return $specs['max_memory_capacity_TB'] * 1024; // Convert TB to GB
+        }
+
+        if (isset($specs['memory']['max_capacity_GB'])) {
+            return $specs['memory']['max_capacity_GB'];
+        }
+
+        if (isset($specs['max_memory_capacity'])) {
+            return $specs['max_memory_capacity'];
+        }
+
+        return 128; // Default fallback
+    }
+
+    /**
+     * Extract ECC support requirement
+     */
+    public function extractECCSupport($specs) {
+        if (isset($specs['ecc_support'])) {
+            return $specs['ecc_support'];
+        }
+
+        if (isset($specs['memory']['ecc'])) {
+            return $specs['memory']['ecc'] === 'required' ? 'required' : 'optional';
+        }
+
+        return 'optional';
+    }
+
+    /**
+     * Extract PCIe lanes from CPU specs
+     */
+    public function extractPCIeLanes($specs) {
+        if (isset($specs['pcie_lanes'])) {
+            return $specs['pcie_lanes'];
+        }
+
+        if (isset($specs['pcie']['lanes'])) {
+            return $specs['pcie']['lanes'];
+        }
+
+        return 20; // Default fallback
+    }
+
+    /**
+     * Extract PCIe version
+     */
+    public function extractPCIeVersion($specs) {
+        if (isset($specs['pcie_generation'])) {
+            return $specs['pcie_generation'];
+        }
+
+        if (isset($specs['pcie']['generation'])) {
+            return $specs['pcie']['generation'];
+        }
+
+        if (isset($specs['pcie_version'])) {
+            // Parse version like "4.0" or "PCIe 4.0"
+            preg_match('/(\d+\.?\d*)/', $specs['pcie_version'], $matches);
+            return isset($matches[1]) ? floatval($matches[1]) : 4.0;
+        }
+
+        return 4.0; // Default fallback
+    }
+
+    /**
+     * Extract memory form factor (DIMM, SO-DIMM, etc.)
+     */
+    public function extractMemoryFormFactor($specs) {
+        if (isset($specs['memory']['form_factor'])) {
+            return $specs['memory']['form_factor'];
+        }
+
+        if (isset($specs['memory_form_factor'])) {
+            return $specs['memory_form_factor'];
+        }
+
+        return 'DIMM'; // Default fallback
+    }
+
+    /**
+     * Extract per-slot memory capacity
+     */
+    public function extractPerSlotMemoryCapacity($specs) {
+        if (isset($specs['memory']['max_per_slot_GB'])) {
+            return $specs['memory']['max_per_slot_GB'];
+        }
+
+        if (isset($specs['max_per_slot_capacity'])) {
+            return $specs['max_per_slot_capacity'];
+        }
+
+        return 32; // Default fallback
+    }
+
+    /**
+     * Extract PCIe slots from motherboard specs
+     */
+    public function extractPCIeSlots($specs) {
+        if (isset($specs['expansion_slots']['pcie_slots'])) {
+            return $specs['expansion_slots']['pcie_slots'];
+        }
+
+        if (isset($specs['pcie_slots'])) {
+            return $specs['pcie_slots'];
+        }
+
+        // Default fallback - typical ATX motherboard
+        return [
+            ['type' => 'PCIe x16', 'lanes' => 16, 'count' => 2, 'size' => 16],
+            ['type' => 'PCIe x4', 'lanes' => 4, 'count' => 2, 'size' => 4],
+            ['type' => 'PCIe x1', 'lanes' => 1, 'count' => 2, 'size' => 1]
+        ];
     }
 }
 ?>

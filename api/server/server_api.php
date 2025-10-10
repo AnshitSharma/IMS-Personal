@@ -4,6 +4,8 @@ require_once __DIR__ . '/../../includes/BaseFunctions.php';
 require_once __DIR__ . '/../../includes/models/ServerBuilder.php';
 require_once __DIR__ . '/../../includes/models/ServerConfiguration.php';
 require_once __DIR__ . '/../../includes/models/CompatibilityEngine.php';
+require_once __DIR__ . '/../../includes/models/FlexibleCompatibilityValidator.php';
+require_once __DIR__ . '/../../includes/models/PCIeSlotTracker.php';
 
 
 header('Content-Type: application/json');
@@ -366,18 +368,19 @@ function handleCreateStart($serverBuilder, $user) {
  */
 function handleAddComponent($serverBuilder, $user) {
     global $pdo;
-    
-    // Enhanced logging for debugging
-    error_log("=== SERVER ADD COMPONENT REQUEST ===");
-    error_log("POST data: " . json_encode($_POST));
-    
-    $configUuid = $_POST['config_uuid'] ?? '';
-    $componentType = $_POST['component_type'] ?? '';
-    $componentUuid = $_POST['component_uuid'] ?? '';
-    $quantity = (int)($_POST['quantity'] ?? 1);
-    $slotPosition = $_POST['slot_position'] ?? null;
-    $notes = $_POST['notes'] ?? '';
-    $override = filter_var($_POST['override'] ?? false, FILTER_VALIDATE_BOOLEAN);
+
+    try {
+        // Enhanced logging for debugging
+        error_log("=== SERVER ADD COMPONENT REQUEST ===");
+        error_log("POST data: " . json_encode($_POST));
+
+        $configUuid = $_POST['config_uuid'] ?? '';
+        $componentType = $_POST['component_type'] ?? '';
+        $componentUuid = $_POST['component_uuid'] ?? '';
+        $quantity = (int)($_POST['quantity'] ?? 1);
+        $slotPosition = $_POST['slot_position'] ?? null;
+        $notes = $_POST['notes'] ?? '';
+        $override = filter_var($_POST['override'] ?? false, FILTER_VALIDATE_BOOLEAN);
     
     error_log("Parsed parameters - Config: $configUuid, Type: $componentType, UUID: $componentUuid, Qty: $quantity");
     
@@ -477,48 +480,53 @@ function handleAddComponent($serverBuilder, $user) {
             ]);
         }
             
-        // ENHANCED: Step 1 - Comprehensive validation before component addition
+        // NEW: Flexible Compatibility Validation (allows components in ANY order)
+        error_log("Starting FlexibleCompatibilityValidator for $componentType");
+
         try {
-            // Check if ComponentCompatibility class exists before loading
-            if (file_exists(__DIR__ . '/../../includes/models/ComponentCompatibility.php')) {
-                require_once __DIR__ . '/../../includes/models/ComponentCompatibility.php';
-                $compatibility = new ComponentCompatibility($pdo);
-                
-                // Phase 1: JSON existence validation (optional - don't fail if JSON missing)
-                try {
-                    $existsInJSON = $compatibility->validateComponentExistsInJSON($componentType, $componentUuid);
-                    if (!$existsInJSON) {
-                        error_log("WARNING: Component $componentUuid not found in $componentType JSON specifications");
-                        // Don't fail here, just log warning
-                    }
-                } catch (Exception $jsonError) {
-                    error_log("JSON validation error (non-critical): " . $jsonError->getMessage());
-                    // Continue without JSON validation
-                }
-                
-                // Phase 2: Component-specific enhanced validation
-                // Phase 2: Flexible validation - components can be added in any order
-                // All compatibility checking is now handled by ServerBuilder's flexible system
-            } else {
-                error_log("ComponentCompatibility.php not found - skipping enhanced validation");
-                // Continue without enhanced validation
+            $validator = new FlexibleCompatibilityValidator($pdo);
+            $validationResult = $validator->validateComponentAddition($configUuid, $componentType, $componentUuid);
+
+            error_log("Validation result: " . json_encode($validationResult));
+
+            // Check validation status
+            if ($validationResult['validation_status'] === 'blocked') {
+                // Critical errors - BLOCK addition
+                send_json_response(0, 1, 400,
+                    "Cannot add component due to compatibility issues",
+                    [
+                        'component_type' => $componentType,
+                        'component_uuid' => $componentUuid,
+                        'validation_status' => 'blocked',
+                        'critical_errors' => $validationResult['critical_errors'],
+                        'recommendation' => 'Fix critical compatibility issues before adding this component'
+                    ]
+                );
             }
-            
-        } catch (Exception $e) {
-            error_log("Enhanced validation error (non-critical): " . $e->getMessage());
-            // Don't fail the entire operation for validation errors - continue with basic validation
+
+            // Store warnings and info for response (will be added if successful)
+            $validationWarnings = $validationResult['warnings'] ?? [];
+            $validationInfo = $validationResult['info_messages'] ?? [];
+
+            if (!empty($validationWarnings)) {
+                error_log("Validation warnings: " . json_encode($validationWarnings));
+            }
+
+        } catch (Exception $validationError) {
+            error_log("FlexibleCompatibilityValidator error: " . $validationError->getMessage());
+            error_log("Stack trace: " . $validationError->getTraceAsString());
+            // Continue with addition - don't block on validation errors
+            $validationWarnings = [];
+            $validationInfo = ["Validation service unavailable - component added without compatibility checks"];
         }
 
-        // NEW: PCIe slot validation for PCIe cards and NICs
+        // PCIe slot assignment for PCIe cards and NICs
         $assignedSlot = null;
         if ($componentType === 'pciecard' || $componentType === 'nic') {
             try {
-                require_once __DIR__ . '/../../includes/models/PCIeSlotTracker.php';
-                require_once __DIR__ . '/../../includes/models/ComponentDataService.php';
-
                 $slotTracker = new PCIeSlotTracker($pdo);
 
-                // Step 1: Check if motherboard exists in configuration
+                // Check if motherboard exists
                 $stmt = $pdo->prepare("
                     SELECT component_uuid
                     FROM server_configuration_components
@@ -528,77 +536,29 @@ function handleAddComponent($serverBuilder, $user) {
                 $stmt->execute([$configUuid]);
                 $motherboardResult = $stmt->fetch(PDO::FETCH_ASSOC);
 
-                if (!$motherboardResult) {
-                    send_json_response(0, 1, 400,
-                        "Cannot add PCIe card/NIC: No motherboard in configuration. Add motherboard first.",
-                        [
-                            'component_type' => $componentType,
-                            'component_uuid' => $componentUuid,
-                            'recommendation' => 'Add a motherboard to the configuration before adding PCIe cards or NICs'
-                        ]
-                    );
-                }
-
-                // Step 2: Get component specifications to determine slot size
-                try {
+                if ($motherboardResult) {
+                    // Get component specifications
+                    require_once __DIR__ . '/../../includes/models/ComponentDataService.php';
                     $componentDataService = ComponentDataService::getInstance();
                     $cardSpecs = $componentDataService->getComponentSpecifications($componentType, $componentUuid, $componentDetails);
-                } catch (Exception $specError) {
-                    error_log("WARNING: Error loading PCIe card specs: " . $specError->getMessage());
-                    $cardSpecs = null;
-                }
 
-                if (!$cardSpecs) {
-                    error_log("WARNING: Could not load PCIe card specs for $componentUuid - proceeding without slot validation");
-                    // Continue without slot validation if specs not found
-                } else {
-                    // Step 3: Extract PCIe slot size from specifications
-                    $cardSlotSize = extractPCIeSlotSizeFromSpecs($cardSpecs);
+                    if ($cardSpecs) {
+                        // Extract PCIe slot size
+                        $cardSlotSize = extractPCIeSlotSizeFromSpecs($cardSpecs);
 
-                    if (!$cardSlotSize) {
-                        error_log("WARNING: Could not determine PCIe slot size for $componentUuid - proceeding without slot validation");
-                    } else {
-                        error_log("PCIe card $componentUuid requires $cardSlotSize slot");
-
-                        // Step 4: Check if card can fit in available slots
-                        if (!$slotTracker->canFitCard($configUuid, $cardSlotSize)) {
-                            $availability = $slotTracker->getSlotAvailability($configUuid);
-
-                            send_json_response(0, 1, 400,
-                                "No available PCIe slots for $cardSlotSize card",
-                                [
-                                    'component_type' => $componentType,
-                                    'component_uuid' => $componentUuid,
-                                    'required_slot' => $cardSlotSize,
-                                    'available_slots' => $availability['available_slots'],
-                                    'used_slots' => array_keys($availability['used_slots']),
-                                    'total_slots' => $availability['total_slots'],
-                                    'recommendation' => "Remove existing PCIe card/NIC or use a component with different slot size"
-                                ]
-                            );
+                        if ($cardSlotSize) {
+                            // Assign optimal slot
+                            $assignedSlot = $slotTracker->assignSlot($configUuid, $cardSlotSize);
+                            if ($assignedSlot) {
+                                $slotPosition = $assignedSlot;
+                                error_log("Assigned PCIe slot: $assignedSlot");
+                            }
                         }
-
-                        // Step 5: Assign optimal slot (smallest compatible slot first)
-                        $assignedSlot = $slotTracker->assignSlot($configUuid, $cardSlotSize);
-
-                        if (!$assignedSlot) {
-                            send_json_response(0, 1, 500, "Failed to assign PCIe slot", [
-                                'component_uuid' => $componentUuid,
-                                'error' => 'Slot assignment failed unexpectedly'
-                            ]);
-                        }
-
-                        // Override slot_position with auto-assigned slot
-                        $slotPosition = $assignedSlot;
-
-                        error_log("Assigned PCIe card $componentUuid to slot: $assignedSlot");
                     }
                 }
-
             } catch (Exception $pcieError) {
-                error_log("PCIe slot validation error: " . $pcieError->getMessage());
-                // Log error but continue - don't fail on validation errors
-                error_log("Continuing without PCIe slot validation due to error");
+                error_log("PCIe slot assignment error: " . $pcieError->getMessage());
+                // Continue without slot assignment
             }
         }
 
@@ -626,6 +586,15 @@ function handleAddComponent($serverBuilder, $user) {
                 ],
                 'timestamp' => date('Y-m-d H:i:s')
             ];
+
+            // Add validation results from FlexibleCompatibilityValidator
+            if (isset($validationWarnings) && !empty($validationWarnings)) {
+                $responseData['validation_warnings'] = $validationWarnings;
+            }
+
+            if (isset($validationInfo) && !empty($validationInfo)) {
+                $responseData['validation_info'] = $validationInfo;
+            }
 
             // Add PCIe slot assignment info if applicable
             if ($assignedSlot && ($componentType === 'pciecard' || $componentType === 'nic')) {
@@ -693,58 +662,53 @@ function handleAddComponent($serverBuilder, $user) {
             
             send_json_response(1, 1, 200, "Component added successfully", $responseData);
         } else {
-            // ENHANCED ERROR RESPONSES with detailed categorization
+            // Error response with recommendations
             $errorType = $result['error_type'] ?? 'unknown';
             $errorMessage = $result['message'] ?? "Failed to add component";
-            
-            $enhancedErrorDetails = [
-                'error_type' => $errorType,
+
+            $errorDetails = [
                 'component_type' => $componentType,
                 'component_uuid' => $componentUuid,
-                'error_category' => categorizeError($errorType),
-                'compatibility_details' => $result['details'] ?? null,
-                'suggested_alternatives' => getSuggestedAlternatives($pdo, $componentType, $componentUuid),
-                'recovery_options' => generateRecoveryOptions($errorType, $componentType),
-                'system_context' => [
-                    'configuration_uuid' => $configUuid,
-                    'validation_timestamp' => date('Y-m-d H:i:s'),
-                    'user_id' => $user['id']
-                ]
+                'error_type' => $errorType
             ];
             
-            // Add specific error details based on error type
-            switch ($errorType) {
-                case 'json_not_found':
-                    $enhancedErrorDetails['suggested_action'] = 'Verify component exists in JSON specifications ';
-                    $enhancedErrorDetails['technical_details'] = 'Component UUID not found in corresponding JSON file';
-                    break;
-                    
-                case 'socket_mismatch':
-                    $enhancedErrorDetails['suggested_action'] = 'Use components with matching socket types';
-                    $enhancedErrorDetails['technical_details'] = 'CPU and motherboard socket types are incompatible';
-                    break;
-                    
-                case 'cpu_limit_exceeded':
-                    $enhancedErrorDetails['suggested_action'] = 'Remove existing CPU or use multi-socket motherboard';
-                    $enhancedErrorDetails['technical_details'] = 'Motherboard CPU socket limit reached';
-                    break;
-                    
-                case 'duplicate_component':
-                    $enhancedErrorDetails['suggested_action'] = 'Component already exists in this configuration';
-                    $enhancedErrorDetails['technical_details'] = 'Duplicate component UUID detected';
-                    break;
-                    
-                case 'compatibility_failure':
-                    $enhancedErrorDetails['suggested_action'] = 'Review component compatibility requirements';
-                    $enhancedErrorDetails['technical_details'] = 'Component failed compatibility validation checks';
-                    break;
-                    
-                default:
-                    $enhancedErrorDetails['suggested_action'] = 'Review component specifications and try again';
-                    $enhancedErrorDetails['technical_details'] = 'Component addition failed validation';
+            // Add recommendation based on error type
+            if (isset($result['recommendation'])) {
+                $errorDetails['recommendation'] = $result['recommendation'];
             }
-            
-            send_json_response(0, 1, 400, $errorMessage, $enhancedErrorDetails);
+
+            // Add warnings if present
+            if (isset($result['warnings']) && !empty($result['warnings'])) {
+                $errorDetails['warnings'] = $result['warnings'];
+            }
+
+            // Add details if present
+            if (isset($result['details'])) {
+                $errorDetails['details'] = $result['details'];
+            }
+
+            // Add specific recommendations based on error type
+            switch ($errorType) {
+                case 'socket_mismatch':
+                    if (!isset($errorDetails['recommendation'])) {
+                        $errorDetails['recommendation'] = 'Use components with matching socket types';
+                    }
+                    break;
+
+                case 'cpu_limit_exceeded':
+                    if (!isset($errorDetails['recommendation'])) {
+                        $errorDetails['recommendation'] = 'Remove existing CPU or use multi-socket motherboard';
+                    }
+                    break;
+
+                case 'duplicate_component':
+                    if (!isset($errorDetails['recommendation'])) {
+                        $errorDetails['recommendation'] = 'Component already exists in this configuration';
+                    }
+                    break;
+            }
+
+            send_json_response(0, 1, 400, $errorMessage, $errorDetails);
         }
         
     } catch (Exception $e) {
@@ -766,6 +730,26 @@ function handleAddComponent($serverBuilder, $user) {
                 'timestamp' => date('Y-m-d H:i:s'),
                 'request_method' => $_SERVER['REQUEST_METHOD'] ?? 'unknown'
             ]
+        ]);
+    }
+
+    } catch (Exception $e) {
+        error_log("FATAL ERROR in handleAddComponent: " . $e->getMessage());
+        error_log("Stack trace: " . $e->getTraceAsString());
+        error_log("File: " . $e->getFile() . " Line: " . $e->getLine());
+        send_json_response(0, 1, 500, "Component addition failed: " . $e->getMessage(), [
+            'error_file' => basename($e->getFile()),
+            'error_line' => $e->getLine(),
+            'error_type' => get_class($e)
+        ]);
+    } catch (Throwable $t) {
+        error_log("FATAL PHP ERROR in handleAddComponent: " . $t->getMessage());
+        error_log("Stack trace: " . $t->getTraceAsString());
+        error_log("File: " . $t->getFile() . " Line: " . $t->getLine());
+        send_json_response(0, 1, 500, "Fatal error: " . $t->getMessage(), [
+            'error_file' => basename($t->getFile()),
+            'error_line' => $t->getLine(),
+            'error_type' => get_class($t)
         ]);
     }
 }
@@ -860,6 +844,10 @@ function handleGetConfiguration($serverBuilder, $user) {
         $configuration['compatibility_score'] = $compatibilityScore;
         
         
+        // Calculate PCIe lane usage and get warnings
+        $pcieTracking = calculatePCIeLaneUsage($details['components'] ?? []);
+        $configWarnings = getConfigurationWarnings($details['components'] ?? []);
+
         send_json_response(1, 1, 200, "Configuration retrieved successfully", [
             'configuration' => [
                 'config_uuid' => $configuration['config_uuid'],
@@ -881,7 +869,9 @@ function handleGetConfiguration($serverBuilder, $user) {
                 'compatibility_score' => $compatibilityScore,
                 'configuration_valid' => $configurationValid,
                 'last_validation' => $configuration['updated_at'] ?? $configuration['created_at']
-            ]
+            ],
+            'pcie_lanes' => $pcieTracking,
+            'warnings' => $configWarnings
         ]);
         
     } catch (Exception $e) {
@@ -1756,12 +1746,229 @@ function getStatusText($statusCode) {
 function getConfigurationStatusText($statusCode) {
     $statusMap = [
         0 => 'Draft',
-        1 => 'Validated', 
+        1 => 'Validated',
         2 => 'Built',
         3 => 'Finalized'
     ];
-    
+
     return $statusMap[$statusCode] ?? 'Unknown';
+}
+
+/**
+ * Calculate PCIe lane usage across the entire server configuration
+ */
+function calculatePCIeLaneUsage($components) {
+    global $pdo;
+    require_once __DIR__ . '/../../includes/models/DataExtractionUtilities.php';
+    $dataUtils = new DataExtractionUtilities($pdo);
+
+    $result = [
+        'cpu_lanes' => [
+            'total' => 0,
+            'used' => 0,
+            'available' => 0
+        ],
+        'chipset_lanes' => [
+            'total' => 0,
+            'used' => 0,
+            'available' => 0
+        ],
+        'm2_slots' => [
+            'total' => 0,
+            'used' => 0,
+            'available' => 0
+        ],
+        'expansion_slots' => [
+            'total_x16' => 0,
+            'used_x16' => 0,
+            'total_x8' => 0,
+            'used_x8' => 0,
+            'total_x4' => 0,
+            'used_x4' => 0
+        ],
+        'detailed_usage' => []
+    ];
+
+    try {
+        // Get CPU PCIe lanes
+        if (isset($components['cpu']) && !empty($components['cpu'])) {
+            $cpuUuid = $components['cpu'][0]['uuid'] ?? null;
+            if ($cpuUuid) {
+                $cpuSpecs = $dataUtils->getCPUByUUID($cpuUuid);
+                if ($cpuSpecs) {
+                    $result['cpu_lanes']['total'] = $cpuSpecs['pcie_lanes'] ?? 0;
+                }
+            }
+        }
+
+        // Get motherboard M.2 slots and expansion slots
+        if (isset($components['motherboard']) && !empty($components['motherboard'])) {
+            $mbUuid = $components['motherboard'][0]['uuid'] ?? null;
+            if ($mbUuid) {
+                $mbSpecs = $dataUtils->getMotherboardByUUID($mbUuid);
+                if ($mbSpecs) {
+                    // M.2 slots
+                    if (isset($mbSpecs['storage']['nvme']['m2_slots'][0]['count'])) {
+                        $result['m2_slots']['total'] = $mbSpecs['storage']['nvme']['m2_slots'][0]['count'];
+                    }
+
+                    // PCIe expansion slots
+                    if (isset($mbSpecs['expansion_slots']['pcie_slots'])) {
+                        foreach ($mbSpecs['expansion_slots']['pcie_slots'] as $slotType) {
+                            $lanes = $slotType['lanes'] ?? 0;
+                            $count = $slotType['count'] ?? 0;
+                            if ($lanes == 16) {
+                                $result['expansion_slots']['total_x16'] += $count;
+                            } elseif ($lanes == 8) {
+                                $result['expansion_slots']['total_x8'] += $count;
+                            } elseif ($lanes == 4) {
+                                $result['expansion_slots']['total_x4'] += $count;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Count M.2 storage usage
+        if (isset($components['storage']) && !empty($components['storage'])) {
+            foreach ($components['storage'] as $storage) {
+                $storageUuid = $storage['uuid'] ?? null;
+                if ($storageUuid) {
+                    $storageSpecs = $dataUtils->getStorageByUUID($storageUuid);
+                    if ($storageSpecs) {
+                        $formFactor = strtolower($storageSpecs['form_factor'] ?? '');
+                        if (strpos($formFactor, 'm.2') !== false || strpos($formFactor, 'm2') !== false) {
+                            $result['m2_slots']['used']++;
+                            $result['detailed_usage'][] = [
+                                'component' => 'M.2 Storage',
+                                'uuid' => $storageUuid,
+                                'type' => 'M.2 Slot',
+                                'lanes_used' => 4
+                            ];
+                        }
+                    }
+                }
+            }
+        }
+
+        // Count PCIe card usage
+        if (isset($components['pciecard']) && !empty($components['pciecard'])) {
+            foreach ($components['pciecard'] as $card) {
+                $cardUuid = $card['uuid'] ?? null;
+                if ($cardUuid) {
+                    $cardSpecs = $dataUtils->getPCIeCardByUUID($cardUuid);
+                    if ($cardSpecs) {
+                        $interface = $cardSpecs['interface'] ?? '';
+                        preg_match('/x(\d+)/', $interface, $matches);
+                        $lanes = (int)($matches[1] ?? 4);
+
+                        $result['cpu_lanes']['used'] += $lanes;
+                        $result['detailed_usage'][] = [
+                            'component' => 'PCIe Card',
+                            'uuid' => $cardUuid,
+                            'type' => $interface,
+                            'lanes_used' => $lanes
+                        ];
+
+                        // Track slot usage
+                        if ($lanes == 16) {
+                            $result['expansion_slots']['used_x16']++;
+                        } elseif ($lanes == 8) {
+                            $result['expansion_slots']['used_x8']++;
+                        } elseif ($lanes == 4) {
+                            $result['expansion_slots']['used_x4']++;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Calculate available
+        $result['cpu_lanes']['available'] = max(0, $result['cpu_lanes']['total'] - $result['cpu_lanes']['used']);
+        $result['m2_slots']['available'] = max(0, $result['m2_slots']['total'] - $result['m2_slots']['used']);
+
+    } catch (Exception $e) {
+        error_log("Error calculating PCIe lane usage: " . $e->getMessage());
+    }
+
+    return $result;
+}
+
+/**
+ * Get current configuration warnings
+ */
+function getConfigurationWarnings($components) {
+    global $pdo;
+    require_once __DIR__ . '/../../includes/models/DataExtractionUtilities.php';
+    $dataUtils = new DataExtractionUtilities($pdo);
+
+    $warnings = [];
+
+    try {
+        // Check M.2 slot capacity
+        $m2Count = 0;
+        $m2TotalSlots = 0;
+
+        if (isset($components['motherboard']) && !empty($components['motherboard'])) {
+            $mbUuid = $components['motherboard'][0]['uuid'] ?? null;
+            if ($mbUuid) {
+                $mbSpecs = $dataUtils->getMotherboardByUUID($mbUuid);
+                if ($mbSpecs && isset($mbSpecs['storage']['nvme']['m2_slots'][0]['count'])) {
+                    $m2TotalSlots = $mbSpecs['storage']['nvme']['m2_slots'][0]['count'];
+                }
+            }
+        }
+
+        if (isset($components['storage']) && !empty($components['storage'])) {
+            foreach ($components['storage'] as $storage) {
+                $storageUuid = $storage['uuid'] ?? null;
+                if ($storageUuid) {
+                    $storageSpecs = $dataUtils->getStorageByUUID($storageUuid);
+                    if ($storageSpecs) {
+                        $formFactor = strtolower($storageSpecs['form_factor'] ?? '');
+                        if (strpos($formFactor, 'm.2') !== false || strpos($formFactor, 'm2') !== false) {
+                            $m2Count++;
+                        }
+                    }
+                }
+            }
+        }
+
+        if ($m2Count > $m2TotalSlots && $m2TotalSlots > 0) {
+            $warnings[] = [
+                'type' => 'm2_slots_exceeded',
+                'severity' => 'high',
+                'message' => "M.2 slots exceeded: Using $m2Count slots but only $m2TotalSlots available",
+                'recommendation' => "Remove " . ($m2Count - $m2TotalSlots) . " M.2 storage device(s)"
+            ];
+        } elseif ($m2Count == $m2TotalSlots && $m2TotalSlots > 0) {
+            $warnings[] = [
+                'type' => 'm2_slots_full',
+                'severity' => 'info',
+                'message' => "All M.2 slots are in use ($m2Count/$m2TotalSlots)",
+                'recommendation' => "No additional M.2 storage can be added"
+            ];
+        }
+
+        // Check for missing critical components
+        $criticalComponents = ['cpu', 'motherboard', 'ram'];
+        foreach ($criticalComponents as $type) {
+            if (empty($components[$type])) {
+                $warnings[] = [
+                    'type' => 'missing_component',
+                    'severity' => 'critical',
+                    'message' => ucfirst($type) . " is required but not present",
+                    'recommendation' => "Add " . ucfirst($type) . " to complete server configuration"
+                ];
+            }
+        }
+
+    } catch (Exception $e) {
+        error_log("Error getting configuration warnings: " . $e->getMessage());
+    }
+
+    return $warnings;
 }
 
 /**
@@ -2525,8 +2732,12 @@ function checkEnhancedRAMCompatibility($compatibility, $ram, $motherboard) {
 /**
  * Enhanced Storage compatibility checking  
  */
+/**
+ * DEPRECATED: Enhanced storage compatibility check
+ * Now handled by StorageConnectionValidator
+ */
 function checkEnhancedStorageCompatibility($compatibility, $storage, $motherboard) {
-    return checkStorageCompatibility(null, $storage, $motherboard, null);
+    return ['compatible' => true, 'compatibility_score' => 85.0, 'reason' => 'Handled by FlexibleCompatibilityValidator', 'deprecated' => true];
 }
 
 /**
@@ -2929,76 +3140,18 @@ function checkRAMCompatibility($pdo, $ram, $motherboard, $motherboardSpecs) {
 /**
  * Check storage compatibility with motherboard - Interface compatibility
  */
+/**
+ * DEPRECATED: Storage compatibility check
+ * Now handled by StorageConnectionValidator in FlexibleCompatibilityValidator
+ */
 function checkStorageCompatibility($pdo, $storage, $motherboard, $motherboardSpecs) {
-    try {
-        $score = 90.0;
-        $reasons = [];
-
-        $storageNotes = strtoupper($storage['Notes'] ?? '');
-        $motherboardNotes = strtoupper($motherboard['Notes'] ?? '');
-
-        // Check interface compatibility (SATA/NVMe/SAS)
-        $storageInterface = 'SATA'; // Default
-        if (stripos($storageNotes, 'NVME') !== false || stripos($storageNotes, 'M.2') !== false) {
-            $storageInterface = 'NVMe';
-        } elseif (stripos($storageNotes, 'SAS') !== false) {
-            $storageInterface = 'SAS';
-        }
-
-        // Check if motherboard supports the interface
-        $interfaceSupported = true;
-        switch ($storageInterface) {
-            case 'NVMe':
-                if (stripos($motherboardNotes, 'NVME') === false && stripos($motherboardNotes, 'M.2') === false) {
-                    $interfaceSupported = false;
-                }
-                break;
-            case 'SAS':
-                if (stripos($motherboardNotes, 'SAS') === false) {
-                    $interfaceSupported = false;
-                }
-                break;
-            case 'SATA':
-                // SATA is widely supported, assume compatible
-                break;
-        }
-
-        if (!$interfaceSupported) {
-            return [
-                'compatible' => false,
-                'compatibility_score' => 0.0,
-                'reason' => "Interface mismatch: Storage uses $storageInterface but motherboard may not support it",
-                'details' => ['storage_interface' => $storageInterface]
-            ];
-        }
-
-        $reasons[] = "Interface compatibility confirmed ($storageInterface)";
-
-        // Consider form factor (2.5", 3.5", M.2)
-        if (stripos($storageNotes, '3.5') !== false) {
-            $reasons[] = "3.5\" form factor";
-        } elseif (stripos($storageNotes, '2.5') !== false) {
-            $reasons[] = "2.5\" form factor";
-        } elseif (stripos($storageNotes, 'M.2') !== false) {
-            $reasons[] = "M.2 form factor";
-        }
-
-        return [
-            'compatible' => true,
-            'compatibility_score' => $score,
-            'reason' => implode(', ', $reasons),
-            'details' => ['interface' => $storageInterface]
-        ];
-
-    } catch (Exception $e) {
-        error_log("Storage compatibility check error: " . $e->getMessage());
-        return [
-            'compatible' => true,
-            'compatibility_score' => 80.0,
-            'reason' => 'Storage compatibility check completed with assumptions',
-            'details' => ['error' => $e->getMessage()]
-        ];
-    }
+    // DEPRECATED: Return default compatible for backward compatibility
+    return [
+        'compatible' => true,
+        'compatibility_score' => 85.0,
+        'reason' => 'Storage validation handled by FlexibleCompatibilityValidator',
+        'deprecated' => true
+    ];
 }
 
 /**
