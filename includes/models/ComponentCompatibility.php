@@ -289,12 +289,18 @@ class ComponentCompatibility {
             // Memory type support
             $cpuMemoryTypes = $this->extractSupportedMemoryTypes($cpuData, 'cpu');
             $ramType = $this->extractMemoryType($ramData);
-            
-            if ($cpuMemoryTypes && $ramType && !in_array($ramType, $cpuMemoryTypes)) {
-                $result['compatible'] = false;
-                $result['compatibility_score'] = 0.0;
-                $result['issues'][] = "Memory type incompatible: CPU does not support $ramType";
-                return $result;
+
+            if ($cpuMemoryTypes && $ramType) {
+                // Normalize memory types: "DDR5-4800" -> "DDR5"
+                $normalizedCpuTypes = array_map(function($type) {
+                    return preg_replace('/-\d+$/', '', $type);
+                }, $cpuMemoryTypes);
+
+                if (!in_array($ramType, $normalizedCpuTypes)) {
+                    // Don't block, just warn
+                    $result['compatibility_score'] *= 0.7;
+                    $result['warnings'][] = "RAM type $ramType may have compatibility issues with CPU (supports " . implode(', ', $normalizedCpuTypes) . ")";
+                }
             }
             
             // Memory speed limits
@@ -487,10 +493,15 @@ class ComponentCompatibility {
             'storage' => 'storageinventory',
             'nic' => 'nicinventory',
             'caddy' => 'caddyinventory',
-            'pciecard' => 'pciecardinventory'
+            'pciecard' => 'pciecardinventory',
+            'chassis' => 'chassisinventory'
         ];
-        
-        $table = $tableMap[$type];
+
+        $table = $tableMap[$type] ?? null;
+        if (!$table) {
+            return null;
+        }
+
         $stmt = $this->pdo->prepare("SELECT * FROM $table WHERE UUID = ?");
         $stmt->execute([$uuid]);
         $dbData = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -727,14 +738,24 @@ class ComponentCompatibility {
     }
     
     private function extractSupportedMemoryTypes($data, $componentType) {
+        // For motherboards, check the memory object first
+        if ($componentType === 'motherboard' && isset($data['memory']) && is_array($data['memory'])) {
+            $memoryType = $data['memory']['type'] ?? null;
+            if ($memoryType) {
+                // Return as array even if it's a single type
+                return is_array($memoryType) ? $memoryType : [$memoryType];
+            }
+        }
+
+        // For other components or fallback
         $memoryTypes = $data['memory_types'] ?? $data['supported_memory'] ?? null;
-        
+
         if (is_string($memoryTypes)) {
             return explode(',', $memoryTypes);
         } elseif (is_array($memoryTypes)) {
             return $memoryTypes;
         }
-        
+
         return null;
     }
     
@@ -743,18 +764,61 @@ class ComponentCompatibility {
     }
     
     private function extractMemorySpeed($data) {
-        return $data['speed'] ?? $data['frequency'] ?? $data['memory_speed'] ?? null;
+        return $data['speed'] ?? $data['frequency'] ?? $data['frequency_MHz'] ?? $data['memory_speed'] ?? null;
     }
     
     private function extractMaxMemorySpeed($data, $componentType = 'motherboard') {
         if ($componentType === 'cpu') {
             return $data['max_memory_speed'] ?? $data['memory_speed'] ?? null;
         }
+
+        // For motherboards, check the memory object first
+        if ($componentType === 'motherboard' && isset($data['memory']) && is_array($data['memory'])) {
+            $maxFreq = $data['memory']['max_frequency_MHz'] ?? null;
+            if ($maxFreq) {
+                return $maxFreq;
+            }
+        }
+
         return $data['max_memory_speed'] ?? $data['memory_speed_max'] ?? null;
     }
     
     private function extractMemoryFormFactor($data) {
-        return $data['form_factor'] ?? $data['memory_form_factor'] ?? 'DIMM';
+        // For motherboards, check the memory object first
+        if (isset($data['memory']) && is_array($data['memory'])) {
+            // Check if memory object has form_factor
+            if (isset($data['memory']['form_factor'])) {
+                return $data['memory']['form_factor'];
+            }
+
+            // Infer RAM form factor from motherboard memory type
+            // Server/workstation motherboards with DDR4/DDR5 use DIMM
+            // Desktop/laptop motherboards might use SO-DIMM (we'll default to DIMM for servers)
+            $memoryType = $data['memory']['type'] ?? '';
+            if (in_array($memoryType, ['DDR3', 'DDR4', 'DDR5'])) {
+                // Server motherboards (EATX, ATX) use DIMM
+                $mbFormFactor = $data['form_factor'] ?? '';
+                if (in_array($mbFormFactor, ['EATX', 'ATX', 'E-ATX', 'SSI EEB'])) {
+                    return 'DIMM';
+                }
+                // Mini-ITX and smaller might use SO-DIMM, but default to DIMM
+                return 'DIMM';
+            }
+        }
+
+        // For RAM modules, use the direct form_factor field
+        // Handle variations like "DIMM (288-pin)" -> normalize to "DIMM"
+        $formFactor = $data['form_factor'] ?? $data['memory_form_factor'] ?? 'DIMM';
+
+        // Normalize form factor - extract just the base form factor type
+        if (strpos($formFactor, 'DIMM') !== false) {
+            if (strpos(strtoupper($formFactor), 'SO-DIMM') !== false || strpos(strtoupper($formFactor), 'SODIMM') !== false) {
+                return 'SO-DIMM';
+            }
+            return 'DIMM';
+        }
+
+        return $formFactor;
     }
     
     private function extractECCSupport($data) {
@@ -1881,8 +1945,15 @@ class ComponentCompatibility {
         
         $ramData = $ramResult['data'];
         $ramType = $ramData['memory_type'] ?? null;
-        $supportedTypes = $motherboardSpecs['memory']['supported_types'] ?? ['DDR4'];
-        
+
+        // Handle both 'type' (single string) and 'supported_types' (array) from motherboard specs
+        $supportedTypes = $motherboardSpecs['memory']['supported_types'] ?? null;
+        if (!$supportedTypes) {
+            // Fall back to single 'type' field and convert to array
+            $singleType = $motherboardSpecs['memory']['type'] ?? 'DDR4';
+            $supportedTypes = [$singleType];
+        }
+
         if (!$ramType) {
             return [
                 'compatible' => false,
@@ -1890,12 +1961,12 @@ class ComponentCompatibility {
                 'details' => null
             ];
         }
-        
+
         $compatible = in_array($ramType, $supportedTypes);
-        
+
         return [
             'compatible' => $compatible,
-            'error' => $compatible ? null : "DDR$ramType memory incompatible with motherboard supporting " . implode(', ', $supportedTypes),
+            'error' => $compatible ? null : "$ramType memory incompatible with motherboard supporting " . implode(', ', $supportedTypes),
             'details' => [
                 'ram_type' => $ramType,
                 'supported_types' => $supportedTypes,
@@ -2665,8 +2736,8 @@ class ComponentCompatibility {
      * Load storage specifications from JSON with UUID validation
      */
     private function loadStorageSpecs($uuid) {
-        $jsonPath = 'All-JSON/storage-jsons/storage-level-3.json';
-        
+        $jsonPath = __DIR__ . '/../../All-JSON/storage-jsons/storage-level-3.json';
+
         if (!file_exists($jsonPath)) {
             error_log("Storage JSON file not found: $jsonPath");
             return null;
@@ -2712,8 +2783,8 @@ class ComponentCompatibility {
      * Load motherboard specifications from JSON with UUID validation
      */
     private function loadMotherboardSpecs($uuid) {
-        $jsonPath = 'All-JSON/motherboad-jsons/motherboard-level-3.json';
-        
+        $jsonPath = __DIR__ . '/../../All-JSON/motherboad-jsons/motherboard-level-3.json';
+
         if (!file_exists($jsonPath)) {
             error_log("Motherboard JSON file not found: $jsonPath");
             return null;
@@ -2744,16 +2815,14 @@ class ComponentCompatibility {
      * Load chassis specifications from JSON with UUID validation
      */
     private function loadChassisSpecs($uuid) {
-        $jsonPath = 'All-JSON/chasis-jsons/chasis-level-3.json';
+        $jsonPath = __DIR__ . '/../../All-JSON/chasis-jsons/chasis-level-3.json';
 
         if (!file_exists($jsonPath)) {
-            error_log("Chassis JSON file not found: $jsonPath");
             return null;
         }
 
         $jsonData = json_decode(file_get_contents($jsonPath), true);
         if (!$jsonData || !isset($jsonData['chassis_specifications'])) {
-            error_log("Failed to decode chassis JSON or missing chassis_specifications");
             return null;
         }
 
@@ -2768,7 +2837,6 @@ class ComponentCompatibility {
             }
         }
 
-        error_log("Chassis UUID $uuid not found in chasis-level-3.json");
         return null;
     }
 
@@ -3837,6 +3905,7 @@ class ComponentCompatibility {
                 $result['warnings'][] = 'Chassis JSON specifications not found - using database data only';
                 $result['compatibility_score'] = 0.7;
                 $result['compatibility_summary'] = 'Limited compatibility data - assumed compatible';
+                $result['details'][] = "loadChassisSpecs() returned NULL for UUID: {$chassisComponent['uuid']}";
                 return $result;
             }
 
@@ -3911,15 +3980,20 @@ class ComponentCompatibility {
             return $result;
 
         } catch (Exception $e) {
-            error_log("Decentralized chassis compatibility check error: " . $e->getMessage());
+            error_log("Decentralized chassis compatibility check error: " . $e->getMessage() . "\nStack trace: " . $e->getTraceAsString());
             return [
                 'compatible' => true,
                 'compatibility_score' => 0.7,
                 'issues' => [],
                 'warnings' => ['Compatibility check failed - defaulting to compatible'],
                 'recommendations' => ['Verify chassis compatibility manually'],
-                'details' => ['Error: ' . $e->getMessage()],
-                'compatibility_summary' => 'Compatibility check failed - assumed compatible'
+                'details' => [
+                    'EXCEPTION_CAUGHT' => $e->getMessage(),
+                    'EXCEPTION_FILE' => $e->getFile(),
+                    'EXCEPTION_LINE' => $e->getLine(),
+                    'EXCEPTION_TRACE' => explode("\n", $e->getTraceAsString())
+                ],
+                'compatibility_summary' => 'EXCEPTION: ' . $e->getMessage() . ' at line ' . $e->getLine()
             ];
         }
     }
@@ -4034,6 +4108,31 @@ class ComponentCompatibility {
 
         $ramMemoryType = $this->extractMemoryType($ramData);
         $ramSpeed = $this->extractMemorySpeed($ramData);
+        $ramFormFactor = $this->extractMemoryFormFactor($ramData);
+
+        // Check form factor compatibility with motherboard
+        if (!empty($memoryRequirements['form_factors'])) {
+            $supportedFormFactors = array_unique($memoryRequirements['form_factors']);
+
+            // Normalize form factors for comparison (handle DIMM/dimm, SO-DIMM/SODIMM variations)
+            $ramFormFactorNormalized = strtoupper(str_replace(['-', '_'], '', $ramFormFactor));
+            $formFactorCompatible = false;
+
+            foreach ($supportedFormFactors as $supportedFF) {
+                $supportedFFNormalized = strtoupper(str_replace(['-', '_'], '', $supportedFF));
+                if ($ramFormFactorNormalized === $supportedFFNormalized) {
+                    $formFactorCompatible = true;
+                    break;
+                }
+            }
+
+            if (!$formFactorCompatible) {
+                $result['compatible'] = false;
+                $result['issues'][] = "RAM form factor '{$ramFormFactor}' is not compatible with motherboard (motherboard requires: " . implode(', ', $supportedFormFactors) . ")";
+            } else {
+                $result['recommendations'][] = "RAM form factor '{$ramFormFactor}' matches motherboard requirements";
+            }
+        }
 
         // Check memory type compatibility with intersection of requirements
         if (!empty($memoryRequirements['supported_types'])) {
@@ -4050,16 +4149,32 @@ class ComponentCompatibility {
             }
         }
 
-        // Check speed compatibility - use minimum of all max speeds
+        // Enhanced speed compatibility checking with performance warnings
         if (!empty($memoryRequirements['max_speeds']) && $ramSpeed) {
             $minMaxSpeed = min($memoryRequirements['max_speeds']);
+            $maxMaxSpeed = max($memoryRequirements['max_speeds']);
 
             if ($ramSpeed > $minMaxSpeed) {
                 $result['compatibility_score'] *= 0.9;
-                $result['warnings'][] = "RAM speed ({$ramSpeed}MHz) exceeds minimum supported speed ({$minMaxSpeed}MHz) - will run at reduced speed";
+                $result['warnings'][] = "Performance: RAM speed ({$ramSpeed}MHz) exceeds component limit ({$minMaxSpeed}MHz) - will run at reduced speed";
+            } else if ($ramSpeed < $minMaxSpeed) {
+                // RAM is slower than what the system supports - performance warning
+                $result['compatibility_score'] *= 0.95;
+                $result['warnings'][] = "Performance: RAM speed ({$ramSpeed}MHz) is lower than system capability ({$minMaxSpeed}MHz) - possible performance bottleneck";
             } else {
-                $result['recommendations'][] = "RAM speed ({$ramSpeed}MHz) within supported limits";
+                $result['recommendations'][] = "RAM speed ({$ramSpeed}MHz) optimal for system";
             }
+
+            // Additional warning if there's variation in max speeds (e.g., CPU vs Motherboard limits differ)
+            if ($maxMaxSpeed > $minMaxSpeed) {
+                $speedSources = $memoryRequirements['sources'] ?? [];
+                if (!empty($speedSources)) {
+                    $result['warnings'][] = "Note: Components have different max memory speeds (" . implode('; ', $speedSources) . ") - system will use lowest common speed";
+                }
+            }
+        } else if ($ramSpeed) {
+            // No existing components with speed requirements - show informational message
+            $result['recommendations'][] = "RAM speed: {$ramSpeed}MHz (no speed constraints from existing components)";
         }
 
         return $result;

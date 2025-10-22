@@ -112,41 +112,47 @@ class JWTHelper {
      */
     public static function getTokenFromHeader() {
         $headers = getallheaders();
-        
+
         if (isset($headers['Authorization'])) {
             if (preg_match('/Bearer\s+(.*)$/i', $headers['Authorization'], $matches)) {
                 return $matches[1];
             }
         }
-        
+
         return null;
     }
-    
+
     /**
-     * Middleware to validate JWT token
+     * Get user ID from current request token
      */
-    public static function validateRequest($pdo) {
+    public static function getUserIdFromToken() {
         $token = self::getTokenFromHeader();
-        
         if (!$token) {
-            throw new Exception('No token provided');
+            return null;
         }
-        
+
         try {
             $payload = self::verifyToken($token);
-            
-            // Get user from database to ensure they still exist
-            $stmt = $pdo->prepare("SELECT id, username, email, firstname, lastname FROM users WHERE id = ?");
-            $stmt->execute([$payload['user_id']]);
-            $user = $stmt->fetch(PDO::FETCH_ASSOC);
-            
-            if (!$user) {
-                throw new Exception('User not found');
-            }
-            
-            return $user;
+            return $payload['user_id'] ?? null;
         } catch (Exception $e) {
-            throw new Exception('Invalid token: ' . $e->getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Refresh token - Generate new token from existing valid token
+     */
+    public static function refreshToken($token) {
+        try {
+            $payload = self::verifyToken($token);
+
+            // Remove time-based claims to regenerate fresh ones
+            unset($payload['iat'], $payload['exp'], $payload['iss']);
+
+            // Generate new token with fresh timestamps
+            return self::generateToken($payload);
+        } catch (Exception $e) {
+            return false;
         }
     }
     

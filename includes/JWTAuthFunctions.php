@@ -1,19 +1,30 @@
 <?php
 /**
- * JWT Authentication Functions - FIXED VERSION
+ * JWT Authentication Functions - OPTIMIZED VERSION
  * Replace session-based functions with JWT equivalents
- * 
+ *
  * File: includes/JWTAuthFunctions.php
  */
 
 require_once __DIR__ . '/JWTHelper.php';
+
+// Request-level cache for authenticated user (prevents multiple DB queries)
+global $_jwt_auth_cache;
+$_jwt_auth_cache = null;
 
 /**
  * Authenticate user with JWT
  */
 if (!function_exists('authenticateWithJWT')) {
     function authenticateWithJWT($pdo) {
-        $token = JWTHelper::extractTokenFromHeader();
+        global $_jwt_auth_cache;
+
+        // Return cached user if already authenticated in this request
+        if ($_jwt_auth_cache !== null) {
+            return $_jwt_auth_cache;
+        }
+
+        $token = JWTHelper::getTokenFromHeader();
         
         if (!$token) {
             return false;
@@ -29,46 +40,60 @@ if (!function_exists('authenticateWithJWT')) {
             $stmt = $pdo->prepare("SELECT id, username, email, firstname, lastname FROM users WHERE id = ?");
             $stmt->execute([$payload['user_id']]);
             $user = $stmt->fetch();
-            
+
             if (!$user) {
+                $_jwt_auth_cache = false;
                 return false;
             }
 
             // Add token payload data to user
             $user['token_payload'] = $payload;
+
+            // Cache the authenticated user for this request
+            $_jwt_auth_cache = $user;
+
             return $user;
         } catch (PDOException $e) {
             error_log("Error verifying JWT user: " . $e->getMessage());
+            $_jwt_auth_cache = false;
             return false;
         }
     }
 }
 
 /**
- * Authenticate user with JWT and ACL
+ * Authenticate user with JWT and optionally load ACL
+ * @param PDO $pdo Database connection
+ * @param bool $loadFullACL Whether to load full permissions summary (expensive)
  */
 if (!function_exists('authenticateWithJWTAndACL')) {
-    function authenticateWithJWTAndACL($pdo) {
+    function authenticateWithJWTAndACL($pdo, $loadFullACL = false) {
         $user = authenticateWithJWT($pdo);
         if (!$user) {
             return false;
         }
-        
+
         // Add Simple ACL information to user data
         if (class_exists('SimpleACL')) {
             $acl = new SimpleACL($pdo, $user['id']);
-            $user['role'] = $acl->getUserRole();
-            $user['permissions'] = $acl->getPermissionsSummary();
+            $user['role'] = $acl->getUserRole();  // Cached after first call
             $user['is_admin'] = $acl->isAdmin();
             $user['is_manager'] = $acl->isManagerOrAdmin();
+
+            // Only load full permissions summary if explicitly requested (reduces DB queries)
+            if ($loadFullACL) {
+                $user['permissions'] = $acl->getPermissionsSummary();
+            }
         } else {
             // Fallback if ACL is not available
             $user['role'] = 'viewer';
-            $user['permissions'] = [];
             $user['is_admin'] = false;
             $user['is_manager'] = false;
+            if ($loadFullACL) {
+                $user['permissions'] = [];
+            }
         }
-        
+
         return $user;
     }
 }
@@ -167,7 +192,7 @@ if (!function_exists('getUserIdFromJWT')) {
  */
 if (!function_exists('refreshJWTToken')) {
     function refreshJWTToken() {
-        $token = JWTHelper::extractTokenFromHeader();
+        $token = JWTHelper::getTokenFromHeader();
         if (!$token) {
             return false;
         }
@@ -205,7 +230,7 @@ if (!function_exists('logoutJWT')) {
 if (!function_exists('validateJWTMiddleware')) {
     function validateJWTMiddleware($pdo) {
         // Check if Authorization header exists
-        $token = JWTHelper::extractTokenFromHeader();
+        $token = JWTHelper::getTokenFromHeader();
         
         if (!$token) {
             http_response_code(401);

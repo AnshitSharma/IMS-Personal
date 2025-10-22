@@ -141,21 +141,19 @@ class DataExtractionUtilities {
      * Find CPU in CPU data structure
      */
     private function findCpuInData($data, $uuid) {
-        // CPU JSON structure may vary - implement based on actual structure
-        foreach ($data as $manufacturer) {
-            if (isset($manufacturer['families'])) {
-                foreach ($manufacturer['families'] as $family) {
-                    if (isset($family['models'])) {
-                        foreach ($family['models'] as $model) {
-                            if (isset($model['uuid']) && $model['uuid'] === $uuid) {
-                                return $model;
-                            }
-                        }
+        // CPU JSON structure: brand → models array with UUID field
+        foreach ($data as $brand) {
+            if (isset($brand['models'])) {
+                foreach ($brand['models'] as $model) {
+                    // Check both 'UUID' and 'uuid' for case-insensitive matching
+                    $modelUuid = $model['UUID'] ?? $model['uuid'] ?? null;
+                    if ($modelUuid === $uuid) {
+                        return $model;
                     }
                 }
             }
         }
-        
+
         return null;
     }
     
@@ -607,6 +605,13 @@ class DataExtractionUtilities {
     }
 
     /**
+     * Get HBA card by UUID (wrapper for findComponentByUuid)
+     */
+    public function getHBACardByUUID($uuid) {
+        return $this->findComponentByUuid('hbacard', $uuid);
+    }
+
+    /**
      * Get motherboard by UUID (wrapper for findComponentByUuid)
      */
     public function getMotherboardByUUID($uuid) {
@@ -764,15 +769,30 @@ class DataExtractionUtilities {
      * Extract memory form factor (DIMM, SO-DIMM, etc.)
      */
     public function extractMemoryFormFactor($specs) {
+        $formFactor = null;
+
+        // Check memory-specific form factor fields only
         if (isset($specs['memory']['form_factor'])) {
-            return $specs['memory']['form_factor'];
+            $formFactor = $specs['memory']['form_factor'];
+        } elseif (isset($specs['memory_form_factor'])) {
+            $formFactor = $specs['memory_form_factor'];
+        } elseif (isset($specs['module_type']) || isset($specs['memory_type'])) {
+            // For RAM components, check form_factor at root level
+            $formFactor = $specs['form_factor'] ?? null;
+        } else {
+            return null; // No memory form factor specified
         }
 
-        if (isset($specs['memory_form_factor'])) {
-            return $specs['memory_form_factor'];
+        if (!$formFactor) {
+            return null;
         }
 
-        return 'DIMM'; // Default fallback
+        // Normalize: "DIMM (288-pin)" → "DIMM"
+        if (preg_match('/^([A-Z\-]+)(?:\s*\([^)]+\))?/i', $formFactor, $matches)) {
+            return trim($matches[1]);
+        }
+
+        return $formFactor;
     }
 
     /**

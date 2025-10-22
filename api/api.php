@@ -116,6 +116,9 @@ try {
         case 'motherboard':
         case 'nic':
         case 'caddy':
+        case 'chassis':
+        case 'pciecard':
+        case 'hbacard':
             handleComponentOperations($module, $operation, $user);
             break;
             

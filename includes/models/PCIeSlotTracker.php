@@ -177,7 +177,7 @@ class PCIeSlotTracker {
                 SELECT COUNT(*) as count
                 FROM server_configuration_components
                 WHERE config_uuid = ?
-                AND component_type IN ('pciecard', 'nic')
+                AND component_type IN ('pciecard', 'hbacard', 'nic')
             ");
             $stmt->execute([$configUuid]);
             $pcieCount = $stmt->fetch(PDO::FETCH_ASSOC)['count'];
@@ -369,7 +369,7 @@ class PCIeSlotTracker {
                 SELECT component_uuid, slot_position
                 FROM server_configuration_components
                 WHERE config_uuid = ?
-                AND component_type IN ('pciecard', 'nic')
+                AND component_type IN ('pciecard', 'hbacard', 'nic')
                 AND slot_position IS NOT NULL
                 AND slot_position LIKE 'pcie_%'
             ");
@@ -507,6 +507,7 @@ class PCIeSlotTracker {
     private function getComponentTypeByUuid($uuid) {
         $tables = [
             'pciecard' => 'pciecardinventory',
+            'hbacard' => 'hbacardinventory',
             'nic' => 'nicinventory'
         ];
 

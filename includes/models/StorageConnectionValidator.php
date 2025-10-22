@@ -228,15 +228,28 @@ class StorageConnectionValidator {
         if ($protocol === 'sas' && $supportsSas) $compatible = true;
 
         if ($compatible) {
+            $backplaneInterface = $backplane['interface'] ?? 'Unknown';
+
+            // Generate clear compatibility message
+            if ($protocol === 'sata' && strtoupper($backplaneInterface) !== 'SATA3') {
+                $compatibilityNote = "$storageInterface drive compatible with $backplaneInterface backplane (backward compatible)";
+            } elseif ($protocol === 'sas' && strtoupper($backplaneInterface) !== 'SAS3') {
+                $compatibilityNote = "$storageInterface drive on $backplaneInterface backplane";
+            } else {
+                $compatibilityNote = "$storageInterface drive on $backplaneInterface backplane (native support)";
+            }
+
             return [
                 'available' => true,
                 'type' => 'chassis_bay',
                 'priority' => 1,
-                'description' => "Storage connects via chassis backplane ({$backplane['interface']} interface)",
+                'description' => "Storage connects via chassis backplane ($compatibilityNote)",
                 'details' => [
                     'chassis_uuid' => $existing['chassis']['component_uuid'],
                     'backplane_model' => $backplane['model'] ?? 'Unknown',
-                    'interface' => $backplane['interface'] ?? 'Unknown'
+                    'backplane_interface' => $backplaneInterface,
+                    'storage_interface' => $storageInterface,
+                    'compatibility_type' => $protocol === strtolower($backplaneInterface) ? 'native' : 'backward_compatible'
                 ]
             ];
         }

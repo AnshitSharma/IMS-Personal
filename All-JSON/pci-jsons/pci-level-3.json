@@ -1,150 +1,5 @@
 [
   {
-    "component_subtype": "HBA Card",
-    "brand": "Broadcom",
-    "series": "HBA 9400",
-    "generation": "9400-16i",
-    "family": "HBA 9400-16i",
-    "models": [
-      {
-        "model": "LSI 9400-16i",
-        "part_number": "05-50008-00",
-        "interface": "PCIe 3.0 x8",
-        "protocol": "SAS",
-        "data_rate": "12Gb/s per lane",
-        "internal_ports": 16,
-        "external_ports": 0,
-        "connector_type": "SFF-8643 (Mini SAS HD)",
-        "max_devices": 1024,
-        "form_factor": "Low Profile/Standard Height",
-        "dimensions_mm": {
-          "length": 167,
-          "width": 69,
-          "height": 14.5
-        },
-        "power_consumption": {
-          "typical_W": 14.8,
-          "max_W": 16.5
-        },
-        "operating_conditions": {
-          "temperature_range": "0°C to 55°C",
-          "humidity": "8% to 90% non-condensing",
-          "altitude": "0 to 3000m"
-        },
-        "inventory": {
-          "quantity_available": 12,
-          "quantity_reserved": 3,
-          "location": "Datacenter A, Rack C2",
-          "rack_position": "Storage Unit 8",
-          "status": "Available",
-          "condition": "New",
-          "purchase_date": "2024-03-15",
-          "warranty_expiration": "2027-03-15",
-          "serial_numbers": [],
-          "sys_score": ""
-        },
-        "compatible_motherboards": [
-          {
-            "brand": "Supermicro",
-            "models": ["X13DRG-H", "X13DRi-N", "X12DPG-QT6"]
-          },
-          {
-            "brand": "ASUS",
-            "models": ["Pro WS W790E-SAGE SE", "Pro WS WRX80E-SAGE SE WIFI"]
-          },
-          {
-            "brand": "GIGABYTE",
-            "models": ["MZ93-FS0", "MC63-4S0"]
-          }
-        ],
-        "compatible_servers": [
-          {
-            "brand": "Dell",
-            "models": ["PowerEdge R760", "PowerEdge R7625"]
-          },
-          {
-            "brand": "HPE",
-            "models": ["ProLiant DL380 Gen11", "ProLiant DL385 Gen11"]
-          },
-          {
-            "brand": "Supermicro",
-            "models": ["SuperServer 1029U-TR4", "AS-2145GH-TNRT"]
-          }
-        ],
-        "slot_compatibility": {
-          "required_slot": "PCIe x8 or x16",
-          "low_profile_bracket": true,
-          "power_requirements": "PCIe slot power only"
-        },
-        "UUID": "hba-9400-16i-001-abcd1234"
-      },
-      {
-        "model": "LSI 9400-8i",
-        "part_number": "05-50008-01",
-        "interface": "PCIe 3.0 x8",
-        "protocol": "SAS",
-        "data_rate": "12Gb/s per lane",
-        "internal_ports": 8,
-        "external_ports": 0,
-        "connector_type": "SFF-8643 (Mini SAS HD)",
-        "max_devices": 512,
-        "form_factor": "Low Profile/Standard Height",
-        "dimensions_mm": {
-          "length": 167,
-          "width": 69,
-          "height": 14.5
-        },
-        "power_consumption": {
-          "typical_W": 12.5,
-          "max_W": 14.2
-        },
-        "operating_conditions": {
-          "temperature_range": "0°C to 55°C",
-          "humidity": "8% to 90% non-condensing",
-          "altitude": "0 to 3000m"
-        },
-        "inventory": {
-          "quantity_available": 18,
-          "quantity_reserved": 4,
-          "location": "Datacenter A, Rack C2",
-          "rack_position": "Storage Unit 9",
-          "status": "Available",
-          "condition": "New",
-          "purchase_date": "2024-03-20",
-          "warranty_expiration": "2027-03-20",
-          "serial_numbers": [],
-          "sys_score": ""
-        },
-        "compatible_motherboards": [
-          {
-            "brand": "Supermicro",
-            "models": ["X13DRG-H", "X13DRi-N", "X12DPG-QT6"]
-          },
-          {
-            "brand": "ASUS",
-            "models": ["Pro WS W790E-SAGE SE", "Pro WS WRX80E-SAGE SE WIFI"]
-          }
-        ],
-        "compatible_servers": [
-          {
-            "brand": "Dell",
-            "models": ["PowerEdge R760", "PowerEdge R7625"]
-          },
-          {
-            "brand": "HPE",
-            "models": ["ProLiant DL380 Gen11", "ProLiant DL385 Gen11"]
-          }
-        ],
-        "slot_compatibility": {
-          "required_slot": "PCIe x8 or x16",
-          "low_profile_bracket": true,
-          "power_requirements": "PCIe slot power only"
-        },
-        "UUID": "hba-9400-8i-001-efgh5678"
-      }
-    ]
-  },
-  {
     "component_subtype": "NVMe Adaptor",
     "brand": "Supermicro",
     "series": "M.2 to PCIe",
@@ -170,57 +25,12 @@
           "typical_W": 15,
           "max_W": 25
         },
-        "operating_conditions": {
-          "temperature_range": "0°C to 55°C",
-          "humidity": "8% to 90% non-condensing",
-          "altitude": "0 to 3000m"
-        },
         "performance": {
           "max_sequential_read": "13000 MB/s",
           "max_sequential_write": "12000 MB/s",
           "max_iops_read": "1200000",
           "max_iops_write": "1100000"
         },
-        "inventory": {
-          "quantity_available": 15,
-          "quantity_reserved": 3,
-          "location": "Datacenter A, Rack D1",
-          "rack_position": "Storage Unit 5",
-          "status": "Available",
-          "condition": "New",
-          "purchase_date": "2024-04-10",
-          "warranty_expiration": "2027-04-10",
-          "serial_numbers": [],
-          "sys_score": ""
-        },
-        "compatible_motherboards": [
-          {
-            "brand": "Supermicro",
-            "models": ["X13DRG-H", "X13DRi-N", "H13DSU-iN"]
-          },
-          {
-            "brand": "ASUS",
-            "models": ["Pro WS W790E-SAGE SE", "Pro WS WRX80E-SAGE SE WIFI"]
-          },
-          {
-            "brand": "GIGABYTE",
-            "models": ["MZ93-FS0", "MC63-4S0"]
-          }
-        ],
-        "compatible_servers": [
-          {
-            "brand": "Dell",
-            "models": ["PowerEdge R760", "PowerEdge R7625"]
-          },
-          {
-            "brand": "HPE",
-            "models": ["ProLiant DL380 Gen11", "ProLiant DL385 Gen11"]
-          },
-          {
-            "brand": "Supermicro",
-            "models": ["SuperServer 1029U-TR4", "AS-2145GH-TNRT"]
-          }
-        ],
         "slot_compatibility": {
           "required_slot": "PCIe x16",
           "low_profile_bracket": false,
@@ -247,10 +57,281 @@
           "typical_W": 8,
           "max_W": 15
         },
-        "operating_conditions": {
-          "temperature_range": "0°C to 55°C",
-          "humidity": "8% to 90% non-condensing",
-          "altitude": "0 to 3000m"
+        "performance": {
+          "max_sequential_read": "6500 MB/s",
+          "max_sequential_write": "6000 MB/s",
+          "max_iops_read": "600000",
+          "max_iops_write": "550000"
+        },
+        "slot_compatibility": {
+          "required_slot": "PCIe x8 or x16",
+          "low_profile_bracket": false,
+          "power_requirements": "PCIe slot power only"
+        },
+        "UUID": "nvme-adaptor-2m2p-001-mnop3456"
+      }
+    ]
+  },
+  {
+    "component_subtype": "NVMe Adaptor",
+    "brand": "ASUS",
+    "series": "Hyper M.2",
+    "generation": "Gen 4",
+    "family": "Hyper M.2 x16",
+    "models": [
+      {
+        "model": "Hyper M.2 x16 Gen 4",
+        "part_number": "HYPER-M2-X16-GEN4",
+        "interface": "PCIe 4.0 x16",
+        "m2_slots": 4,
+        "m2_form_factors": ["2242", "2260", "2280", "22110"],
+        "max_capacity_per_slot": "8TB",
+        "total_max_capacity": "32TB",
+        "form_factor": "HHHL (Half Height Half Length)",
+        "dimensions_mm": {
+          "length": 170,
+          "width": 70,
+          "height": 15
+        },
+        "power_consumption": {
+          "idle_W": 3.0,
+          "typical_W": 18,
+          "max_W": 30
+        },
+        "performance": {
+          "max_sequential_read": "28000 MB/s",
+          "max_sequential_write": "24000 MB/s",
+          "max_iops_read": "2400000",
+          "max_iops_write": "2000000"
+        },
+        "slot_compatibility": {
+          "required_slot": "PCIe x16",
+          "low_profile_bracket": false,
+          "power_requirements": "PCIe slot power only"
+        },
+        "UUID": "nvme-adaptor-asus-hyper-x16-gen4-abcd1234"
+      },
+      {
+        "model": "Hyper M.2 x16 Gen 5",
+        "part_number": "HYPER-M2-X16-GEN5",
+        "interface": "PCIe 5.0 x16",
+        "m2_slots": 4,
+        "m2_form_factors": ["2242", "2260", "2280", "22110"],
+        "max_capacity_per_slot": "8TB",
+        "total_max_capacity": "32TB",
+        "form_factor": "HHHL (Half Height Half Length)",
+        "dimensions_mm": {
+          "length": 170,
+          "width": 70,
+          "height": 15
+        },
+        "power_consumption": {
+          "idle_W": 3.5,
+          "typical_W": 22,
+          "max_W": 40
+        },
+        "performance": {
+          "max_sequential_read": "56000 MB/s",
+          "max_sequential_write": "48000 MB/s",
+          "max_iops_read": "4800000",
+          "max_iops_write": "4000000"
+        },
+        "slot_compatibility": {
+          "required_slot": "PCIe x16",
+          "low_profile_bracket": false,
+          "power_requirements": "PCIe slot power + 6-pin PCIe"
+        },
+        "UUID": "nvme-adaptor-asus-hyper-x16-gen5-efgh5678"
+      }
+    ]
+  },
+  {
+    "component_subtype": "NVMe Adaptor",
+    "brand": "GIGABYTE",
+    "series": "AORUS Gen4 AIC",
+    "generation": "Gen 4",
+    "family": "AORUS Gen4 AIC Adaptor",
+    "models": [
+      {
+        "model": "AORUS Gen4 AIC Adaptor",
+        "part_number": "GC-A4000S",
+        "interface": "PCIe 4.0 x16",
+        "m2_slots": 4,
+        "m2_form_factors": ["2280"],
+        "max_capacity_per_slot": "8TB",
+        "total_max_capacity": "32TB",
+        "form_factor": "HHHL (Half Height Half Length)",
+        "dimensions_mm": {
+          "length": 168,
+          "width": 69,
+          "height": 16
+        },
+        "power_consumption": {
+          "idle_W": 2.8,
+          "typical_W": 16,
+          "max_W": 28
+        },
+        "performance": {
+          "max_sequential_read": "28000 MB/s",
+          "max_sequential_write": "24000 MB/s",
+          "max_iops_read": "2400000",
+          "max_iops_write": "2000000"
+        },
+        "cooling": {
+          "heatsink": true,
+          "thermal_pads": true,
+          "fan_support": false
+        },
+        "slot_compatibility": {
+          "required_slot": "PCIe x16",
+          "low_profile_bracket": false,
+          "power_requirements": "PCIe slot power only"
+        },
+        "UUID": "nvme-adaptor-gigabyte-gen4-aic-ijkl9012"
+      }
+    ]
+  },
+  {
+    "component_subtype": "NVMe Adaptor",
+    "brand": "HighPoint",
+    "series": "SSD7000 Series",
+    "generation": "Gen 4",
+    "family": "SSD7000 Series",
+    "models": [
+      {
+        "model": "SSD7580A",
+        "part_number": "SSD7580A",
+        "interface": "PCIe 4.0 x16",
+        "m2_slots": 8,
+        "m2_form_factors": ["2280", "22110"],
+        "max_capacity_per_slot": "8TB",
+        "total_max_capacity": "64TB",
+        "form_factor": "FHFL (Full Height Full Length)",
+        "dimensions_mm": {
+          "length": 312,
+          "width": 120,
+          "height": 75
+        },
+        "power_consumption": {
+          "idle_W": 5.0,
+          "typical_W": 35,
+          "max_W": 60
+        },
+        "performance": {
+          "max_sequential_read": "56000 MB/s",
+          "max_sequential_write": "48000 MB/s",
+          "max_iops_read": "4800000",
+          "max_iops_write": "4000000"
+        },
+        "cooling": {
+          "heatsink": true,
+          "thermal_pads": true,
+          "fan_support": true,
+          "active_cooling": true
+        },
+        "slot_compatibility": {
+          "required_slot": "PCIe x16",
+          "low_profile_bracket": false,
+          "power_requirements": "PCIe slot power + 8-pin PCIe"
+        },
+        "UUID": "nvme-adaptor-highpoint-ssd7580a-mnop3456"
+      },
+      {
+        "model": "SSD7540",
+        "part_number": "SSD7540",
+        "interface": "PCIe 4.0 x16",
+        "m2_slots": 4,
+        "m2_form_factors": ["2280", "22110"],
+        "max_capacity_per_slot": "8TB",
+        "total_max_capacity": "32TB",
+        "form_factor": "HHHL (Half Height Half Length)",
+        "dimensions_mm": {
+          "length": 168,
+          "width": 69,
+          "height": 18
+        },
+        "power_consumption": {
+          "idle_W": 3.2,
+          "typical_W": 20,
+          "max_W": 35
+        },
+        "performance": {
+          "max_sequential_read": "28000 MB/s",
+          "max_sequential_write": "24000 MB/s",
+          "max_iops_read": "2400000",
+          "max_iops_write": "2000000"
+        },
+        "cooling": {
+          "heatsink": true,
+          "thermal_pads": true,
+          "fan_support": false
+        },
+        "slot_compatibility": {
+          "required_slot": "PCIe x16",
+          "low_profile_bracket": false,
+          "power_requirements": "PCIe slot power only"
+        },
+        "UUID": "nvme-adaptor-highpoint-ssd7540-qrst7890"
+      }
+    ]
+  },
+  {
+    "component_subtype": "NVMe Adaptor",
+    "brand": "StarTech",
+    "series": "M.2 PCIe Adapters",
+    "generation": "Gen 3/4",
+    "family": "M.2 PCIe Adapters",
+    "models": [
+      {
+        "model": "PEX4M2E1",
+        "part_number": "PEX4M2E1",
+        "interface": "PCIe 3.0 x16",
+        "m2_slots": 4,
+        "m2_form_factors": ["2230", "2242", "2260", "2280"],
+        "max_capacity_per_slot": "8TB",
+        "total_max_capacity": "32TB",
+        "form_factor": "HHHL (Half Height Half Length)",
+        "dimensions_mm": {
+          "length": 165,
+          "width": 68,
+          "height": 14
+        },
+        "power_consumption": {
+          "idle_W": 2.0,
+          "typical_W": 12,
+          "max_W": 20
+        },
+        "performance": {
+          "max_sequential_read": "13000 MB/s",
+          "max_sequential_write": "12000 MB/s",
+          "max_iops_read": "1200000",
+          "max_iops_write": "1100000"
+        },
+        "slot_compatibility": {
+          "required_slot": "PCIe x16",
+          "low_profile_bracket": true,
+          "power_requirements": "PCIe slot power only"
+        },
+        "UUID": "nvme-adaptor-startech-pex4m2e1-uvwx4567"
+      },
+      {
+        "model": "PEX2M2E1",
+        "part_number": "PEX2M2E1",
+        "interface": "PCIe 3.0 x8",
+        "m2_slots": 2,
+        "m2_form_factors": ["2230", "2242", "2260", "2280"],
+        "max_capacity_per_slot": "8TB",
+        "total_max_capacity": "16TB",
+        "form_factor": "HHHL (Half Height Half Length)",
+        "dimensions_mm": {
+          "length": 165,
+          "width": 68,
+          "height": 14
+        },
+        "power_consumption": {
+          "idle_W": 1.2,
+          "typical_W": 7,
+          "max_W": 12
         },
         "performance": {
           "max_sequential_read": "6500 MB/s",
@@ -258,44 +339,12 @@
           "max_iops_read": "600000",
           "max_iops_write": "550000"
         },
-        "inventory": {
-          "quantity_available": 22,
-          "quantity_reserved": 3,
-          "location": "Datacenter A, Rack D1",
-          "rack_position": "Storage Unit 6",
-          "status": "Available",
-          "condition": "New",
-          "purchase_date": "2024-04-05",
-          "warranty_expiration": "2027-04-05",
-          "serial_numbers": [],
-          "sys_score": ""
-        },
-        "compatible_motherboards": [
-          {
-            "brand": "Supermicro",
-            "models": ["X13DRG-H", "X13DRi-N", "H13DSU-iN"]
-          },
-          {
-            "brand": "ASUS",
-            "models": ["Pro WS W790E-SAGE SE"]
-          }
-        ],
-        "compatible_servers": [
-          {
-            "brand": "Dell",
-            "models": ["PowerEdge R760", "PowerEdge R7625"]
-          },
-          {
-            "brand": "HPE",
-            "models": ["ProLiant DL380 Gen11"]
-          }
-        ],
         "slot_compatibility": {
           "required_slot": "PCIe x8 or x16",
-          "low_profile_bracket": false,
+          "low_profile_bracket": true,
           "power_requirements": "PCIe slot power only"
         },
-        "UUID": "nvme-adaptor-2m2p-001-mnop3456"
+        "UUID": "nvme-adaptor-startech-pex2m2e1-yzab8901"
       }
     ]
   },
@@ -321,48 +370,11 @@
           "width": 80,
           "height": 15
         },
-        "operating_conditions": {
-          "temperature_range": "0°C to 60°C",
-          "humidity": "8% to 90% non-condensing",
-          "altitude": "0 to 3000m"
-        },
         "electrical_specs": {
           "signal_integrity": "PCIe 4.0 compliant",
           "insertion_loss": "<3dB @ 8GHz",
           "return_loss": ">10dB @ 8GHz"
         },
-        "inventory": {
-          "quantity_available": 28,
-          "quantity_reserved": 4,
-          "location": "Datacenter B, Rack A1",
-          "rack_position": "Storage Unit 12",
-          "status": "Available",
-          "condition": "New",
-          "purchase_date": "2024-05-01",
-          "warranty_expiration": "2027-05-01",
-          "serial_numbers": [],
-          "sys_score": ""
-        },
-        "compatible_motherboards": [
-          {
-            "brand": "Supermicro",
-            "models": ["X13DRG-H", "X13DRi-N", "X12DPG-QT6"]
-          },
-          {
-            "brand": "ASUS",
-            "models": ["Pro WS W790E-SAGE SE"]
-          }
-        ],
-        "compatible_servers": [
-          {
-            "brand": "Supermicro",
-            "models": ["SuperServer 815TQ-R500WB", "SuperServer 815TQ-R700WB"]
-          },
-          {
-            "brand": "Dell",
-            "models": ["PowerEdge R230", "PowerEdge R330"]
-          }
-        ],
         "compatible_chassis": [
           {
             "brand": "Supermicro",
@@ -391,44 +403,11 @@
           "width": 80,
           "height": 15
         },
-        "operating_conditions": {
-          "temperature_range": "0°C to 60°C",
-          "humidity": "8% to 90% non-condensing",
-          "altitude": "0 to 3000m"
-        },
         "electrical_specs": {
           "signal_integrity": "PCIe 4.0 compliant",
           "insertion_loss": "<3dB @ 8GHz",
           "return_loss": ">10dB @ 8GHz"
         },
-        "inventory": {
-          "quantity_available": 24,
-          "quantity_reserved": 4,
-          "location": "Datacenter B, Rack A1",
-          "rack_position": "Storage Unit 13",
-          "status": "Available",
-          "condition": "New",
-          "purchase_date": "2024-05-05",
-          "warranty_expiration": "2027-05-05",
-          "serial_numbers": [],
-          "sys_score": ""
-        },
-        "compatible_motherboards": [
-          {
-            "brand": "Supermicro",
-            "models": ["X13DRG-H", "X13DRi-N"]
-          },
-          {
-            "brand": "ASUS",
-            "models": ["Pro WS W790E-SAGE SE"]
-          }
-        ],
-        "compatible_servers": [
-          {
-            "brand": "Supermicro",
-            "models": ["SuperServer 815TQ-R500WB", "SuperServer 815TQ-R700WB"]
-          }
-        ],
         "compatible_chassis": [
           {
             "brand": "Supermicro",
@@ -457,48 +436,11 @@
           "width": 120,
           "height": 75
         },
-        "operating_conditions": {
-          "temperature_range": "0°C to 60°C",
-          "humidity": "8% to 90% non-condensing",
-          "altitude": "0 to 3000m"
-        },
         "electrical_specs": {
           "signal_integrity": "PCIe 4.0 compliant",
           "insertion_loss": "<3dB @ 8GHz",
           "return_loss": ">10dB @ 8GHz"
         },
-        "inventory": {
-          "quantity_available": 16,
-          "quantity_reserved": 4,
-          "location": "Datacenter B, Rack B2",
-          "rack_position": "Storage Unit 15",
-          "status": "Available",
-          "condition": "New",
-          "purchase_date": "2024-05-10",
-          "warranty_expiration": "2027-05-10",
-          "serial_numbers": [],
-          "sys_score": ""
-        },
-        "compatible_motherboards": [
-          {
-            "brand": "Supermicro",
-            "models": ["X13DRG-H", "X13DRi-N", "H13DSU-iN"]
-          },
-          {
-            "brand": "ASUS",
-            "models": ["Pro WS W790E-SAGE SE", "Pro WS WRX80E-SAGE SE WIFI"]
-          }
-        ],
-        "compatible_servers": [
-          {
-            "brand": "Supermicro",
-            "models": ["SuperServer 825TQ-R720LPB", "SuperServer 825TQ-R740LPB"]
-          },
-          {
-            "brand": "Dell",
-            "models": ["PowerEdge R740", "PowerEdge R750"]
-          }
-        ],
         "compatible_chassis": [
           {
             "brand": "Supermicro",
@@ -512,376 +454,638 @@
           "supports_gpu": true
         },
         "UUID": "riser-2u-e16r-001-yzab8901"
+      },
+      {
+        "model": "RSC-R2UU-2E16R",
+        "part_number": "CSE-825TQ-R720LPB-2E16R",
+        "interface": "PCIe 4.0",
+        "pcie_slots": 2,
+        "slot_type": "x16",
+        "form_factor": "2U Standard Height",
+        "cable_type": "Flexible PCIe",
+        "cable_length": "200mm",
+        "low_profile_only": false,
+        "dimensions_mm": {
+          "length": 220,
+          "width": 120,
+          "height": 75
+        },
+        "electrical_specs": {
+          "signal_integrity": "PCIe 4.0 compliant",
+          "insertion_loss": "<3dB @ 8GHz",
+          "return_loss": ">10dB @ 8GHz"
+        },
+        "compatible_chassis": [
+          {
+            "brand": "Supermicro",
+            "models": ["CSE-825TQ", "CSE-825TQC", "CSE-826BE1C"]
+          }
+        ],
+        "slot_compatibility": {
+          "motherboard_connection": "PCIe x16 slot",
+          "expansion_slots": "2x PCIe x16 standard height",
+          "power_passthrough": true,
+          "supports_gpu": true
+        },
+        "UUID": "riser-2u-2e16r-001-cdef2345"
+      },
+      {
+        "model": "RSC-R2UU-3E8R",
+        "part_number": "CSE-825TQ-R720LPB-3E8R",
+        "interface": "PCIe 4.0",
+        "pcie_slots": 3,
+        "slot_type": "x8",
+        "form_factor": "2U Standard Height",
+        "cable_type": "Flexible PCIe",
+        "cable_length": "200mm",
+        "low_profile_only": false,
+        "dimensions_mm": {
+          "length": 220,
+          "width": 120,
+          "height": 75
+        },
+        "electrical_specs": {
+          "signal_integrity": "PCIe 4.0 compliant",
+          "insertion_loss": "<3dB @ 8GHz",
+          "return_loss": ">10dB @ 8GHz"
+        },
+        "compatible_chassis": [
+          {
+            "brand": "Supermicro",
+            "models": ["CSE-825TQ", "CSE-825TQC"]
+          }
+        ],
+        "slot_compatibility": {
+          "motherboard_connection": "PCIe x16 slot",
+          "expansion_slots": "3x PCIe x8 standard height",
+          "power_passthrough": true,
+          "supports_gpu": false
+        },
+        "UUID": "riser-2u-3e8r-001-ghij6789"
       }
     ]
   },
   {
-    "component_subtype": "GPU",
-    "brand": "NVIDIA",
-    "series": "Data Center GPUs",
-    "generation": "Hopper",
-    "family": "H100 Series",
+    "component_subtype": "Riser Card",
+    "brand": "Dell",
+    "series": "PowerEdge Riser Cards",
+    "generation": "Gen 4",
+    "family": "PowerEdge R750 Riser Cards",
     "models": [
       {
-        "model": "H100 PCIe",
-        "architecture": "Hopper GH100",
-        "manufacturing_process": "4nm TSMC",
-        "release_year": 2022,
-        "interface_requirements": {
-          "pcie_version": "5.0",
-          "pcie_lanes": 16,
-          "pcie_slot_type": "x16 (electrical)",
-          "minimum_pcie_version": "4.0",
-          "backward_compatible": true,
-          "slot_height": "Full Height, Full Length",
-          "slot_width": "Dual Slot",
-          "form_factors_supported": ["PCIe", "SXM5", "HGX"]
-        },
-        "power_requirements": {
-          "idle_power": "50W",
-          "typical_power": "350W",
-          "maximum_power": "700W",
-          "pcie_power_draw": "75W + External connectors",
-          "external_power_required": true,
-          "power_connectors": {
-            "pcie": "2x 8-pin or 1x 16-pin (12VHPWR)",
-            "sxm": "Motherboard supplied",
-            "total_pins": 16
-          },
-          "power_efficiency": "4+ TFLOPS per Watt"
-        },
-        "form_factor": "PCIe x16 Dual Slot",
-        "memory_specs": {
-          "capacity": "80GB",
-          "type": "HBM3",
-          "bandwidth": "2000 GB/s",
-          "bus_width": "5120-bit",
-          "ecc_support": true
-        },
-        "compute_specifications": {
-          "cuda_cores": 16896,
-          "tensor_cores": "4th Gen (512)",
-          "rt_cores": 0,
-          "base_clock": "1230 MHz",
-          "boost_clock": "1980 MHz",
-          "memory_clock": "2619 MHz"
-        },
-        "performance_specs": {
-          "fp32_performance": "51 TFLOPS",
-          "tensor_performance": {
-            "fp16": "1979 TFLOPS",
-            "bf16": "1979 TFLOPS",
-            "int8": "3958 TOPS",
-            "int4": "7916 TOPS",
-            "fp8": "3958 TFLOPS"
-          },
-          "memory_bandwidth": "2000 GB/s",
-          "nvlink_bandwidth": "900 GB/s bidirectional"
-        },
-        "connectivity": {
-          "nvlink": {
-            "version": "4.0",
-            "links": 18,
-            "topology_support": ["All-to-all", "Switch", "Hybrid"]
-          },
-          "pcie_lanes_used": 16,
-          "multi_gpu_support": {
-            "sli_support": false,
-            "nvlink_scaling": "Up to 8 GPUs",
-            "mig_support": true,
-            "mig_instances": "Up to 7 instances"
-          }
-        },
-        "cooling_requirements": {
-          "thermal_design_power": "350W",
-          "cooling_solution": "Active cooling required",
-          "airflow_required": "300 CFM minimum",
-          "case_temperature_max": "83°C",
-          "thermal_throttling": "Yes"
-        },
+        "model": "PowerEdge R750 Riser 1",
+        "part_number": "DELL-R750-RSR1",
+        "interface": "PCIe 4.0",
+        "pcie_slots": 1,
+        "slot_type": "x16",
+        "form_factor": "2U Standard Height",
+        "cable_type": "PCIe Riser",
+        "cable_length": "N/A",
+        "low_profile_only": false,
         "dimensions_mm": {
-          "length": 267,
-          "width": 112,
-          "height": 40
+          "length": 175,
+          "width": 115,
+          "height": 70
         },
-        "operating_conditions": {
-          "temperature_range": "0°C to +30°C (at sea level)",
-          "storage_temperature": "-40°C to +70°C",
-          "humidity": "10% to 90% non-condensing",
-          "altitude": "0 to 3048m operating"
+        "electrical_specs": {
+          "signal_integrity": "PCIe 4.0 compliant",
+          "insertion_loss": "<3dB @ 8GHz",
+          "return_loss": ">10dB @ 8GHz"
         },
-        "inventory": {
-          "quantity_available": 0,
-          "quantity_reserved": 0,
-          "location": "N/A",
-          "rack_position": "N/A",
-          "status": "Out of Stock",
-          "condition": "New",
-          "purchase_date": "",
-          "warranty_expiration": "",
-          "serial_numbers": [],
-          "sys_score": ""
-        },
-        "compatible_motherboards": [
-          {
-            "brand": "Supermicro",
-            "models": ["X13DRG-H", "X13DRi-N", "H13DSU-iN"]
-          },
-          {
-            "brand": "ASUS",
-            "models": ["Pro WS W790E-SAGE SE", "Pro WS WRX80E-SAGE SE WIFI"]
-          },
-          {
-            "brand": "GIGABYTE",
-            "models": ["MZ93-FS0", "MC63-4S0"]
-          }
-        ],
-        "compatible_servers": [
+        "compatible_chassis": [
           {
             "brand": "Dell",
-            "models": ["PowerEdge R760", "PowerEdge R7625"]
-          },
+            "models": ["PowerEdge R750", "PowerEdge R750xs"]
+          }
+        ],
+        "slot_compatibility": {
+          "motherboard_connection": "PCIe x16 slot",
+          "expansion_slot": "1x PCIe x16 standard height",
+          "power_passthrough": true,
+          "supports_gpu": true
+        },
+        "UUID": "riser-dell-r750-rsr1-klmn0123"
+      },
+      {
+        "model": "PowerEdge R750 Riser 2",
+        "part_number": "DELL-R750-RSR2",
+        "interface": "PCIe 4.0",
+        "pcie_slots": 2,
+        "slot_type": "x16",
+        "form_factor": "2U Standard Height",
+        "cable_type": "PCIe Riser",
+        "cable_length": "N/A",
+        "low_profile_only": false,
+        "dimensions_mm": {
+          "length": 220,
+          "width": 115,
+          "height": 70
+        },
+        "electrical_specs": {
+          "signal_integrity": "PCIe 4.0 compliant",
+          "insertion_loss": "<3dB @ 8GHz",
+          "return_loss": ">10dB @ 8GHz"
+        },
+        "compatible_chassis": [
+          {
+            "brand": "Dell",
+            "models": ["PowerEdge R750", "PowerEdge R750xs"]
+          }
+        ],
+        "slot_compatibility": {
+          "motherboard_connection": "PCIe x16 slot",
+          "expansion_slots": "2x PCIe x16 standard height",
+          "power_passthrough": true,
+          "supports_gpu": true
+        },
+        "UUID": "riser-dell-r750-rsr2-opqr4567"
+      }
+    ]
+  },
+  {
+    "component_subtype": "Riser Card",
+    "brand": "HPE",
+    "series": "ProLiant Riser Cards",
+    "generation": "Gen 10+",
+    "family": "ProLiant DL380 Gen10+ Riser Cards",
+    "models": [
+      {
+        "model": "DL380 Gen10+ Primary Riser",
+        "part_number": "HPE-DL380-G10P-RSR1",
+        "interface": "PCIe 4.0",
+        "pcie_slots": 1,
+        "slot_type": "x16",
+        "form_factor": "2U Standard Height",
+        "cable_type": "PCIe Riser",
+        "cable_length": "N/A",
+        "low_profile_only": false,
+        "dimensions_mm": {
+          "length": 180,
+          "width": 110,
+          "height": 68
+        },
+        "electrical_specs": {
+          "signal_integrity": "PCIe 4.0 compliant",
+          "insertion_loss": "<3dB @ 8GHz",
+          "return_loss": ">10dB @ 8GHz"
+        },
+        "compatible_chassis": [
           {
             "brand": "HPE",
-            "models": ["ProLiant DL380 Gen11", "ProLiant DL385 Gen11"]
-          },
-          {
-            "brand": "Supermicro",
-            "models": ["SuperServer 1029U-TR4", "AS-2145GH-TNRT"]
+            "models": ["ProLiant DL380 Gen10+", "ProLiant DL380 Gen11"]
           }
         ],
         "slot_compatibility": {
-          "required_slot": "PCIe x16",
-          "low_profile_bracket": false,
-          "power_requirements": "2x 8-pin PCIe or 1x 16-pin 12VHPWR"
+          "motherboard_connection": "PCIe x16 slot",
+          "expansion_slot": "1x PCIe x16 standard height",
+          "power_passthrough": true,
+          "supports_gpu": true
         },
-        "UUID": "h100-pcie-01ab-cdef-0123-456789abcdef"
+        "UUID": "riser-hpe-dl380-g10p-rsr1-stuv8901"
+      },
+      {
+        "model": "DL380 Gen10+ Secondary Riser",
+        "part_number": "HPE-DL380-G10P-RSR2",
+        "interface": "PCIe 4.0",
+        "pcie_slots": 2,
+        "slot_type": "x8",
+        "form_factor": "2U Standard Height",
+        "cable_type": "PCIe Riser",
+        "cable_length": "N/A",
+        "low_profile_only": false,
+        "dimensions_mm": {
+          "length": 200,
+          "width": 110,
+          "height": 68
+        },
+        "electrical_specs": {
+          "signal_integrity": "PCIe 4.0 compliant",
+          "insertion_loss": "<3dB @ 8GHz",
+          "return_loss": ">10dB @ 8GHz"
+        },
+        "compatible_chassis": [
+          {
+            "brand": "HPE",
+            "models": ["ProLiant DL380 Gen10+", "ProLiant DL380 Gen11"]
+          }
+        ],
+        "slot_compatibility": {
+          "motherboard_connection": "PCIe x16 slot",
+          "expansion_slots": "2x PCIe x8 standard height",
+          "power_passthrough": true,
+          "supports_gpu": false
+        },
+        "UUID": "riser-hpe-dl380-g10p-rsr2-wxyz2345"
+      },
+      {
+        "model": "DL380 Gen10+ Tertiary Riser",
+        "part_number": "HPE-DL380-G10P-RSR3",
+        "interface": "PCIe 4.0",
+        "pcie_slots": 3,
+        "slot_type": "x8",
+        "form_factor": "2U Standard Height",
+        "cable_type": "PCIe Riser",
+        "cable_length": "N/A",
+        "low_profile_only": false,
+        "dimensions_mm": {
+          "length": 230,
+          "width": 110,
+          "height": 68
+        },
+        "electrical_specs": {
+          "signal_integrity": "PCIe 4.0 compliant",
+          "insertion_loss": "<3dB @ 8GHz",
+          "return_loss": ">10dB @ 8GHz"
+        },
+        "compatible_chassis": [
+          {
+            "brand": "HPE",
+            "models": ["ProLiant DL380 Gen10+"]
+          }
+        ],
+        "slot_compatibility": {
+          "motherboard_connection": "PCIe x16 slot",
+          "expansion_slots": "3x PCIe x8 standard height",
+          "power_passthrough": true,
+          "supports_gpu": false
+        },
+        "UUID": "riser-hpe-dl380-g10p-rsr3-abcd6789"
       }
     ]
   },
   {
-    "component_subtype": "GPU",
-    "brand": "NVIDIA",
-    "series": "Data Center GPUs",
-    "generation": "Ampere",
-    "family": "A100 Series",
+    "component_subtype": "Riser Card",
+    "brand": "Supermicro",
+    "series": "RSC Riser Cards",
+    "generation": "Gen 5",
+    "family": "4U and Tower Riser Cards",
     "models": [
       {
-        "model": "A100 PCIe 40GB",
-        "architecture": "Ampere",
+        "model": "RSC-W4-66G4",
+        "part_number": "RSC-W4-66G4",
         "interface": "PCIe 4.0",
-        "memory": "40GB HBM2e",
-        "memory_bandwidth": "1.6TB/s",
-        "form_factor": "PCIe x16 Dual Slot",
-        "power_consumption": "300W",
+        "pcie_slots": 4,
+        "slot_type": "x16",
+        "form_factor": "4U Standard Height",
+        "cable_type": "Flexible PCIe",
+        "cable_length": "250mm",
+        "low_profile_only": false,
         "dimensions_mm": {
-          "length": 267,
-          "width": 112,
-          "height": 40
+          "length": 280,
+          "width": 140,
+          "height": 75
         },
-        "operating_conditions": {
-          "temperature_range": "0°C to +30°C",
-          "humidity": "10% to 90% non-condensing"
+        "electrical_specs": {
+          "signal_integrity": "PCIe 4.0 compliant",
+          "insertion_loss": "<3dB @ 8GHz",
+          "return_loss": ">10dB @ 8GHz"
         },
-        "inventory": {
-          "quantity_available": 18,
-          "quantity_reserved": 0,
-          "location": "Datacenter A, Rack G1",
-          "rack_position": "GPU Unit 1",
-          "status": "Available",
-          "condition": "New",
-          "purchase_date": "2024-02-15",
-          "warranty_expiration": "2027-02-15",
-          "serial_numbers": [],
-          "sys_score": ""
-        },
-        "features": [
-          "Multi-Instance GPU",
-          "NVLink 3.0",
-          "Sparsity",
-          "PCIe Gen4"
-        ],
-        "compatible_motherboards": [
+        "compatible_chassis": [
           {
             "brand": "Supermicro",
-            "models": ["X13DRG-H", "X13DRi-N"]
-          },
-          {
-            "brand": "ASUS",
-            "models": ["Pro WS W790E-SAGE SE"]
+            "models": ["CSE-847E16", "CSE-846BE1C", "CSE-848E1C"]
           }
         ],
         "slot_compatibility": {
-          "required_slot": "PCIe x16",
-          "low_profile_bracket": false,
-          "power_requirements": "2x 8-pin PCIe"
+          "motherboard_connection": "PCIe x16 slot",
+          "expansion_slots": "4x PCIe x16 standard height",
+          "power_passthrough": true,
+          "supports_gpu": true
         },
-        "UUID": "a100-pcie-40gb-1234-abcd-5678-ef0123456789"
+        "UUID": "riser-4u-w4-66g4-efgh0123"
       },
       {
-        "model": "A100 PCIe 80GB",
-        "architecture": "Ampere",
+        "model": "RSC-W-68G4",
+        "part_number": "RSC-W-68G4",
         "interface": "PCIe 4.0",
-        "memory": "80GB HBM2e",
-        "memory_bandwidth": "2TB/s",
-        "form_factor": "PCIe x16 Dual Slot",
-        "power_consumption": "300W",
+        "pcie_slots": 6,
+        "slot_type": "x8",
+        "form_factor": "4U Standard Height",
+        "cable_type": "Flexible PCIe",
+        "cable_length": "250mm",
+        "low_profile_only": false,
         "dimensions_mm": {
-          "length": 267,
-          "width": 112,
-          "height": 40
+          "length": 320,
+          "width": 140,
+          "height": 75
         },
-        "operating_conditions": {
-          "temperature_range": "0°C to +30°C",
-          "humidity": "10% to 90% non-condensing"
+        "electrical_specs": {
+          "signal_integrity": "PCIe 4.0 compliant",
+          "insertion_loss": "<3dB @ 8GHz",
+          "return_loss": ">10dB @ 8GHz"
         },
-        "inventory": {
-          "quantity_available": 12,
-          "quantity_reserved": 0,
-          "location": "Datacenter A, Rack G1",
-          "rack_position": "GPU Unit 2",
-          "status": "Available",
-          "condition": "New",
-          "purchase_date": "2024-03-01",
-          "warranty_expiration": "2027-03-01",
-          "serial_numbers": [],
-          "sys_score": ""
-        },
-        "features": [
-          "Multi-Instance GPU",
-          "NVLink 3.0",
-          "Sparsity",
-          "PCIe Gen4"
-        ],
-        "compatible_motherboards": [
+        "compatible_chassis": [
           {
             "brand": "Supermicro",
-            "models": ["X13DRG-H", "X13DRi-N"]
-          },
-          {
-            "brand": "ASUS",
-            "models": ["Pro WS W790E-SAGE SE"]
+            "models": ["CSE-847E16", "CSE-846BE1C"]
           }
         ],
         "slot_compatibility": {
-          "required_slot": "PCIe x16",
-          "low_profile_bracket": false,
-          "power_requirements": "2x 8-pin PCIe"
+          "motherboard_connection": "2x PCIe x16 slots",
+          "expansion_slots": "6x PCIe x8 standard height",
+          "power_passthrough": true,
+          "supports_gpu": false
         },
-        "UUID": "a100-pcie-80gb-5678-efab-9012-cdef01234567"
+        "UUID": "riser-4u-w-68g4-ijkl4567"
+      },
+      {
+        "model": "RSC-W2-66",
+        "part_number": "RSC-W2-66",
+        "interface": "PCIe 3.0/4.0",
+        "pcie_slots": 2,
+        "slot_type": "x16",
+        "form_factor": "Tower/Workstation",
+        "cable_type": "Flexible PCIe",
+        "cable_length": "200mm",
+        "low_profile_only": false,
+        "dimensions_mm": {
+          "length": 200,
+          "width": 120,
+          "height": 75
+        },
+        "electrical_specs": {
+          "signal_integrity": "PCIe 4.0 compliant",
+          "insertion_loss": "<3dB @ 8GHz",
+          "return_loss": ">10dB @ 8GHz"
+        },
+        "compatible_chassis": [
+          {
+            "brand": "Supermicro",
+            "models": ["CSE-743T", "CSE-745TQ"]
+          }
+        ],
+        "slot_compatibility": {
+          "motherboard_connection": "PCIe x16 slot",
+          "expansion_slots": "2x PCIe x16 standard height",
+          "power_passthrough": true,
+          "supports_gpu": true
+        },
+        "UUID": "riser-tower-w2-66-mnop8901"
       }
     ]
   },
   {
-    "component_subtype": "GPU",
-    "brand": "AMD",
-    "series": "Instinct Accelerators",
-    "generation": "CDNA 3",
-    "family": "MI300 Series",
+    "component_subtype": "Riser Card",
+    "brand": "ASUS",
+    "series": "Server Riser Cards",
+    "generation": "Gen 4",
+    "family": "RS Series Riser Cards",
     "models": [
       {
-        "model": "MI300X",
-        "architecture": "CDNA 3",
-        "interface": "PCIe 5.0",
-        "memory": "192GB HBM3",
-        "memory_bandwidth": "5.3TB/s",
-        "form_factor": "OAM",
-        "power_consumption": "750W",
+        "model": "PIKE II 3108",
+        "part_number": "PIKE-II-3108",
+        "interface": "PCIe 3.0",
+        "pcie_slots": 1,
+        "slot_type": "x8",
+        "form_factor": "Proprietary",
+        "cable_type": "Direct mount",
+        "cable_length": "N/A",
+        "low_profile_only": false,
         "dimensions_mm": {
-          "length": 300,
-          "width": 120,
-          "height": 50
+          "length": 140,
+          "width": 100,
+          "height": 25
         },
-        "operating_conditions": {
-          "temperature_range": "0°C to +35°C",
-          "humidity": "10% to 90% non-condensing"
+        "electrical_specs": {
+          "signal_integrity": "PCIe 3.0 compliant",
+          "insertion_loss": "<3dB @ 8GHz",
+          "return_loss": ">10dB @ 8GHz"
         },
-        "inventory": {
-          "quantity_available": 4,
-          "quantity_reserved": 0,
-          "location": "Datacenter B, Rack H1",
-          "rack_position": "GPU Unit 1",
-          "status": "Available",
-          "condition": "New",
-          "purchase_date": "2024-06-01",
-          "warranty_expiration": "2027-06-01",
-          "serial_numbers": [],
-          "sys_score": ""
-        },
-        "features": [
-          "Infinity Cache",
-          "ROCm",
-          "Mixed Precision",
-          "ECC Memory"
-        ],
-        "compatible_motherboards": [
-          {
-            "brand": "Supermicro",
-            "models": ["H13DSU-iN"]
-          },
+        "compatible_chassis": [
           {
             "brand": "ASUS",
-            "models": ["Pro WS WRX80E-SAGE SE WIFI"]
+            "models": ["RS720-E9", "RS520-E9"]
           }
         ],
         "slot_compatibility": {
-          "required_slot": "OAM Socket",
-          "low_profile_bracket": false,
-          "power_requirements": "OAM Power Delivery"
+          "motherboard_connection": "PCIe x8 slot",
+          "expansion_slot": "1x PCIe x8 standard height",
+          "power_passthrough": true,
+          "supports_gpu": false
         },
-        "UUID": "mi300x-oam-90ab-cdef-1234-567890abcdef01"
+        "UUID": "riser-asus-pike-3108-qrst2345"
       },
       {
-        "model": "MI300A",
-        "architecture": "CDNA 3",
-        "interface": "PCIe 5.0",
-        "memory": "128GB HBM3",
-        "memory_bandwidth": "5.3TB/s",
-        "form_factor": "OAM",
-        "power_consumption": "760W",
+        "model": "HYPER DUAL Riser",
+        "part_number": "HYPER-DUAL-RSR",
+        "interface": "PCIe 4.0",
+        "pcie_slots": 2,
+        "slot_type": "x16",
+        "form_factor": "2U Standard Height",
+        "cable_type": "Flexible PCIe",
+        "cable_length": "180mm",
+        "low_profile_only": false,
         "dimensions_mm": {
-          "length": 300,
-          "width": 120,
-          "height": 50
+          "length": 210,
+          "width": 115,
+          "height": 70
         },
-        "operating_conditions": {
-          "temperature_range": "0°C to +35°C",
-          "humidity": "10% to 90% non-condensing"
+        "electrical_specs": {
+          "signal_integrity": "PCIe 4.0 compliant",
+          "insertion_loss": "<3dB @ 8GHz",
+          "return_loss": ">10dB @ 8GHz"
         },
-        "inventory": {
-          "quantity_available": 2,
-          "quantity_reserved": 0,
-          "location": "Datacenter B, Rack H1",
-          "rack_position": "GPU Unit 2",
-          "status": "Available",
-          "condition": "New",
-          "purchase_date": "2024-06-15",
-          "warranty_expiration": "2027-06-15",
-          "serial_numbers": [],
-          "sys_score": ""
-        },
-        "features": [
-          "Integrated CPU+GPU",
-          "Infinity Cache",
-          "ROCm",
-          "Unified Memory"
-        ],
-        "compatible_motherboards": [
-          {
-            "brand": "Supermicro",
-            "models": ["H13DSU-iN"]
-          },
+        "compatible_chassis": [
           {
             "brand": "ASUS",
-            "models": ["Pro WS WRX80E-SAGE SE WIFI"]
+            "models": ["RS720A-E11", "RS720-E11"]
           }
         ],
         "slot_compatibility": {
-          "required_slot": "OAM Socket",
-          "low_profile_bracket": false,
-          "power_requirements": "OAM Power Delivery"
+          "motherboard_connection": "PCIe x16 slot",
+          "expansion_slots": "2x PCIe x16 standard height",
+          "power_passthrough": true,
+          "supports_gpu": true
         },
-        "UUID": "mi300a-oam-cdef-0123-4567-89abcdef0123"
+        "UUID": "riser-asus-hyper-dual-uvwx6789"
+      }
+    ]
+  },
+  {
+    "component_subtype": "Riser Card",
+    "brand": "Lenovo",
+    "series": "ThinkSystem Riser Cards",
+    "generation": "Gen 4",
+    "family": "ThinkSystem SR650 V2 Riser Cards",
+    "models": [
+      {
+        "model": "SR650 V2 PCIe FH/FL Riser 1",
+        "part_number": "4XH7A08794",
+        "interface": "PCIe 4.0",
+        "pcie_slots": 1,
+        "slot_type": "x16",
+        "form_factor": "2U Standard Height",
+        "cable_type": "PCIe Riser",
+        "cable_length": "N/A",
+        "low_profile_only": false,
+        "dimensions_mm": {
+          "length": 178,
+          "width": 112,
+          "height": 69
+        },
+        "electrical_specs": {
+          "signal_integrity": "PCIe 4.0 compliant",
+          "insertion_loss": "<3dB @ 8GHz",
+          "return_loss": ">10dB @ 8GHz"
+        },
+        "compatible_chassis": [
+          {
+            "brand": "Lenovo",
+            "models": ["ThinkSystem SR650 V2", "ThinkSystem SR630 V2"]
+          }
+        ],
+        "slot_compatibility": {
+          "motherboard_connection": "PCIe x16 slot",
+          "expansion_slot": "1x PCIe x16 FHFL",
+          "power_passthrough": true,
+          "supports_gpu": true
+        },
+        "UUID": "riser-lenovo-sr650v2-rsr1-yzab0123"
+      },
+      {
+        "model": "SR650 V2 PCIe FH/FL Riser 2",
+        "part_number": "4XH7A08795",
+        "interface": "PCIe 4.0",
+        "pcie_slots": 2,
+        "slot_type": "x16",
+        "form_factor": "2U Standard Height",
+        "cable_type": "PCIe Riser",
+        "cable_length": "N/A",
+        "low_profile_only": false,
+        "dimensions_mm": {
+          "length": 218,
+          "width": 112,
+          "height": 69
+        },
+        "electrical_specs": {
+          "signal_integrity": "PCIe 4.0 compliant",
+          "insertion_loss": "<3dB @ 8GHz",
+          "return_loss": ">10dB @ 8GHz"
+        },
+        "compatible_chassis": [
+          {
+            "brand": "Lenovo",
+            "models": ["ThinkSystem SR650 V2", "ThinkSystem SR630 V2"]
+          }
+        ],
+        "slot_compatibility": {
+          "motherboard_connection": "PCIe x16 slot",
+          "expansion_slots": "2x PCIe x16 FHFL",
+          "power_passthrough": true,
+          "supports_gpu": true
+        },
+        "UUID": "riser-lenovo-sr650v2-rsr2-cdef4567"
+      },
+      {
+        "model": "SR650 V2 PCIe LP Riser",
+        "part_number": "4XH7A08796",
+        "interface": "PCIe 4.0",
+        "pcie_slots": 3,
+        "slot_type": "x8",
+        "form_factor": "2U Low Profile",
+        "cable_type": "PCIe Riser",
+        "cable_length": "N/A",
+        "low_profile_only": true,
+        "dimensions_mm": {
+          "length": 220,
+          "width": 112,
+          "height": 18
+        },
+        "electrical_specs": {
+          "signal_integrity": "PCIe 4.0 compliant",
+          "insertion_loss": "<3dB @ 8GHz",
+          "return_loss": ">10dB @ 8GHz"
+        },
+        "compatible_chassis": [
+          {
+            "brand": "Lenovo",
+            "models": ["ThinkSystem SR650 V2"]
+          }
+        ],
+        "slot_compatibility": {
+          "motherboard_connection": "PCIe x16 slot",
+          "expansion_slots": "3x PCIe x8 low profile",
+          "power_passthrough": true,
+          "supports_gpu": false
+        },
+        "UUID": "riser-lenovo-sr650v2-lp-ghij8901"
+      }
+    ]
+  },
+  {
+    "component_subtype": "Riser Card",
+    "brand": "Cisco",
+    "series": "UCS Riser Cards",
+    "generation": "Gen 4",
+    "family": "UCS C240 M6 Riser Cards",
+    "models": [
+      {
+        "model": "UCS C240 M6 PCIe Riser 1",
+        "part_number": "UCSC-PCI-1C-240M6",
+        "interface": "PCIe 4.0",
+        "pcie_slots": 1,
+        "slot_type": "x16",
+        "form_factor": "2U Standard Height",
+        "cable_type": "PCIe Riser",
+        "cable_length": "N/A",
+        "low_profile_only": false,
+        "dimensions_mm": {
+          "length": 175,
+          "width": 110,
+          "height": 68
+        },
+        "electrical_specs": {
+          "signal_integrity": "PCIe 4.0 compliant",
+          "insertion_loss": "<3dB @ 8GHz",
+          "return_loss": ">10dB @ 8GHz"
+        },
+        "compatible_chassis": [
+          {
+            "brand": "Cisco",
+            "models": ["UCS C240 M6", "UCS C240 M6SX"]
+          }
+        ],
+        "slot_compatibility": {
+          "motherboard_connection": "PCIe x16 slot",
+          "expansion_slot": "1x PCIe x16 standard height",
+          "power_passthrough": true,
+          "supports_gpu": true
+        },
+        "UUID": "riser-cisco-c240m6-rsr1-klmn2345"
+      },
+      {
+        "model": "UCS C240 M6 PCIe Riser 2",
+        "part_number": "UCSC-PCI-2C-240M6",
+        "interface": "PCIe 4.0",
+        "pcie_slots": 2,
+        "slot_type": "x16",
+        "form_factor": "2U Standard Height",
+        "cable_type": "PCIe Riser",
+        "cable_length": "N/A",
+        "low_profile_only": false,
+        "dimensions_mm": {
+          "length": 215,
+          "width": 110,
+          "height": 68
+        },
+        "electrical_specs": {
+          "signal_integrity": "PCIe 4.0 compliant",
+          "insertion_loss": "<3dB @ 8GHz",
+          "return_loss": ">10dB @ 8GHz"
+        },
+        "compatible_chassis": [
+          {
+            "brand": "Cisco",
+            "models": ["UCS C240 M6", "UCS C240 M6SX"]
+          }
+        ],
+        "slot_compatibility": {
+          "motherboard_connection": "PCIe x16 slot",
+          "expansion_slots": "2x PCIe x16 standard height",
+          "power_passthrough": true,
+          "supports_gpu": true
+        },
+        "UUID": "riser-cisco-c240m6-rsr2-opqr6789"
       }
     ]
   }

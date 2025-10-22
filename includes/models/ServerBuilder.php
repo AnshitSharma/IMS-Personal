@@ -16,7 +16,8 @@ class ServerBuilder {
             'motherboard' => 'motherboardinventory',
             'nic' => 'nicinventory',
             'caddy' => 'caddyinventory',
-            'pciecard' => 'pciecardinventory'
+            'pciecard' => 'pciecardinventory',
+            'hbacard' => 'hbacardinventory'
         ];
 
         // Initialize DataExtractionUtilities for JSON spec lookups
@@ -133,8 +134,8 @@ class ServerBuilder {
                     $compatibility = new ComponentCompatibility($this->pdo);
 
                     // Skip JSON validation for storage, nic, caddy, chassis - database UUIDs don't match JSON UUIDs
-                    // Only validate: cpu, motherboard, ram, pciecard
-                    $componentsToValidate = ['cpu', 'motherboard', 'ram', 'pciecard'];
+                    // Only validate: cpu, motherboard, ram, pciecard, hbacard
+                    $componentsToValidate = ['cpu', 'motherboard', 'ram', 'pciecard', 'hbacard'];
                     if (in_array($componentType, $componentsToValidate)) {
                         $existsResult = $compatibility->validateComponentExistsInJSON($componentType, $componentUuid);
                         if (!$existsResult) {
@@ -1813,6 +1814,7 @@ class ServerBuilder {
             'nic' => 25,
             'caddy' => 5,
             'pciecard' => 30,
+            'hbacard' => 20,
             'chassis' => 0  // Chassis doesn't consume power directly
         ];
 
@@ -1902,10 +1904,17 @@ class ServerBuilder {
                     $cardType = strtolower($specs['type'] ?? '');
                     if (strpos($cardType, 'gpu') !== false) {
                         return 75; // Mid-range GPU
-                    } elseif (strpos($cardType, 'raid') !== false || strpos($cardType, 'hba') !== false) {
-                        return 25; // RAID/HBA controllers
+                    } elseif (strpos($cardType, 'raid') !== false) {
+                        return 25; // RAID controllers
                     }
                     return 30; // Default PCIe card
+
+                case 'hbacard':
+                    $specs = $this->dataUtils->getHBACardByUUID($componentUuid);
+                    if ($specs && isset($specs['power_consumption']['typical_W'])) {
+                        return (int)$specs['power_consumption']['typical_W'];
+                    }
+                    return 20; // Default HBA card power
 
                 case 'caddy':
                     return 0; // Caddies don't consume power
@@ -3058,6 +3067,1244 @@ class ServerBuilder {
                 'limits' => null
             ];
         }
+    }
+
+    /**
+     * COMPREHENSIVE Configuration Validation with Detailed Resource Tracking
+     *
+     * Performs in-depth validation of server configuration including:
+     * - Required component presence checks
+     * - Resource availability tracking (slots, bays, ports, lanes)
+     * - Compatibility scoring across all components
+     * - Detailed error/warning/info messages
+     *
+     * @param string $configUuid Server configuration UUID
+     * @return array Comprehensive validation results with scores and resource tracking
+     */
+    public function validateConfigurationComprehensive($configUuid) {
+        try {
+            error_log("=== Starting Comprehensive Validation for config: $configUuid ===");
+
+            // Initialize result structure
+            $result = [
+                'valid' => true,
+                'compatibility_score' => 100,
+                'category_scores' => [
+                    'cpu' => 100,
+                    'motherboard' => 100,
+                    'ram' => 100,
+                    'storage' => 100,
+                    'pcie' => 100,
+                    'nic' => 100,
+                    'chassis' => 100,
+                    'caddy' => 100
+                ],
+                'required_components' => [],
+                'resource_availability' => [],
+                'errors' => [],
+                'warnings' => [],
+                'info' => [],
+                'detailed_checks' => [
+                    'storage_connections' => [],
+                    'pcie_assignments' => [],
+                    'compatibility_matrix' => []
+                ]
+            ];
+
+            // Step 1: Get all components in configuration
+            $stmt = $this->pdo->prepare("
+                SELECT component_type, component_uuid, quantity, slot_position
+                FROM server_configuration_components
+                WHERE config_uuid = ?
+            ");
+            $stmt->execute([$configUuid]);
+            $components = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            if (empty($components)) {
+                $result['valid'] = false;
+                $result['compatibility_score'] = 0;
+                $result['errors'][] = [
+                    'type' => 'no_components',
+                    'message' => 'Configuration has no components'
+                ];
+                return $result;
+            }
+
+            // Step 2: Group components by type
+            $componentsByType = [];
+            foreach ($components as $component) {
+                $type = $component['component_type'];
+                if (!isset($componentsByType[$type])) {
+                    $componentsByType[$type] = [];
+                }
+                $componentsByType[$type][] = $component;
+            }
+
+            // Step 3: REQUIRED COMPONENT VALIDATION
+            $this->validateRequiredComponents($componentsByType, $result);
+
+            // Step 4: SINGLE COMPONENT CONSTRAINTS (motherboard, chassis, HBA)
+            $this->validateSingleComponentConstraints($componentsByType, $result);
+
+            // Step 5: RESOURCE AVAILABILITY TRACKING
+            if (isset($componentsByType['motherboard'])) {
+                $this->trackCPUSocketAvailability($configUuid, $componentsByType, $result);
+                $this->trackRAMSlotAvailability($configUuid, $componentsByType, $result);
+                $this->trackPCIeLaneAvailability($configUuid, $componentsByType, $result);
+            }
+
+            if (isset($componentsByType['chassis'])) {
+                $this->trackStorageBayAvailability($configUuid, $componentsByType, $result);
+            }
+
+            // Step 6: PCIE SLOT VALIDATION (Reuse existing tracker)
+            $this->validatePCIeSlots($configUuid, $result);
+
+            // Step 7: STORAGE CONNECTION VALIDATION (Reuse existing validator)
+            $this->validateStorageConnections($configUuid, $componentsByType, $result);
+
+            // Step 8: CPU COMPATIBILITY CHECKS
+            $this->validateCPUCompatibilityComprehensive($configUuid, $componentsByType, $result);
+
+            // Step 9: RAM COMPATIBILITY CHECKS
+            $this->validateRAMCompatibilityComprehensive($configUuid, $componentsByType, $result);
+
+            // Step 10: CADDY REQUIREMENT VALIDATION
+            $this->validateCaddyRequirements($configUuid, $componentsByType, $result);
+
+            // Step 11: HBA-CHASSIS INTERFACE MATCHING
+            $this->validateHBAChassisInterfaceMatch($componentsByType, $result);
+
+            // Step 12: BUILD COMPREHENSIVE COMPATIBILITY MATRIX
+            $this->buildComprehensiveCompatibilityMatrix($configUuid, $componentsByType, $result);
+
+            // Step 13: CALCULATE FINAL COMPATIBILITY SCORE
+            $this->calculateFinalCompatibilityScore($result);
+
+            error_log("=== Validation Complete: Score={$result['compatibility_score']}, Valid=" . ($result['valid'] ? 'YES' : 'NO') . " ===");
+
+            return $result;
+
+        } catch (Exception $e) {
+            error_log("Error in comprehensive validation: " . $e->getMessage());
+            error_log("Stack trace: " . $e->getTraceAsString());
+            return [
+                'valid' => false,
+                'compatibility_score' => 0,
+                'category_scores' => [],
+                'required_components' => [],
+                'resource_availability' => [],
+                'errors' => [[
+                    'type' => 'validation_exception',
+                    'message' => 'Validation failed: ' . $e->getMessage()
+                ]],
+                'warnings' => [],
+                'info' => [],
+                'detailed_checks' => []
+            ];
+        }
+    }
+
+    /**
+     * Validate presence of required components
+     */
+    private function validateRequiredComponents($componentsByType, &$result) {
+        $requiredComponents = [
+            'chassis' => 'Chassis',
+            'motherboard' => 'Motherboard',
+            'cpu' => 'CPU',
+            'ram' => 'RAM',
+            'storage' => 'Storage',
+            'nic' => 'Network Interface Card (NIC)'
+        ];
+
+        foreach ($requiredComponents as $type => $name) {
+            $present = isset($componentsByType[$type]) && count($componentsByType[$type]) > 0;
+            $count = $present ? count($componentsByType[$type]) : 0;
+
+            $result['required_components'][$type] = [
+                'present' => $present,
+                'count' => $count,
+                'name' => $name
+            ];
+
+            if (!$present) {
+                $result['valid'] = false;
+                $result['compatibility_score'] -= 15;
+                $result['errors'][] = [
+                    'type' => 'missing_required_component',
+                    'component' => $type,
+                    'message' => "Missing required component: $name"
+                ];
+            } else {
+                $result['info'][] = [
+                    'type' => 'component_present',
+                    'message' => "$name: $count component(s) present"
+                ];
+            }
+        }
+    }
+
+    /**
+     * Validate single component constraints (only 1 motherboard, chassis, HBA allowed)
+     */
+    private function validateSingleComponentConstraints($componentsByType, &$result) {
+        // Only one motherboard allowed
+        if (isset($componentsByType['motherboard']) && count($componentsByType['motherboard']) > 1) {
+            $result['valid'] = false;
+            $result['errors'][] = [
+                'type' => 'multiple_motherboards',
+                'message' => 'Configuration has multiple motherboards. Only one motherboard allowed per server.'
+            ];
+            $result['compatibility_score'] -= 20;
+        }
+
+        // Only one chassis allowed
+        if (isset($componentsByType['chassis']) && count($componentsByType['chassis']) > 1) {
+            $result['valid'] = false;
+            $result['errors'][] = [
+                'type' => 'multiple_chassis',
+                'message' => 'Configuration has multiple chassis. Only one chassis allowed per server.'
+            ];
+            $result['compatibility_score'] -= 20;
+        }
+
+        // Only one HBA card allowed
+        if (isset($componentsByType['hbacard']) && count($componentsByType['hbacard']) > 1) {
+            $hbaCount = count($componentsByType['hbacard']);
+            $result['valid'] = false;
+            $result['errors'][] = [
+                'type' => 'multiple_hba_cards',
+                'message' => "Configuration has $hbaCount HBA cards. Only one HBA card allowed per server."
+            ];
+            $result['compatibility_score'] -= 15;
+        }
+    }
+
+    /**
+     * Track CPU socket availability
+     */
+    private function trackCPUSocketAvailability($configUuid, $componentsByType, &$result) {
+        try {
+            $motherboard = $componentsByType['motherboard'][0];
+            $mbSpecs = $this->dataUtils->getMotherboardByUUID($motherboard['component_uuid']);
+
+            if (!$mbSpecs) {
+                $result['warnings'][] = [
+                    'type' => 'motherboard_specs_not_found',
+                    'message' => 'Could not load motherboard specifications'
+                ];
+                return;
+            }
+
+            $maxSockets = $mbSpecs['socket']['count'] ?? 1;
+            $usedSockets = isset($componentsByType['cpu']) ? count($componentsByType['cpu']) : 0;
+            $availableSockets = max(0, $maxSockets - $usedSockets);
+
+            $result['resource_availability']['cpu_sockets'] = [
+                'max' => $maxSockets,
+                'used' => $usedSockets,
+                'available' => $availableSockets
+            ];
+
+            if ($usedSockets > $maxSockets) {
+                $result['valid'] = false;
+                $result['errors'][] = [
+                    'type' => 'cpu_socket_exceeded',
+                    'message' => "Too many CPUs: $usedSockets CPUs but only $maxSockets socket(s) available"
+                ];
+                $result['category_scores']['cpu'] = 0;
+            }
+
+        } catch (Exception $e) {
+            error_log("Error tracking CPU sockets: " . $e->getMessage());
+        }
+    }
+
+    /**
+     * Track RAM slot availability
+     */
+    private function trackRAMSlotAvailability($configUuid, $componentsByType, &$result) {
+        try {
+            $motherboard = $componentsByType['motherboard'][0];
+            $mbSpecs = $this->dataUtils->getMotherboardByUUID($motherboard['component_uuid']);
+
+            if (!$mbSpecs) {
+                return;
+            }
+
+            $maxSlots = $mbSpecs['memory']['slots'] ?? 4;
+            $maxCapacityGB = $mbSpecs['memory']['max_capacity_gb'] ?? 128;
+            $usedSlots = isset($componentsByType['ram']) ? count($componentsByType['ram']) : 0;
+            $availableSlots = max(0, $maxSlots - $usedSlots);
+
+            // Calculate total RAM capacity
+            $totalCapacityGB = 0;
+            if (isset($componentsByType['ram'])) {
+                foreach ($componentsByType['ram'] as $ram) {
+                    $ramSpecs = $this->dataUtils->getRAMByUUID($ram['component_uuid']);
+                    if ($ramSpecs) {
+                        $capacity = $ramSpecs['capacity_gb'] ?? 0;
+                        $totalCapacityGB += $capacity;
+                    }
+                }
+            }
+
+            $result['resource_availability']['ram_slots'] = [
+                'max' => $maxSlots,
+                'used' => $usedSlots,
+                'available' => $availableSlots,
+                'max_capacity_gb' => $maxCapacityGB,
+                'used_capacity_gb' => $totalCapacityGB,
+                'available_capacity_gb' => max(0, $maxCapacityGB - $totalCapacityGB)
+            ];
+
+            if ($usedSlots > $maxSlots) {
+                $result['valid'] = false;
+                $result['errors'][] = [
+                    'type' => 'ram_slot_exceeded',
+                    'message' => "Too many RAM modules: $usedSlots modules but only $maxSlots slot(s) available"
+                ];
+                $result['category_scores']['ram'] = 0;
+            }
+
+            if ($totalCapacityGB > $maxCapacityGB) {
+                $result['valid'] = false;
+                $result['errors'][] = [
+                    'type' => 'ram_capacity_exceeded',
+                    'message' => "RAM capacity exceeded: {$totalCapacityGB}GB installed but maximum is {$maxCapacityGB}GB"
+                ];
+                $result['category_scores']['ram'] = max(0, $result['category_scores']['ram'] - 30);
+            }
+
+        } catch (Exception $e) {
+            error_log("Error tracking RAM slots: " . $e->getMessage());
+        }
+    }
+
+    /**
+     * Track PCIe lane availability (CPU + Chipset lanes)
+     */
+    private function trackPCIeLaneAvailability($configUuid, $componentsByType, &$result) {
+        try {
+            $totalLanes = 0;
+            $laneSources = [];
+
+            // Get CPU PCIe lanes
+            if (isset($componentsByType['cpu'])) {
+                $cpuIndex = 1;
+                foreach ($componentsByType['cpu'] as $cpu) {
+                    $cpuSpecs = $this->dataUtils->getCPUByUUID($cpu['component_uuid']);
+                    if ($cpuSpecs) {
+                        $lanes = $cpuSpecs['pcie_lanes'] ?? 0;
+                        $totalLanes += $lanes;
+                        $laneSources[] = "CPU $cpuIndex: $lanes lanes";
+                        $cpuIndex++;
+                    }
+                }
+            }
+
+            // Get chipset PCIe lanes from motherboard
+            if (isset($componentsByType['motherboard'])) {
+                $motherboard = $componentsByType['motherboard'][0];
+                $mbSpecs = $this->dataUtils->getMotherboardByUUID($motherboard['component_uuid']);
+                if ($mbSpecs) {
+                    $chipsetLanes = $mbSpecs['chipset_pcie_lanes'] ?? 0;
+                    $totalLanes += $chipsetLanes;
+                    $laneSources[] = "Chipset: $chipsetLanes lanes";
+                }
+            }
+
+            // Calculate used lanes from PCIe cards, HBA cards and NICs
+            $usedLanes = 0;
+            if (isset($componentsByType['pciecard'])) {
+                foreach ($componentsByType['pciecard'] as $card) {
+                    $cardSpecs = $this->dataUtils->getPCIeCardByUUID($card['component_uuid']);
+                    if ($cardSpecs) {
+                        $interface = $cardSpecs['interface'] ?? '';
+                        if (preg_match('/x(\d+)/i', $interface, $matches)) {
+                            $usedLanes += (int)$matches[1];
+                        }
+                    }
+                }
+            }
+
+            if (isset($componentsByType['hbacard'])) {
+                foreach ($componentsByType['hbacard'] as $card) {
+                    $cardSpecs = $this->dataUtils->getHBACardByUUID($card['component_uuid']);
+                    if ($cardSpecs) {
+                        $interface = $cardSpecs['interface'] ?? '';
+                        if (preg_match('/x(\d+)/i', $interface, $matches)) {
+                            $usedLanes += (int)$matches[1];
+                        }
+                    }
+                }
+            }
+
+            if (isset($componentsByType['nic'])) {
+                foreach ($componentsByType['nic'] as $nic) {
+                    // Most NICs use x4 or x8, default to x4
+                    $usedLanes += 4;
+                }
+            }
+
+            // Account for NVMe storage that uses PCIe slots (not M.2)
+            if (isset($componentsByType['storage'])) {
+                foreach ($componentsByType['storage'] as $storage) {
+                    $storageSpecs = $this->dataUtils->getStorageByUUID($storage['component_uuid']);
+                    if ($storageSpecs) {
+                        $interface = strtolower($storageSpecs['interface'] ?? '');
+                        $formFactor = strtolower($storageSpecs['form_factor'] ?? '');
+
+                        // Only count non-M.2 NVMe (U.2, PCIe add-in cards)
+                        $isM2 = (strpos($formFactor, 'm.2') !== false || strpos($formFactor, 'm2') !== false);
+                        $isNVMe = (strpos($interface, 'nvme') !== false || strpos($interface, 'pcie') !== false);
+
+                        if ($isNVMe && !$isM2) {
+                            $usedLanes += 4; // U.2 or PCIe add-in NVMe typically uses x4
+                        }
+                    }
+                }
+            }
+
+            $availableLanes = max(0, $totalLanes - $usedLanes);
+
+            $result['resource_availability']['pcie_lanes'] = [
+                'total' => $totalLanes,
+                'used' => $usedLanes,
+                'available' => $availableLanes,
+                'sources' => $laneSources
+            ];
+
+            if ($usedLanes > $totalLanes) {
+                $result['warnings'][] = [
+                    'type' => 'pcie_lanes_exceeded',
+                    'message' => "PCIe lane budget exceeded: $usedLanes lanes used but only $totalLanes lanes available. Some devices may run at reduced bandwidth."
+                ];
+                $result['category_scores']['pcie'] = max(0, $result['category_scores']['pcie'] - 20);
+            }
+
+        } catch (Exception $e) {
+            error_log("Error tracking PCIe lanes: " . $e->getMessage());
+        }
+    }
+
+    /**
+     * Track storage bay availability
+     */
+    private function trackStorageBayAvailability($configUuid, $componentsByType, &$result) {
+        try {
+            $chassis = $componentsByType['chassis'][0];
+            $chassisSpecs = $this->dataUtils->getChassisSpecifications($chassis['component_uuid']);
+
+            if (!$chassisSpecs) {
+                $result['warnings'][] = [
+                    'type' => 'chassis_specs_not_found',
+                    'message' => 'Could not load chassis specifications'
+                ];
+                return;
+            }
+
+            $driveBays = $chassisSpecs['drive_bays'] ?? [];
+            $totalBays = $driveBays['total_bays'] ?? 0;
+            $bayConfiguration = $driveBays['bay_configuration'] ?? [];
+
+            // CRITICAL: Only count storage devices that connect via chassis backplane
+            // Storage connecting via motherboard M.2/SATA does NOT use chassis bays
+            $usedBays = 0;
+            $backplaneStorageList = [];
+
+            if (isset($componentsByType['storage'])) {
+                require_once __DIR__ . '/StorageConnectionValidator.php';
+                $storageValidator = new StorageConnectionValidator($this->pdo);
+                $existingComponents = $this->getExistingComponentsForValidation($configUuid);
+
+                foreach ($componentsByType['storage'] as $storage) {
+                    $validation = $storageValidator->validate($configUuid, $storage['component_uuid'], $existingComponents);
+
+                    // Check if primary connection path is chassis bay
+                    if ($validation['valid'] && isset($validation['primary_path'])) {
+                        if ($validation['primary_path']['type'] === 'chassis_bay') {
+                            $usedBays++;
+
+                            $storageSpecs = $this->dataUtils->getStorageByUUID($storage['component_uuid']);
+                            $backplaneStorageList[] = [
+                                'uuid' => $storage['component_uuid'],
+                                'model' => $storageSpecs['model'] ?? 'Unknown',
+                                'form_factor' => $storageSpecs['form_factor'] ?? 'Unknown'
+                            ];
+                        }
+                    }
+                }
+            }
+
+            $availableBays = max(0, $totalBays - $usedBays);
+
+            $result['resource_availability']['storage_bays'] = [
+                'max' => $totalBays,
+                'used' => $usedBays,
+                'available' => $availableBays,
+                'bay_configuration' => $bayConfiguration,
+                'backplane_connected_storage' => $backplaneStorageList
+            ];
+
+            if ($usedBays > $totalBays) {
+                $result['valid'] = false;
+                $result['errors'][] = [
+                    'type' => 'storage_bay_exceeded',
+                    'message' => "Too many storage devices connected to chassis backplane: $usedBays devices but only $totalBays bay(s) available"
+                ];
+                $result['category_scores']['storage'] = 0;
+            }
+
+        } catch (Exception $e) {
+            error_log("Error tracking storage bays: " . $e->getMessage());
+        }
+    }
+
+    /**
+     * Validate PCIe slot assignments using existing PCIeSlotTracker
+     */
+    private function validatePCIeSlots($configUuid, &$result) {
+        try {
+            require_once __DIR__ . '/PCIeSlotTracker.php';
+            $slotTracker = new PCIeSlotTracker($this->pdo);
+
+            $pcieValidation = $slotTracker->validateAllSlots($configUuid);
+
+            // Track slot availability
+            if ($pcieValidation['valid']) {
+                $slotAvailability = $slotTracker->getSlotAvailability($configUuid);
+
+                if ($slotAvailability['success']) {
+                    $slotSummary = [];
+                    foreach ($slotAvailability['total_slots'] as $slotSize => $slots) {
+                        $usedCount = 0;
+                        foreach ($slotAvailability['used_slots'] as $slotId => $componentUuid) {
+                            if (strpos($slotId, $slotSize) !== false) {
+                                $usedCount++;
+                            }
+                        }
+
+                        $slotSummary[$slotSize] = [
+                            'max' => count($slots),
+                            'used' => $usedCount,
+                            'available' => count($slots) - $usedCount
+                        ];
+                    }
+
+                    $result['resource_availability']['pcie_slots'] = $slotSummary;
+                }
+            }
+
+            // Add PCIe validation results
+            $result['detailed_checks']['pcie_assignments'] = $pcieValidation;
+
+            if (!$pcieValidation['valid']) {
+                $result['valid'] = false;
+                $result['errors'] = array_merge($result['errors'], array_map(function($err) {
+                    return ['type' => 'pcie_slot_error', 'message' => $err];
+                }, $pcieValidation['errors']));
+                $result['category_scores']['pcie'] = 0;
+            }
+
+            if (!empty($pcieValidation['warnings'])) {
+                $result['warnings'] = array_merge($result['warnings'], array_map(function($warn) {
+                    return ['type' => 'pcie_slot_warning', 'message' => $warn];
+                }, $pcieValidation['warnings']));
+                $result['category_scores']['pcie'] = max(0, $result['category_scores']['pcie'] - 10);
+            }
+
+        } catch (Exception $e) {
+            error_log("Error validating PCIe slots: " . $e->getMessage());
+            $result['warnings'][] = [
+                'type' => 'pcie_validation_error',
+                'message' => 'PCIe slot validation could not be completed: ' . $e->getMessage()
+            ];
+        }
+    }
+
+    /**
+     * Validate storage connections using existing StorageConnectionValidator
+     */
+    private function validateStorageConnections($configUuid, $componentsByType, &$result) {
+        try {
+            if (!isset($componentsByType['storage'])) {
+                return; // No storage to validate
+            }
+
+            require_once __DIR__ . '/StorageConnectionValidator.php';
+            $storageValidator = new StorageConnectionValidator($this->pdo);
+
+            // Get existing components for validation
+            $existingComponents = $this->getExistingComponentsForValidation($configUuid);
+
+            $storageResults = [];
+            $caddyRequired = 0;
+            $caddyAvailable = isset($componentsByType['caddy']) ? count($componentsByType['caddy']) : 0;
+            $caddiesNeeded = []; // Track which storage devices need caddies
+
+            foreach ($componentsByType['storage'] as $storage) {
+                $validation = $storageValidator->validate($configUuid, $storage['component_uuid'], $existingComponents);
+
+                // Create simplified storage connection entry
+                $storageSpecs = $this->dataUtils->getStorageByUUID($storage['component_uuid']);
+                $simplifiedEntry = [
+                    'storage_uuid' => $storage['component_uuid'],
+                    'interface' => strtoupper($storageSpecs['interface'] ?? 'Unknown'),
+                    'form_factor' => $storageSpecs['form_factor'] ?? 'Unknown',
+                    'valid' => $validation['valid'],
+                    'primary_path' => [
+                        'type' => $validation['primary_path']['type'] ?? 'none',
+                        'description' => $validation['primary_path']['description'] ?? 'No connection available'
+                    ]
+                ];
+
+                // Add only if there are errors or warnings
+                if (!empty($validation['errors'])) {
+                    $simplifiedEntry['errors'] = $validation['errors'];
+                }
+                if (!empty($validation['warnings'])) {
+                    $simplifiedEntry['warnings'] = $validation['warnings'];
+                }
+
+                $storageResults[] = $simplifiedEntry;
+
+                // CRITICAL: Check if storage connects via chassis backplane
+                $usesBackplane = false;
+                if ($validation['valid'] && isset($validation['primary_path'])) {
+                    if ($validation['primary_path']['type'] === 'chassis_bay') {
+                        $usesBackplane = true;
+                        $caddyRequired++;
+
+                        // Get storage specs to determine caddy form factor requirement
+                        $storageSpecs = $this->dataUtils->getStorageByUUID($storage['component_uuid']);
+                        $formFactor = $storageSpecs['form_factor'] ?? 'Unknown';
+
+                        $caddiesNeeded[] = [
+                            'storage_uuid' => $storage['component_uuid'],
+                            'form_factor' => $formFactor,
+                            'connection_type' => 'chassis_backplane'
+                        ];
+                    }
+                }
+
+                // Also check for caddy warnings from validator (2.5" in 3.5" bay scenarios)
+                if (!empty($validation['warnings'])) {
+                    foreach ($validation['warnings'] as $warning) {
+                        if (isset($warning['type']) && $warning['type'] === 'caddy_recommended') {
+                            // Only increment if not already counted above
+                            if (!$usesBackplane) {
+                                $caddyRequired++;
+
+                                $storageSpecs = $this->dataUtils->getStorageByUUID($storage['component_uuid']);
+                                $formFactor = $storageSpecs['form_factor'] ?? 'Unknown';
+
+                                $caddiesNeeded[] = [
+                                    'storage_uuid' => $storage['component_uuid'],
+                                    'form_factor' => $formFactor,
+                                    'connection_type' => 'size_adapter'
+                                ];
+                            }
+                        }
+                    }
+                }
+
+                if (!$validation['valid']) {
+                    $result['valid'] = false;
+                    $result['errors'] = array_merge($result['errors'], array_map(function($err) use ($storage) {
+                        return [
+                            'type' => 'storage_connection_error',
+                            'storage_uuid' => $storage['component_uuid'],
+                            'message' => $err['message'] ?? $err
+                        ];
+                    }, $validation['errors']));
+                    $result['category_scores']['storage'] = 0;
+                }
+
+                if (!empty($validation['warnings'])) {
+                    $result['warnings'] = array_merge($result['warnings'], array_map(function($warn) use ($storage) {
+                        return [
+                            'type' => 'storage_connection_warning',
+                            'storage_uuid' => $storage['component_uuid'],
+                            'message' => $warn['message'] ?? $warn
+                        ];
+                    }, $validation['warnings']));
+                    $result['category_scores']['storage'] = max(0, $result['category_scores']['storage'] - 5);
+                }
+            }
+
+            $result['detailed_checks']['storage_connections'] = $storageResults;
+
+            // Validate caddy availability and form factor matching
+            $caddyErrors = [];
+            $caddyWarnings = [];
+
+            if ($caddyRequired > 0) {
+                // Get all caddies in configuration
+                $availableCaddies = [];
+                if (isset($componentsByType['caddy'])) {
+                    // Load caddy JSON specifications
+                    $caddyJsonPath = __DIR__ . '/../../All-JSON/caddy-jsons/caddy_details.json';
+                    $caddySpecs = [];
+                    if (file_exists($caddyJsonPath)) {
+                        $caddyJson = json_decode(file_get_contents($caddyJsonPath), true);
+                        if (isset($caddyJson['caddies'])) {
+                            foreach ($caddyJson['caddies'] as $spec) {
+                                if (isset($spec['uuid'])) {
+                                    $caddySpecs[$spec['uuid']] = $spec;
+                                }
+                            }
+                        }
+                    }
+
+                    foreach ($componentsByType['caddy'] as $caddy) {
+                        $caddyUuid = $caddy['component_uuid'];
+                        $size = 'Unknown';
+
+                        // Try to get size from JSON specifications first
+                        if (isset($caddySpecs[$caddyUuid]) && isset($caddySpecs[$caddyUuid]['compatibility']['size'])) {
+                            $size = $caddySpecs[$caddyUuid]['compatibility']['size'];
+                        } else {
+                            // Fallback to Notes field if JSON not found
+                            $stmt = $this->pdo->prepare("SELECT Notes FROM caddyinventory WHERE UUID = ?");
+                            $stmt->execute([$caddyUuid]);
+                            $caddyData = $stmt->fetch(PDO::FETCH_ASSOC);
+
+                            if ($caddyData) {
+                                $notes = $caddyData['Notes'] ?? '';
+                                if (preg_match('/2\.5[\s\-]?inch/i', $notes)) {
+                                    $size = '2.5-inch';
+                                } elseif (preg_match('/3\.5[\s\-]?inch/i', $notes)) {
+                                    $size = '3.5-inch';
+                                }
+                            }
+                        }
+
+                        $availableCaddies[] = [
+                            'uuid' => $caddyUuid,
+                            'size' => $size
+                        ];
+                    }
+                }
+
+                // Match caddies to storage devices
+                foreach ($caddiesNeeded as $need) {
+                    $matchFound = false;
+                    $storageFormFactor = $need['form_factor'];
+
+                    // Normalize form factor to caddy size format
+                    $requiredCaddySize = null;
+                    if (stripos($storageFormFactor, '2.5') !== false || stripos($storageFormFactor, '2.5"') !== false) {
+                        $requiredCaddySize = '2.5';
+                    } elseif (stripos($storageFormFactor, '3.5') !== false || stripos($storageFormFactor, '3.5"') !== false) {
+                        $requiredCaddySize = '3.5';
+                    }
+
+                    foreach ($availableCaddies as $idx => $caddy) {
+                        if ($requiredCaddySize && stripos($caddy['size'], $requiredCaddySize) !== false) {
+                            $matchFound = true;
+                            unset($availableCaddies[$idx]); // Remove matched caddy
+                            break;
+                        }
+                    }
+
+                    if (!$matchFound) {
+                        $caddyErrors[] = [
+                            'type' => 'missing_caddy',
+                            'storage_uuid' => $need['storage_uuid'],
+                            'required_form_factor' => $storageFormFactor,
+                            'message' => "Storage device ({$need['storage_uuid']}) requires {$storageFormFactor} caddy for {$need['connection_type']} connection"
+                        ];
+                    }
+                }
+
+                // Add errors to result
+                if (!empty($caddyErrors)) {
+                    $result['valid'] = false;
+                    $result['errors'] = array_merge($result['errors'], $caddyErrors);
+                    $result['category_scores']['storage'] = max(0, $result['category_scores']['storage'] - 20);
+                }
+            }
+
+            // Track caddy availability with details
+            $result['resource_availability']['caddies'] = [
+                'required' => $caddyRequired,
+                'available' => $caddyAvailable,
+                'missing' => max(0, $caddyRequired - $caddyAvailable),
+                'details' => $caddiesNeeded
+            ];
+
+            // Don't add summary error if specific caddy errors already added (avoid duplicate penalty)
+            // The specific errors above already provide detailed information
+
+        } catch (Exception $e) {
+            error_log("Error validating storage connections: " . $e->getMessage());
+            $result['warnings'][] = [
+                'type' => 'storage_validation_error',
+                'message' => 'Storage validation could not be completed: ' . $e->getMessage()
+            ];
+        }
+    }
+
+    /**
+     * Validate CPU compatibility (socket, dual CPU warnings) - Comprehensive validation
+     */
+    private function validateCPUCompatibilityComprehensive($configUuid, $componentsByType, &$result) {
+        try {
+            if (!isset($componentsByType['cpu']) || !isset($componentsByType['motherboard'])) {
+                return;
+            }
+
+            require_once __DIR__ . '/ComponentCompatibility.php';
+            $compatibility = new ComponentCompatibility($this->pdo);
+
+            $motherboard = $componentsByType['motherboard'][0];
+            $mbSpecs = $this->dataUtils->getMotherboardByUUID($motherboard['component_uuid']);
+
+            if (!$mbSpecs) {
+                return;
+            }
+
+            $cpuModels = [];
+            foreach ($componentsByType['cpu'] as $cpu) {
+                $cpuSpecs = $this->dataUtils->getCPUByUUID($cpu['component_uuid']);
+
+                // Socket compatibility check
+                $socketResult = $compatibility->validateCPUSocketCompatibility($cpu['component_uuid'], [
+                    'cpu' => [
+                        'socket_type' => $mbSpecs['socket']['type'] ?? 'Unknown'
+                    ]
+                ]);
+
+                if (!$socketResult['compatible']) {
+                    $result['valid'] = false;
+                    $result['errors'][] = [
+                        'type' => 'cpu_socket_incompatible',
+                        'cpu_uuid' => $cpu['component_uuid'],
+                        'message' => $socketResult['error']
+                    ];
+                    $result['category_scores']['cpu'] = 0;
+                }
+
+                if ($cpuSpecs) {
+                    $cpuModels[] = $cpuSpecs['model'] ?? 'Unknown';
+                }
+            }
+
+            // Dual CPU warning if different models
+            if (count($cpuModels) === 2 && $cpuModels[0] !== $cpuModels[1]) {
+                $result['warnings'][] = [
+                    'type' => 'dual_cpu_different_models',
+                    'message' => "Dual CPUs detected with different models ({$cpuModels[0]} and {$cpuModels[1]}). This may cause performance issues or system instability."
+                ];
+                // Don't reduce category score - warning penalty is already applied in final calculation
+                // This prevents double penalty (was -15 category + -3 warning = -18 total)
+            }
+
+        } catch (Exception $e) {
+            error_log("Error validating CPU compatibility: " . $e->getMessage());
+        }
+    }
+
+    /**
+     * Validate RAM compatibility (type, speed, capacity) - Comprehensive validation
+     */
+    private function validateRAMCompatibilityComprehensive($configUuid, $componentsByType, &$result) {
+        try {
+            if (!isset($componentsByType['ram']) || !isset($componentsByType['motherboard'])) {
+                return;
+            }
+
+            require_once __DIR__ . '/ComponentCompatibility.php';
+            $compatibility = new ComponentCompatibility($this->pdo);
+
+            $motherboard = $componentsByType['motherboard'][0];
+            $mbSpecs = $this->dataUtils->getMotherboardByUUID($motherboard['component_uuid']);
+
+            if (!$mbSpecs) {
+                return;
+            }
+
+            foreach ($componentsByType['ram'] as $ram) {
+                // Type compatibility check - pass full motherboard specs for flexible field handling
+                $typeResult = $compatibility->validateRAMTypeCompatibility($ram['component_uuid'], $mbSpecs);
+
+                if (!$typeResult['compatible']) {
+                    $result['valid'] = false;
+                    $result['errors'][] = [
+                        'type' => 'ram_type_incompatible',
+                        'ram_uuid' => $ram['component_uuid'],
+                        'message' => $typeResult['error']
+                    ];
+                    $result['category_scores']['ram'] = 0;
+                }
+            }
+
+        } catch (Exception $e) {
+            error_log("Error validating RAM compatibility: " . $e->getMessage());
+        }
+    }
+
+    /**
+     * Validate caddy requirements for storage devices
+     */
+    private function validateCaddyRequirements($configUuid, $componentsByType, &$result) {
+        try {
+            if (!isset($componentsByType['storage']) || !isset($componentsByType['chassis'])) {
+                return;
+            }
+
+            // This is already handled in validateStorageConnections
+            // Kept as separate method for clarity and future enhancements
+
+        } catch (Exception $e) {
+            error_log("Error validating caddy requirements: " . $e->getMessage());
+        }
+    }
+
+    /**
+     * Validate HBA card interface matches chassis backplane interface
+     */
+    private function validateHBAChassisInterfaceMatch($componentsByType, &$result) {
+        try {
+            if (!isset($componentsByType['chassis']) || !isset($componentsByType['hbacard'])) {
+                return;
+            }
+
+            // Find HBA card
+            $hbaCard = null;
+            if (isset($componentsByType['hbacard']) && !empty($componentsByType['hbacard'])) {
+                $card = $componentsByType['hbacard'][0];
+                $hbaCard = $this->dataUtils->getHBACardByUUID($card['component_uuid']);
+            }
+
+            if (!$hbaCard) {
+                return; // No HBA card, skip check
+            }
+
+            // Get chassis backplane interface
+            $chassis = $componentsByType['chassis'][0];
+            $chassisSpecs = $this->dataUtils->getChassisSpecifications($chassis['component_uuid']);
+
+            if (!$chassisSpecs) {
+                return;
+            }
+
+            $backplane = $chassisSpecs['backplane'] ?? [];
+            $backplaneInterface = strtoupper($backplane['interface'] ?? 'Unknown');
+            $hbaInterface = strtoupper($hbaCard['interface'] ?? 'Unknown');
+
+            // Extract protocol from interfaces
+            $backplaneProtocol = '';
+            if (strpos($backplaneInterface, 'SATA') !== false) $backplaneProtocol = 'SATA';
+            if (strpos($backplaneInterface, 'SAS') !== false) $backplaneProtocol = 'SAS';
+
+            $hbaProtocol = '';
+            if (strpos($hbaInterface, 'SATA') !== false) $hbaProtocol = 'SATA';
+            if (strpos($hbaInterface, 'SAS') !== false) $hbaProtocol = 'SAS';
+
+            // SAS HBA can support SATA (backward compatible), but SATA HBA cannot support SAS
+            if ($backplaneProtocol === 'SAS' && $hbaProtocol === 'SATA') {
+                $result['valid'] = false;
+                $result['errors'][] = [
+                    'type' => 'hba_chassis_interface_mismatch',
+                    'message' => "HBA card interface ($hbaInterface) incompatible with chassis backplane ($backplaneInterface). SAS backplane requires SAS HBA."
+                ];
+                $result['category_scores']['storage'] = 0;
+            } elseif ($backplaneProtocol === 'SATA' && $hbaProtocol === 'SAS') {
+                // This is OK - SAS HBA can handle SATA backplane
+                $result['info'][] = [
+                    'type' => 'hba_chassis_compatible',
+                    'message' => "SAS HBA is compatible with SATA backplane (backward compatible)"
+                ];
+            } elseif ($backplaneProtocol !== $hbaProtocol && $backplaneProtocol && $hbaProtocol) {
+                $result['warnings'][] = [
+                    'type' => 'hba_chassis_interface_mismatch',
+                    'message' => "HBA interface ($hbaInterface) may not match chassis backplane ($backplaneInterface). Verify compatibility."
+                ];
+                $result['category_scores']['storage'] = max(0, $result['category_scores']['storage'] - 10);
+            }
+
+        } catch (Exception $e) {
+            error_log("Error validating HBA-chassis interface match: " . $e->getMessage());
+        }
+    }
+
+    /**
+     * Build comprehensive compatibility matrix showing ALL component pair validations
+     */
+    private function buildComprehensiveCompatibilityMatrix($configUuid, $componentsByType, &$result) {
+        try {
+            require_once __DIR__ . '/ComponentCompatibility.php';
+            $compatibility = new ComponentCompatibility($this->pdo);
+
+            $matrix = [];
+
+            // Get component specs
+            $motherboard = isset($componentsByType['motherboard']) ? $componentsByType['motherboard'][0] : null;
+            $chassis = isset($componentsByType['chassis']) ? $componentsByType['chassis'][0] : null;
+
+            $mbSpecs = $motherboard ? $this->dataUtils->getMotherboardByUUID($motherboard['component_uuid']) : null;
+            $chassisSpecs = $chassis ? $this->dataUtils->getChassisSpecifications($chassis['component_uuid']) : null;
+
+            // 1. MOTHERBOARD ↔ CPU COMPATIBILITY
+            if ($motherboard && isset($componentsByType['cpu'])) {
+                $cpuList = [];
+                $allCompatible = true;
+                foreach ($componentsByType['cpu'] as $cpu) {
+                    $cpuSpecs = $this->dataUtils->getCPUByUUID($cpu['component_uuid']);
+                    $socketResult = $compatibility->validateCPUSocketCompatibility($cpu['component_uuid'], [
+                        'cpu' => ['socket_type' => $mbSpecs['socket']['type'] ?? 'Unknown']
+                    ]);
+
+                    if (!$socketResult['compatible']) {
+                        $allCompatible = false;
+                    }
+
+                    $cpuList[] = [
+                        'model' => $cpuSpecs['model'] ?? 'Unknown',
+                        'compatible' => $socketResult['compatible']
+                    ];
+                }
+
+                $matrix[] = [
+                    'pair' => 'motherboard_cpu',
+                    'check' => 'Socket: ' . ($mbSpecs['socket']['type'] ?? 'Unknown'),
+                    'count' => count($cpuList),
+                    'items' => $cpuList,
+                    'compatible' => $allCompatible
+                ];
+            }
+
+            // 2. MOTHERBOARD ↔ RAM COMPATIBILITY
+            if ($motherboard && isset($componentsByType['ram'])) {
+                $ramList = [];
+                $allCompatible = true;
+                foreach ($componentsByType['ram'] as $ram) {
+                    $ramSpecs = $this->dataUtils->getRAMByUUID($ram['component_uuid']);
+                    $typeResult = $compatibility->validateRAMTypeCompatibility($ram['component_uuid'], $mbSpecs);
+
+                    if (!$typeResult['compatible']) {
+                        $allCompatible = false;
+                    }
+
+                    $ramList[] = [
+                        'type' => $ramSpecs['memory_type'] ?? 'Unknown',
+                        'compatible' => $typeResult['compatible']
+                    ];
+                }
+
+                // Get supported RAM types - handle both 'type' and 'types' fields
+                $supportedTypes = $mbSpecs['memory']['types'] ?? [$mbSpecs['memory']['type'] ?? 'DDR4'];
+                $matrix[] = [
+                    'pair' => 'motherboard_ram',
+                    'check' => 'Type: ' . implode('/', $supportedTypes),
+                    'count' => count($ramList),
+                    'items' => $ramList,
+                    'compatible' => $allCompatible
+                ];
+            }
+
+            // 3. STORAGE CONNECTIVITY (Use actual validation results)
+            if (isset($componentsByType['storage'])) {
+                $storageList = [];
+                $allCompatible = true;
+
+                // Reuse the storage validation results from detailed_checks
+                if (isset($result['detailed_checks']['storage_connections'])) {
+                    foreach ($result['detailed_checks']['storage_connections'] as $storageValidation) {
+                        $storageSpecs = $this->dataUtils->getStorageByUUID($storageValidation['storage_uuid']);
+                        $interface = strtoupper($storageSpecs['interface'] ?? 'Unknown');
+
+                        $compatible = $storageValidation['validation']['valid'];
+                        $connectionPath = 'No path';
+
+                        // Extract connection path from primary_path
+                        if (isset($storageValidation['validation']['primary_path'])) {
+                            $primaryPath = $storageValidation['validation']['primary_path'];
+                            switch ($primaryPath['type']) {
+                                case 'chassis_bay':
+                                    $connectionPath = 'Chassis backplane';
+                                    break;
+                                case 'motherboard_m2':
+                                    $connectionPath = 'Motherboard M.2';
+                                    break;
+                                case 'motherboard_sata':
+                                    $connectionPath = 'Motherboard SATA';
+                                    break;
+                                case 'hba_card':
+                                    $connectionPath = 'HBA Card';
+                                    break;
+                                case 'pcie_adapter':
+                                    $connectionPath = 'PCIe Adapter';
+                                    break;
+                                default:
+                                    $connectionPath = ucwords(str_replace('_', ' ', $primaryPath['type']));
+                            }
+                        }
+
+                        if (!$compatible) {
+                            $allCompatible = false;
+                        }
+
+                        $storageList[] = [
+                            'interface' => $interface,
+                            'path' => $connectionPath,
+                            'compatible' => $compatible
+                        ];
+                    }
+                }
+
+                $matrix[] = [
+                    'pair' => 'storage_connectivity',
+                    'check' => 'All storage devices have valid connection path',
+                    'count' => count($storageList),
+                    'items' => $storageList,
+                    'compatible' => $allCompatible
+                ];
+            }
+
+            // 4. PCIE CARDS COMPATIBILITY
+            if ($motherboard && isset($componentsByType['pciecard'])) {
+                $pcieList = [];
+                $allCompatible = true;
+                foreach ($componentsByType['pciecard'] as $card) {
+                    $cardSpecs = $this->dataUtils->getPCIeCardByUUID($card['component_uuid']);
+                    $cardType = $cardSpecs['component_subtype'] ?? 'PCIe Card';
+
+                    // Check if motherboard has available slots (basic check)
+                    $compatible = isset($mbSpecs['expansion_slots']) && !empty($mbSpecs['expansion_slots']);
+
+                    if (!$compatible) {
+                        $allCompatible = false;
+                    }
+
+                    $pcieList[] = [
+                        'type' => $cardType,
+                        'compatible' => $compatible
+                    ];
+                }
+
+                $matrix[] = [
+                    'pair' => 'pcie_cards',
+                    'check' => 'PCIe slot availability',
+                    'count' => count($pcieList),
+                    'items' => $pcieList,
+                    'compatible' => $allCompatible
+                ];
+            }
+
+            // 4b. HBA CARDS COMPATIBILITY
+            if ($motherboard && isset($componentsByType['hbacard'])) {
+                $hbaList = [];
+                $allCompatible = true;
+                foreach ($componentsByType['hbacard'] as $card) {
+                    $cardSpecs = $this->dataUtils->getHBACardByUUID($card['component_uuid']);
+                    $cardType = 'HBA Card';
+
+                    // Check if motherboard has available slots (basic check)
+                    $compatible = isset($mbSpecs['expansion_slots']) && !empty($mbSpecs['expansion_slots']);
+
+                    if (!$compatible) {
+                        $allCompatible = false;
+                    }
+
+                    $hbaList[] = [
+                        'type' => $cardType,
+                        'model' => $cardSpecs['model'] ?? 'Unknown',
+                        'compatible' => $compatible
+                    ];
+                }
+
+                $matrix[] = [
+                    'pair' => 'hba_cards',
+                    'check' => 'HBA slot availability',
+                    'count' => count($hbaList),
+                    'items' => $hbaList,
+                    'compatible' => $allCompatible
+                ];
+            }
+
+            // 5. CHASSIS ↔ MOTHERBOARD FORM FACTOR
+            if ($chassis && $motherboard) {
+                $chassisFormFactor = $chassisSpecs['form_factor'] ?? 'Unknown';
+                $mbFormFactor = $mbSpecs['form_factor'] ?? 'Unknown';
+                $compatible = (stripos($chassisFormFactor, $mbFormFactor) !== false);
+
+                $matrix[] = [
+                    'pair' => 'chassis_motherboard',
+                    'check' => "$chassisFormFactor ↔ $mbFormFactor",
+                    'compatible' => $compatible
+                ];
+            }
+
+            $result['detailed_checks']['compatibility_matrix'] = $matrix;
+
+        } catch (Exception $e) {
+            error_log("Error building compatibility matrix: " . $e->getMessage());
+        }
+    }
+
+    /**
+     * Calculate final compatibility score based on category scores and issues
+     */
+    private function calculateFinalCompatibilityScore(&$result) {
+        // Start with average of category scores
+        $categoryScores = array_values($result['category_scores']);
+        $avgScore = count($categoryScores) > 0 ? array_sum($categoryScores) / count($categoryScores) : 0;
+
+        // Apply error penalty
+        $errorPenalty = count($result['errors']) * 10;
+
+        // Apply warning penalty
+        $warningPenalty = count($result['warnings']) * 3;
+
+        // Calculate final score
+        $finalScore = max(0, min(100, $avgScore - $errorPenalty - $warningPenalty));
+
+        $result['compatibility_score'] = round($finalScore);
+
+        // Set valid to false if score is too low
+        if ($finalScore < 50) {
+            $result['valid'] = false;
+        }
+    }
+
+    /**
+     * Get existing components formatted for validation
+     */
+    private function getExistingComponentsForValidation($configUuid) {
+        $stmt = $this->pdo->prepare("
+            SELECT component_type, component_uuid
+            FROM server_configuration_components
+            WHERE config_uuid = ?
+        ");
+        $stmt->execute([$configUuid]);
+        $components = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        $formatted = [
+            'chassis' => null,
+            'motherboard' => null,
+            'cpu' => [],
+            'ram' => [],
+            'storage' => [],
+            'nic' => [],
+            'pciecard' => [],
+            'hbacard' => [],
+            'caddy' => []
+        ];
+
+        foreach ($components as $component) {
+            $type = $component['component_type'];
+            if ($type === 'chassis' || $type === 'motherboard') {
+                $formatted[$type] = $component;
+            } else {
+                $formatted[$type][] = $component;
+            }
+        }
+
+        return $formatted;
     }
 }
 

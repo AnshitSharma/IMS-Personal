@@ -8,8 +8,8 @@
         "module_type": "RDIMM",
         "form_factor": "DIMM (288-pin)",
         "capacity_GB": 64,
-        "frequency_MHz": 4800,
-        "speed_MTs": 4800,
+        "frequency_MHz": 6000,
+        "speed_MTs": 6000,
         "timing": {
           "cas_latency": 40
         },

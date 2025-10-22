@@ -17,12 +17,14 @@
 require_once __DIR__ . '/ComponentDataService.php';
 require_once __DIR__ . '/DataExtractionUtilities.php';
 require_once __DIR__ . '/StorageConnectionValidator.php';
+require_once __DIR__ . '/CompatibilityEngine.php';
 
 class FlexibleCompatibilityValidator {
 
     private $pdo;
     private $componentDataService;
     private $dataUtils;
+    private $compatibilityEngine;
 
     // Component type to inventory table mapping
     private $componentTables = [
@@ -40,6 +42,7 @@ class FlexibleCompatibilityValidator {
         $this->pdo = $pdo;
         $this->componentDataService = ComponentDataService::getInstance();
         $this->dataUtils = new DataExtractionUtilities();
+        $this->compatibilityEngine = new CompatibilityEngine($pdo);
     }
 
     /**
@@ -284,8 +287,17 @@ class FlexibleCompatibilityValidator {
             $motherboardSpecs = $this->getComponentSpecs('motherboard', $existing['motherboard']['component_uuid']);
 
             if ($motherboardSpecs) {
-                $motherboardSocket = $motherboardSpecs['socket'] ?? null;
-                $motherboardMaxCPUs = $motherboardSpecs['max_cpus'] ?? 1;
+                $socketData = $motherboardSpecs['socket'] ?? null;
+
+                // Handle socket format: can be string "LGA 4189" OR object {"type": "LGA 4189", "count": 2}
+                if (is_array($socketData)) {
+                    $motherboardSocket = $socketData['type'] ?? null;
+                    $motherboardMaxCPUs = $socketData['count'] ?? 1;
+                } else {
+                    $motherboardSocket = $socketData;
+                    $motherboardMaxCPUs = $motherboardSpecs['max_cpus'] ?? 1;
+                }
+
                 $motherboardPCIeVersion = $this->dataUtils->extractPCIeVersion($motherboardSpecs);
 
                 // Socket compatibility check
@@ -356,7 +368,14 @@ class FlexibleCompatibilityValidator {
 
             $ramTypes = array_unique($ramTypes);
             if (!empty($ramTypes)) {
-                $incompatibleTypes = array_diff($ramTypes, $cpuMemoryTypes);
+                // Check each RAM type for base compatibility
+                $incompatibleTypes = [];
+                foreach ($ramTypes as $ramType) {
+                    if (!$this->isMemoryTypeCompatible($ramType, $cpuMemoryTypes)) {
+                        $incompatibleTypes[] = $ramType;
+                    }
+                }
+
                 if (!empty($incompatibleTypes)) {
                     $errors[] = [
                         'type' => 'ram_type_incompatibility',
@@ -572,8 +591,17 @@ class FlexibleCompatibilityValidator {
         }
 
         // Extract motherboard specifications
-        $motherboardSocket = $motherboardSpecs['socket'] ?? null;
-        $motherboardMaxCPUs = $motherboardSpecs['max_cpus'] ?? 1;
+        $socketData = $motherboardSpecs['socket'] ?? null;
+
+        // Handle socket format: can be string "LGA 4189" OR object {"type": "LGA 4189", "count": 2}
+        if (is_array($socketData)) {
+            $motherboardSocket = $socketData['type'] ?? null;
+            $motherboardMaxCPUs = $socketData['count'] ?? 1;
+        } else {
+            $motherboardSocket = $socketData;
+            $motherboardMaxCPUs = $motherboardSpecs['max_cpus'] ?? 1;
+        }
+
         $motherboardMemoryTypes = $this->dataUtils->extractMemoryTypes($motherboardSpecs);
         $motherboardMemorySlots = $motherboardSpecs['memory_slots'] ?? 4;
         $motherboardMaxMemoryCapacity = $this->dataUtils->extractMaxMemoryCapacity($motherboardSpecs);
@@ -693,7 +721,14 @@ class FlexibleCompatibilityValidator {
             // RAM type compatibility
             $ramTypes = array_unique($ramTypes);
             if (!empty($ramTypes)) {
-                $incompatibleTypes = array_diff($ramTypes, $motherboardMemoryTypes);
+                // Check each RAM type for base compatibility
+                $incompatibleTypes = [];
+                foreach ($ramTypes as $ramType) {
+                    if (!$this->isMemoryTypeCompatible($ramType, $motherboardMemoryTypes)) {
+                        $incompatibleTypes[] = $ramType;
+                    }
+                }
+
                 if (!empty($incompatibleTypes)) {
                     $errors[] = [
                         'type' => 'ram_type_incompatibility',
@@ -932,7 +967,7 @@ class FlexibleCompatibilityValidator {
 
         // Extract RAM specifications
         $ramType = $ramSpecs['memory_type'] ?? $ramSpecs['type'] ?? null;
-        $ramFormFactor = $ramSpecs['form_factor'] ?? null;
+        $ramFormFactor = $this->dataUtils->extractMemoryFormFactor($ramSpecs);
         $ramCapacity = $ramSpecs['capacity_gb'] ?? ($ramSpecs['capacity'] ?? 0);
         $ramFrequency = $ramSpecs['frequency_mhz'] ?? ($ramSpecs['frequency'] ?? 0);
         $ramIsECC = ($ramSpecs['ecc'] ?? $ramSpecs['is_ecc'] ?? false);
@@ -961,8 +996,8 @@ class FlexibleCompatibilityValidator {
                 $motherboardMaxMemoryFreq = $this->dataUtils->extractMaxMemoryFrequency($motherboardSpecs);
                 $motherboardPerSlotCapacity = $this->dataUtils->extractPerSlotMemoryCapacity($motherboardSpecs);
 
-                // Type compatibility
-                if ($ramType && !in_array($ramType, $motherboardMemoryTypes)) {
+                // Type compatibility - check base memory type
+                if ($ramType && !$this->isMemoryTypeCompatible($ramType, $motherboardMemoryTypes)) {
                     $errors[] = [
                         'type' => 'ram_type_incompatible_motherboard',
                         'severity' => 'critical',
@@ -1059,8 +1094,8 @@ class FlexibleCompatibilityValidator {
                     $cpuMaxMemoryCapacity = $this->dataUtils->extractMaxMemoryCapacity($cpuSpecs);
                     $cpuECCRequired = $this->dataUtils->extractECCSupport($cpuSpecs) === 'required';
 
-                    // Type compatibility
-                    if ($ramType && !in_array($ramType, $cpuMemoryTypes)) {
+                    // Type compatibility - check base memory type (DDR5 matches DDR5-4800, etc.)
+                    if ($ramType && !$this->isMemoryTypeCompatible($ramType, $cpuMemoryTypes)) {
                         $errors[] = [
                             'type' => 'ram_type_incompatible_cpu',
                             'severity' => 'critical',
@@ -1459,33 +1494,56 @@ class FlexibleCompatibilityValidator {
                     $storageFormFactor = $storageSpecs['form_factor'] ?? '3.5-inch';
                     $storageInterface = $storageSpecs['interface'] ?? 'SATA';
 
-                    // Form factor check
-                    $formFactorResult = $this->validateStorageFormFactor($storageFormFactor, $chassisSpecs, $existing['caddy']);
+                    // Form factor check using CompatibilityEngine
+                    $formFactorResult = $this->compatibilityEngine->validateStorageFormFactor($storageSpecs, $chassisSpecs);
+
                     if (!$formFactorResult['compatible']) {
                         $errors[] = [
                             'type' => 'existing_storage_incompatible',
                             'severity' => 'critical',
                             'message' => "Existing storage (UUID: {$storage['component_uuid']}) incompatible with chassis",
                             'details' => $formFactorResult,
-                            'resolution' => $formFactorResult['resolution']
+                            'resolution' => $formFactorResult['reason'] ?? 'Choose compatible storage or chassis'
                         ];
-                    } elseif ($formFactorResult['caddy_required'] && !$formFactorResult['caddy_available']) {
-                        $errors[] = [
-                            'type' => 'existing_storage_needs_caddy',
-                            'severity' => 'critical',
-                            'message' => $formFactorResult['caddy_message'] . " for existing storage",
-                            'resolution' => "Add " . $formFactorResult['required_caddy_type'] . " before adding chassis"
-                        ];
+                    } elseif (isset($formFactorResult['caddy_required']) && $formFactorResult['caddy_required']) {
+                        // Check if required caddy is present
+                        $caddyPresent = false;
+                        foreach ($existing['caddy'] as $caddy) {
+                            $caddySpecs = $this->getComponentFromInventory('caddy', $caddy['component_uuid']);
+                            if ($caddySpecs) {
+                                $caddyType = $caddySpecs['type'] ?? $caddySpecs['form_factor'] ?? '';
+                                if (strpos($caddyType, $storageFormFactor) !== false) {
+                                    $caddyPresent = true;
+                                    break;
+                                }
+                            }
+                        }
+
+                        if (!$caddyPresent) {
+                            $warnings[] = [
+                                'type' => 'existing_storage_needs_caddy',
+                                'severity' => 'medium',
+                                'message' => "Storage requires caddy adapter for chassis compatibility",
+                                'recommendation' => "Add $storageFormFactor caddy adapter"
+                            ];
+                        }
                     }
 
-                    // Interface check
-                    $interfaceResult = $this->validateStorageInterface($storageInterface, $backplane);
+                    // Interface check using CompatibilityEngine
+                    $interfaceResult = $this->compatibilityEngine->validateStorageInterface($storageSpecs, $chassisSpecs);
                     if (!$interfaceResult['compatible']) {
                         $errors[] = [
                             'type' => 'existing_storage_interface_incompatible',
                             'severity' => 'critical',
                             'message' => "Existing storage interface $storageInterface not supported by chassis",
-                            'resolution' => $interfaceResult['resolution']
+                            'resolution' => $interfaceResult['reason'] ?? 'Choose compatible storage or chassis with appropriate backplane'
+                        ];
+                    } elseif (isset($interfaceResult['adapter_required']) && $interfaceResult['adapter_required']) {
+                        $warnings[] = [
+                            'type' => 'storage_adapter_recommended',
+                            'severity' => 'low',
+                            'message' => $interfaceResult['adapter_message'] ?? 'Storage may require adapter',
+                            'recommendation' => 'Add recommended adapter card'
                         ];
                     }
                 }
@@ -1505,6 +1563,56 @@ class FlexibleCompatibilityValidator {
                         'message' => "Motherboard is $motherboardFormFactor, chassis officially supports " . implode('/', $formFactorSupport),
                         'recommendation' => 'Verify physical fitment before deployment'
                     ];
+                }
+            }
+        }
+
+        // REVERSE CHECKS (Existing HBA Cards → Chassis Backplane)
+        if (!empty($existing['pciecard'])) {
+            $backplaneInterface = strtoupper($backplane['interface'] ?? 'Unknown');
+            $supportsSAS = $backplane['supports_sas'] ?? false;
+            $supportsSATA = $backplane['supports_sata'] ?? false;
+            $chassisModel = $chassisSpecs['model'] ?? 'Unknown';
+
+            foreach ($existing['pciecard'] as $pcieCard) {
+                // Get PCIe card specs to check if it's an HBA
+                $cardSpecs = $this->dataUtils->getPCIeCardByUUID($pcieCard['component_uuid']);
+
+                if ($cardSpecs && isset($cardSpecs['component_subtype']) && $cardSpecs['component_subtype'] === 'HBA Card') {
+                    $hbaProtocol = strtoupper($cardSpecs['protocol'] ?? 'Unknown');
+                    $hbaModel = $cardSpecs['model'] ?? 'Unknown HBA';
+
+                    // Protocol compatibility check
+                    $compatible = false;
+                    if (strpos($hbaProtocol, 'SAS') !== false && $supportsSAS) {
+                        $compatible = true;
+                    } elseif (strpos($hbaProtocol, 'SATA') !== false && $supportsSATA) {
+                        $compatible = true;
+                    }
+
+                    if (!$compatible) {
+                        $errors[] = [
+                            'type' => 'hba_chassis_protocol_mismatch',
+                            'severity' => 'critical',
+                            'message' => "Existing HBA card ($hbaModel - $hbaProtocol) is incompatible with chassis backplane ($chassisModel - $backplaneInterface)",
+                            'details' => [
+                                'hba_uuid' => $pcieCard['component_uuid'],
+                                'hba_model' => $hbaModel,
+                                'hba_protocol' => $hbaProtocol,
+                                'chassis_model' => $chassisModel,
+                                'backplane_interface' => $backplaneInterface,
+                                'supports_sas' => $supportsSAS ? 'Yes' : 'No',
+                                'supports_sata' => $supportsSATA ? 'Yes' : 'No'
+                            ],
+                            'resolution' => "Remove HBA card and add $backplaneInterface-compatible HBA OR choose chassis with $hbaProtocol backplane support"
+                        ];
+                    } else {
+                        // Compatible - add informational message
+                        $info[] = [
+                            'type' => 'hba_chassis_compatible',
+                            'message' => "HBA card ($hbaModel - $hbaProtocol) is compatible with chassis backplane ($backplaneInterface)"
+                        ];
+                    }
                 }
             }
         }
@@ -1574,6 +1682,89 @@ class FlexibleCompatibilityValidator {
         // Extract PCIe specifications
         $deviceSlotSize = $this->extractPCIeSlotSize($deviceSpecs);
         $devicePCIeVersion = $this->extractPCIeVersion($deviceSpecs);
+
+        // HBA Card Specific Checks
+        $isHBACard = isset($deviceSpecs['component_subtype']) && $deviceSpecs['component_subtype'] === 'HBA Card';
+
+        // CHECK 1: Only ONE HBA card allowed per server configuration
+        if ($isHBACard && !empty($existing['pciecard'])) {
+            // Check if there's already an HBA card in the configuration
+            foreach ($existing['pciecard'] as $existingCard) {
+                $existingCardSpecs = $this->dataUtils->getPCIeCardByUUID($existingCard['component_uuid']);
+                if ($existingCardSpecs && isset($existingCardSpecs['component_subtype']) && $existingCardSpecs['component_subtype'] === 'HBA Card') {
+                    $existingHBAModel = $existingCardSpecs['model'] ?? 'Unknown HBA';
+                    $newHBAModel = $deviceSpecs['model'] ?? 'Unknown HBA';
+
+                    $errors[] = [
+                        'type' => 'hba_limit_exceeded',
+                        'severity' => 'critical',
+                        'message' => "Server configuration can only have ONE HBA card. Existing HBA: $existingHBAModel",
+                        'details' => [
+                            'existing_hba_uuid' => $existingCard['component_uuid'],
+                            'existing_hba_model' => $existingHBAModel,
+                            'new_hba_model' => $newHBAModel,
+                            'limit' => 1
+                        ],
+                        'resolution' => "Remove existing HBA card ($existingHBAModel) before adding new HBA card ($newHBAModel)"
+                    ];
+
+                    // Return immediately - don't need to check further
+                    return [
+                        'validation_status' => 'blocked',
+                        'critical_errors' => $errors,
+                        'warnings' => [],
+                        'info_messages' => []
+                    ];
+                }
+            }
+        }
+
+        // CHECK 2: HBA-Chassis compatibility validation
+        if ($isHBACard && $existing['chassis']) {
+            $chassisSpecs = $this->getChassisSpecs($existing['chassis']['component_uuid']);
+            if ($chassisSpecs) {
+                $backplane = $chassisSpecs['backplane'] ?? [];
+                $backplaneInterface = strtoupper($backplane['interface'] ?? 'Unknown');
+                $supportsSAS = $backplane['supports_sas'] ?? false;
+                $supportsSATA = $backplane['supports_sata'] ?? false;
+                $chassisModel = $chassisSpecs['model'] ?? 'Unknown';
+
+                $hbaProtocol = strtoupper($deviceSpecs['protocol'] ?? 'Unknown');
+                $hbaModel = $deviceSpecs['model'] ?? 'Unknown HBA';
+
+                // Protocol compatibility check
+                $compatible = false;
+                if (strpos($hbaProtocol, 'SAS') !== false && $supportsSAS) {
+                    $compatible = true;
+                } elseif (strpos($hbaProtocol, 'SATA') !== false && $supportsSATA) {
+                    $compatible = true;
+                }
+
+                if (!$compatible) {
+                    $errors[] = [
+                        'type' => 'hba_chassis_protocol_mismatch',
+                        'severity' => 'critical',
+                        'message' => "HBA card ($hbaModel - $hbaProtocol) is incompatible with existing chassis backplane ($chassisModel - $backplaneInterface)",
+                        'details' => [
+                            'hba_model' => $hbaModel,
+                            'hba_protocol' => $hbaProtocol,
+                            'chassis_uuid' => $existing['chassis']['component_uuid'],
+                            'chassis_model' => $chassisModel,
+                            'backplane_interface' => $backplaneInterface,
+                            'supports_sas' => $supportsSAS ? 'Yes' : 'No',
+                            'supports_sata' => $supportsSATA ? 'Yes' : 'No'
+                        ],
+                        'resolution' => "Choose $backplaneInterface-compatible HBA card OR remove chassis and add $hbaProtocol-compatible chassis"
+                    ];
+                } else {
+                    // Compatible - add informational message
+                    $info[] = [
+                        'type' => 'hba_chassis_compatible',
+                        'message' => "HBA card ($hbaModel - $hbaProtocol) is compatible with chassis backplane ($backplaneInterface)"
+                    ];
+                }
+            }
+        }
 
         // FORWARD CHECKS (PCIe Device → Motherboard)
         if ($existing['motherboard']) {
@@ -1782,6 +1973,35 @@ class FlexibleCompatibilityValidator {
             'warnings' => $warnings,
             'info_messages' => $info
         ];
+    }
+
+    /**
+     * Check if RAM memory type is compatible with CPU memory types
+     * Matches base type (DDR5 matches DDR5-4800, DDR5-5600, etc.)
+     *
+     * @param string $ramType RAM memory type (e.g., "DDR5", "DDR4")
+     * @param array $cpuMemoryTypes CPU supported types (e.g., ["DDR5-4800", "DDR5-5600"])
+     * @return bool True if compatible
+     */
+    private function isMemoryTypeCompatible($ramType, $cpuMemoryTypes) {
+        if (empty($cpuMemoryTypes)) {
+            return true;
+        }
+
+        // Extract base RAM type (DDR5, DDR4, etc.) - remove speed suffix
+        $ramBaseType = preg_replace('/-\d+$/', '', $ramType);
+
+        foreach ($cpuMemoryTypes as $cpuType) {
+            // Extract base CPU type - remove speed suffix
+            $cpuBaseType = preg_replace('/-\d+$/', '', $cpuType);
+
+            // Case-insensitive comparison of base types
+            if (strcasecmp($ramBaseType, $cpuBaseType) === 0) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }
 ?>

@@ -599,7 +599,9 @@ if (!function_exists('performGlobalSearch')) {
 if (!function_exists('getComponentsByType')) {
     function getComponentsByType($pdo, $type) {
         try {
-            $stmt = $pdo->prepare("SELECT * FROM $type ORDER BY id DESC");
+            // Map component type to table name (add 'inventory' suffix)
+            $tableName = $type . 'inventory';
+            $stmt = $pdo->prepare("SELECT * FROM $tableName ORDER BY id DESC");
             $stmt->execute();
             return $stmt->fetchAll(PDO::FETCH_ASSOC);
         } catch (Exception $e) {
@@ -615,7 +617,9 @@ if (!function_exists('getComponentsByType')) {
 if (!function_exists('getComponentById')) {
     function getComponentById($pdo, $type, $id) {
         try {
-            $stmt = $pdo->prepare("SELECT * FROM $type WHERE id = ?");
+            // Map component type to table name (add 'inventory' suffix)
+            $tableName = $type . 'inventory';
+            $stmt = $pdo->prepare("SELECT * FROM $tableName WHERE id = ?");
             $stmt->execute([$id]);
             return $stmt->fetch(PDO::FETCH_ASSOC);
         } catch (Exception $e) {
@@ -631,29 +635,60 @@ if (!function_exists('getComponentById')) {
 if (!function_exists('addComponent')) {
     function addComponent($pdo, $type, $data, $userId) {
         try {
-            // Generate UUID if not provided
-            if (!isset($data['UUID']) || empty($data['UUID'])) {
+            error_log("=== addComponent V2.0 WITH UUID VALIDATION: type=$type, UUID=" . ($data['UUID'] ?? 'NOT SET') . " ===");
+
+            // CRITICAL: UUID VALIDATION - Component must exist in JSON specifications
+            if (isset($data['UUID']) && !empty($data['UUID'])) {
+                error_log("UUID validation starting for $type with UUID: {$data['UUID']}");
+                require_once(__DIR__ . '/models/ComponentDataService.php');
+                $componentService = ComponentDataService::getInstance();
+
+                // Map table names to component types (table names are just the component type without 'inventory' suffix)
+                // Only validate UUIDs for components that have JSON specifications
+                $componentTypes = ['cpu', 'ram', 'storage', 'motherboard', 'nic', 'caddy'];
+
+                if (in_array($type, $componentTypes)) {
+                    error_log("Component type '$type' requires UUID validation");
+                    $validationResult = $componentService->validateComponentUuid($type, $data['UUID']);
+                    error_log("Validation result for $type UUID {$data['UUID']}: " . ($validationResult ? 'VALID' : 'INVALID'));
+
+                    if (!$validationResult) {
+                        error_log("BLOCKING: UUID '{$data['UUID']}' not found in $type JSON");
+                        throw new Exception("Component UUID '{$data['UUID']}' not found in $type JSON specifications");
+                    }
+                    error_log("UUID validation passed for $type: {$data['UUID']}");
+                } else {
+                    error_log("Component type '$type' does not require UUID validation");
+                }
+            } else {
+                // Generate UUID if not provided
                 $data['UUID'] = generateUUID();
+                error_log("Warning: No UUID provided, generated new UUID: {$data['UUID']}");
             }
-            
+
             // Prepare column names and values
             $columns = array_keys($data);
             $placeholders = array_fill(0, count($columns), '?');
             $values = array_values($data);
-            
-            $sql = "INSERT INTO $type (" . implode(', ', $columns) . ") VALUES (" . implode(', ', $placeholders) . ")";
-            
+
+            // Map component type to table name (add 'inventory' suffix)
+            $tableName = $type . 'inventory';
+            $sql = "INSERT INTO $tableName (" . implode(', ', $columns) . ") VALUES (" . implode(', ', $placeholders) . ")";
+
             error_log("Inserting $type data: " . json_encode($data));
-            
+
             $stmt = $pdo->prepare($sql);
             $result = $stmt->execute($values);
-            
+
             if ($result) {
-                return $pdo->lastInsertId();
+                return [
+                    'id' => $pdo->lastInsertId(),
+                    'uuid' => $data['UUID']
+                ];
             }
-            
+
             return false;
-            
+
         } catch (Exception $e) {
             error_log("Error adding $type component: " . $e->getMessage());
             throw $e;
@@ -671,12 +706,14 @@ if (!function_exists('updateComponent')) {
             $setClause = implode(' = ?, ', $columns) . ' = ?';
             $values = array_values($data);
             $values[] = $id; // Add ID for WHERE clause
-            
-            $sql = "UPDATE $type SET $setClause WHERE id = ?";
-            
+
+            // Map component type to table name (add 'inventory' suffix)
+            $tableName = $type . 'inventory';
+            $sql = "UPDATE $tableName SET $setClause WHERE id = ?";
+
             $stmt = $pdo->prepare($sql);
             return $stmt->execute($values);
-            
+
         } catch (Exception $e) {
             error_log("Error updating $type component: " . $e->getMessage());
             throw $e;
@@ -690,9 +727,11 @@ if (!function_exists('updateComponent')) {
 if (!function_exists('deleteComponent')) {
     function deleteComponent($pdo, $type, $id, $userId) {
         try {
-            $stmt = $pdo->prepare("DELETE FROM $type WHERE id = ?");
+            // Map component type to table name (add 'inventory' suffix)
+            $tableName = $type . 'inventory';
+            $stmt = $pdo->prepare("DELETE FROM $tableName WHERE id = ?");
             return $stmt->execute([$id]);
-            
+
         } catch (Exception $e) {
             error_log("Error deleting $type component: " . $e->getMessage());
             throw $e;

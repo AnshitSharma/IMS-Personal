@@ -1090,64 +1090,62 @@ function handleGetAvailableComponents($user) {
  */
 function handleValidateConfiguration($serverBuilder, $user) {
     global $pdo;
-    
-    $configUuid = $_POST['config_uuid'] ?? '';
-    
+
+    $configUuid = $_POST['config_uuid'] ?? $_GET['config_uuid'] ?? '';
+
     if (empty($configUuid)) {
         send_json_response(0, 1, 400, "Configuration UUID is required");
     }
-    
+
     try {
+        // Load configuration to verify it exists
         $config = ServerConfiguration::loadByUuid($pdo, $configUuid);
         if (!$config) {
             send_json_response(0, 1, 404, "Server configuration not found");
         }
-        
+
         // Check permissions
         if ($config->get('created_by') != $user['id'] && !hasPermission($pdo, 'server.view_all', $user['id'])) {
             send_json_response(0, 1, 403, "Insufficient permissions to validate this configuration");
         }
 
-        $validation = $serverBuilder->validateConfiguration($configUuid);
+        // Use the NEW comprehensive validation method
+        $validation = $serverBuilder->validateConfigurationComprehensive($configUuid);
 
-        // NEW: Add PCIe slot validation
-        try {
-            require_once __DIR__ . '/../../includes/models/PCIeSlotTracker.php';
-            $slotTracker = new PCIeSlotTracker($pdo);
-
-            $pcieValidation = $slotTracker->validateAllSlots($configUuid);
-
-            // Add PCIe slot validation to the overall validation results
-            $validation['pcie_slots'] = $pcieValidation;
-
-            // If PCIe validation failed, mark overall validation as failed
-            if (!$pcieValidation['valid']) {
-                $validation['valid'] = false;
-                if (!isset($validation['errors'])) {
-                    $validation['errors'] = [];
-                }
-                $validation['errors'] = array_merge(
-                    $validation['errors'],
-                    $pcieValidation['errors']
-                );
+        // Update database with compatibility score
+        if (isset($validation['compatibility_score'])) {
+            try {
+                $stmt = $pdo->prepare("
+                    UPDATE server_configurations
+                    SET compatibility_score = ?,
+                        validation_results = ?,
+                        updated_at = NOW()
+                    WHERE config_uuid = ?
+                ");
+                $stmt->execute([
+                    $validation['compatibility_score'],
+                    json_encode($validation),
+                    $configUuid
+                ]);
+            } catch (Exception $dbError) {
+                error_log("Failed to update compatibility score in database: " . $dbError->getMessage());
+                // Don't fail the entire request if DB update fails
             }
-
-        } catch (Exception $pcieError) {
-            error_log("PCIe slot validation error: " . $pcieError->getMessage());
-            // Add warning but don't fail entire validation
-            if (!isset($validation['warnings'])) {
-                $validation['warnings'] = [];
-            }
-            $validation['warnings'][] = "PCIe slot validation could not be completed: " . $pcieError->getMessage();
         }
 
-        send_json_response(1, 1, 200, "Configuration validation completed", [
+        // Determine response message based on validation result
+        $message = $validation['valid']
+            ? "Configuration validation passed (Score: {$validation['compatibility_score']}%)"
+            : "Configuration validation failed (Score: {$validation['compatibility_score']}%)";
+
+        send_json_response(1, 1, 200, $message, [
             'config_uuid' => $configUuid,
             'validation' => $validation
         ]);
-        
+
     } catch (Exception $e) {
         error_log("Error validating configuration: " . $e->getMessage());
+        error_log("Stack trace: " . $e->getTraceAsString());
         send_json_response(0, 1, 500, "Failed to validate configuration: " . $e->getMessage());
     }
 }
@@ -1337,6 +1335,11 @@ function handleGetCompatible($serverBuilder, $user) {
                         $compatibilityScore = $chassisCompatResult['compatibility_score'];
                         // Use concise compatibility summary instead of verbose details
                         $compatibilityReasons = [$chassisCompatResult['compatibility_summary'] ?? 'Compatibility check completed'];
+
+                        // DEBUG: Include details array if present
+                        if (isset($chassisCompatResult['details'])) {
+                            $compatibilityReasons[] = 'DEBUG_DETAILS: ' . json_encode($chassisCompatResult['details']);
+                        }
                     } elseif ($componentType === 'pciecard') {
                         // Use specialized PCIe card compatibility checking
                         $pcieCompatResult = $compatibility->checkPCIeDecentralizedCompatibility(
@@ -1455,7 +1458,7 @@ function handleGetCompatible($serverBuilder, $user) {
             ],
             'existing_components_summary' => [
                 'total_existing' => count($existingComponentsData),
-                'types' => array_unique(array_column($existingComponentsData, 'type'))
+                'types' => array_values(array_unique(array_column($existingComponentsData, 'type')))
             ],
             'compatibility_summary' => [
                 'has_compatible' => count($compatibleOnly) > 0,
@@ -1774,9 +1777,17 @@ function calculatePCIeLaneUsage($components) {
             'available' => 0
         ],
         'm2_slots' => [
-            'total' => 0,
-            'used' => 0,
-            'available' => 0
+            'motherboard' => [
+                'total' => 0,
+                'used' => 0,
+                'available' => 0
+            ],
+            'expansion_cards' => [
+                'total' => 0,
+                'used' => 0,
+                'available' => 0,
+                'providers' => []
+            ]
         ],
         'expansion_slots' => [
             'total_x16' => 0,
@@ -1807,9 +1818,9 @@ function calculatePCIeLaneUsage($components) {
             if ($mbUuid) {
                 $mbSpecs = $dataUtils->getMotherboardByUUID($mbUuid);
                 if ($mbSpecs) {
-                    // M.2 slots
+                    // M.2 slots from motherboard
                     if (isset($mbSpecs['storage']['nvme']['m2_slots'][0]['count'])) {
-                        $result['m2_slots']['total'] = $mbSpecs['storage']['nvme']['m2_slots'][0]['count'];
+                        $result['m2_slots']['motherboard']['total'] = $mbSpecs['storage']['nvme']['m2_slots'][0]['count'];
                     }
 
                     // PCIe expansion slots
@@ -1839,11 +1850,26 @@ function calculatePCIeLaneUsage($components) {
                     if ($storageSpecs) {
                         $formFactor = strtolower($storageSpecs['form_factor'] ?? '');
                         if (strpos($formFactor, 'm.2') !== false || strpos($formFactor, 'm2') !== false) {
-                            $result['m2_slots']['used']++;
+                            // Determine which type of slot this M.2 storage is using
+                            $slotPosition = strtolower($storage['slot_position'] ?? '');
+                            $slotSource = 'motherboard'; // Default to motherboard
+
+                            // Check if slot_position indicates expansion card usage
+                            if (strpos($slotPosition, 'expansion') !== false ||
+                                strpos($slotPosition, 'pcie') !== false ||
+                                strpos($slotPosition, 'adapter') !== false ||
+                                strpos($slotPosition, 'card') !== false) {
+                                $slotSource = 'expansion_cards';
+                            }
+
+                            // Increment the appropriate slot usage counter
+                            $result['m2_slots'][$slotSource]['used']++;
+
                             $result['detailed_usage'][] = [
                                 'component' => 'M.2 Storage',
                                 'uuid' => $storageUuid,
                                 'type' => 'M.2 Slot',
+                                'slot_source' => $slotSource,
                                 'lanes_used' => 4
                             ];
                         }
@@ -1879,14 +1905,31 @@ function calculatePCIeLaneUsage($components) {
                         } elseif ($lanes == 4) {
                             $result['expansion_slots']['used_x4']++;
                         }
+
+                        // Check if this PCIe card provides M.2 slots (NVMe adapters)
+                        if (isset($cardSpecs['m2_slots']) && $cardSpecs['m2_slots'] > 0) {
+                            $m2SlotsProvided = (int)$cardSpecs['m2_slots'];
+                            $result['m2_slots']['expansion_cards']['total'] += $m2SlotsProvided;
+
+                            // Add card to providers list with detailed specs
+                            $result['m2_slots']['expansion_cards']['providers'][] = [
+                                'uuid' => $cardUuid,
+                                'name' => $cardSpecs['model'] ?? 'Unknown Model',
+                                'slots_provided' => $m2SlotsProvided,
+                                'max_capacity_per_slot' => $cardSpecs['max_capacity_per_slot'] ?? 'N/A',
+                                'max_speed' => $cardSpecs['performance']['max_sequential_read'] ?? 'N/A',
+                                'm2_form_factors' => $cardSpecs['m2_form_factors'] ?? []
+                            ];
+                        }
                     }
                 }
             }
         }
 
-        // Calculate available
+        // Calculate available slots
         $result['cpu_lanes']['available'] = max(0, $result['cpu_lanes']['total'] - $result['cpu_lanes']['used']);
-        $result['m2_slots']['available'] = max(0, $result['m2_slots']['total'] - $result['m2_slots']['used']);
+        $result['m2_slots']['motherboard']['available'] = max(0, $result['m2_slots']['motherboard']['total'] - $result['m2_slots']['motherboard']['used']);
+        $result['m2_slots']['expansion_cards']['available'] = max(0, $result['m2_slots']['expansion_cards']['total'] - $result['m2_slots']['expansion_cards']['used']);
 
     } catch (Exception $e) {
         error_log("Error calculating PCIe lane usage: " . $e->getMessage());

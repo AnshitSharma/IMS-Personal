@@ -15,7 +15,9 @@ class ComponentDataService {
         'ram' => 'Ram-jsons/ram_detail.json',
         'storage' => 'storage-jsons/storage-level-3.json',
         'nic' => 'nic-jsons/nic-level-3.json',
-        'caddy' => 'caddy-jsons/caddy_details.json'
+        'caddy' => 'caddy-jsons/caddy_details.json',
+        'pciecard' => 'pci-jsons/pci-level-3.json',
+        'hbacard' => 'hbacard-jsons/hbacard-level-3.json'
     ];
 
     private function __construct() {
@@ -60,7 +62,7 @@ class ComponentDataService {
 
     public function findComponentByUuid($componentType, $uuid, $databaseRecord = null) {
         $jsonData = $this->loadJsonData($componentType);
-        
+
         // First try direct UUID match in JSON
         foreach ($jsonData as $brand) {
             if (isset($brand['models'])) {
@@ -77,13 +79,85 @@ class ComponentDataService {
                 }
             }
         }
-        
+
         // If direct match fails and we have database record, try smart matching
         if ($databaseRecord) {
             return $this->findComponentBySmartMatching($componentType, $databaseRecord, $jsonData);
         }
-        
+
         return null;
+    }
+
+    /**
+     * Validate if a component UUID exists in JSON files
+     * Used by component-add APIs to ensure component exists before adding to inventory
+     *
+     * @param string $componentType Component type (cpu, ram, storage, motherboard, nic, caddy)
+     * @param string $uuid Component UUID to validate
+     * @return bool True if UUID exists in JSON, false otherwise
+     */
+    public function validateComponentUuid($componentType, $uuid) {
+        try {
+            error_log("ComponentDataService::validateComponentUuid called with type=$componentType, uuid=$uuid");
+            $jsonData = $this->loadJsonData($componentType);
+            error_log("JSON data loaded successfully for $componentType");
+
+            // Handle caddy JSON structure: {"caddies": [...]}
+            if ($componentType === 'caddy' && isset($jsonData['caddies'])) {
+                error_log("Processing caddy JSON structure, found " . count($jsonData['caddies']) . " caddies");
+                foreach ($jsonData['caddies'] as $index => $caddy) {
+                    $caddyUuid = $caddy['uuid'] ?? 'NO_UUID';
+                    error_log("Checking caddy[$index]: uuid=$caddyUuid vs search=$uuid");
+                    if (isset($caddy['uuid']) && $caddy['uuid'] === $uuid) {
+                        error_log("UUID validation SUCCESS: $uuid found in caddy JSON at index $index");
+                        return true;
+                    }
+                }
+                error_log("UUID validation FAILED: $uuid not found in caddy JSON (searched " . count($jsonData['caddies']) . " items)");
+                return false;
+            }
+
+            // Handle NIC JSON structure: [...{brand, series: [{name, models: [...]}]}]
+            if ($componentType === 'nic') {
+                foreach ($jsonData as $brand) {
+                    if (isset($brand['series'])) {
+                        foreach ($brand['series'] as $series) {
+                            if (isset($series['models'])) {
+                                foreach ($series['models'] as $model) {
+                                    $modelUuid = $this->getOrGenerateUuid($model, $componentType);
+                                    if ($modelUuid === $uuid) {
+                                        error_log("UUID validation SUCCESS: $uuid found in NIC JSON");
+                                        return true;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                error_log("UUID validation FAILED: $uuid not found in NIC JSON");
+                return false;
+            }
+
+            // Handle standard brand/models structure (cpu, motherboard, storage, ram)
+            foreach ($jsonData as $brand) {
+                if (isset($brand['models'])) {
+                    foreach ($brand['models'] as $model) {
+                        $modelUuid = $this->getOrGenerateUuid($model, $componentType);
+                        if ($modelUuid === $uuid) {
+                            error_log("UUID validation SUCCESS: $uuid found in $componentType JSON");
+                            return true;
+                        }
+                    }
+                }
+            }
+
+            error_log("UUID validation FAILED: $uuid not found in $componentType JSON");
+            return false;
+
+        } catch (Exception $e) {
+            error_log("UUID validation ERROR for $componentType: " . $e->getMessage());
+            return false;
+        }
     }
 
     public function findComponentByModel($componentType, $brand, $model) {
@@ -110,10 +184,14 @@ class ComponentDataService {
     }
 
     private function getOrGenerateUuid($model, $componentType) {
+        // Check both 'uuid' and 'UUID' (JSON may have either)
         if (isset($model['uuid'])) {
             return $model['uuid'];
         }
-        
+        if (isset($model['UUID'])) {
+            return $model['UUID'];
+        }
+
         return $this->generateUuidFromModel($model, $componentType);
     }
 
