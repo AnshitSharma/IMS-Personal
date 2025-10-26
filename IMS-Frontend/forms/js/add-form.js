@@ -7,6 +7,9 @@ class AddFormComponent {
         this.storageData = null;
         this.caddyData = null;
         this.nicData = null;
+        this.hbaData = null;
+        this.chassisData = null;
+        this.pciData = null;
         this.formContainer = document.getElementById('formFields');
         this.init();
     }
@@ -29,6 +32,12 @@ class AddFormComponent {
             await this.initializeCaddyForm();
         } else if (this.componentType === 'nic') {
             await this.initializeNicForm();
+        } else if (this.componentType === 'hba') {
+            await this.initializeHbaForm();
+        } else if (this.componentType === 'chassis') {
+            await this.initializeChassisForm();
+        } else if (this.componentType === 'pci') {
+            await this.initializePciForm();
         } else {
             this.initializeGenericForm();
         }
@@ -1178,10 +1187,24 @@ class AddFormComponent {
                     </div>
                 `;
                 infoContainer.style.display = 'block';
-                document.getElementById('componentUuid').value = caddyDetails.model; // Using model as UUID
+                document.getElementById('componentUuid').value = caddyDetails.uuid; // Using model as UUID
             }
         } else {
             infoContainer.style.display = 'none';
+        }
+    }
+
+    async initializeNicForm() {
+        try {
+            const response = await fetch('../All-JSON/nic-jsons/nic-level-3.json');
+            if (!response.ok) throw new Error('Failed to load NIC data.');
+            this.nicData = await response.json();
+            this.renderNicForm();
+            this.setupNicFormEventListeners();
+            this.populateNicCategories();
+        } catch (error) {
+            console.error('Error initializing NIC form:', error);
+            this.formContainer.innerHTML = `<p class="form-error">Could not load NIC form data. Please try again.</p>`;
         }
     }
 
@@ -1206,12 +1229,6 @@ class AddFormComponent {
                         <label for="nicSeries" class="form-label required">Series</label>
                         <select id="nicSeries" name="series" class="form-select" required disabled>
                             <option value="">Select Series</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label for="nicFamily" class="form-label required">Family</label>
-                        <select id="nicFamily" name="family" class="form-select" required disabled>
-                            <option value="">Select Family</option>
                         </select>
                     </div>
                     <div class="form-group form-column-span-2">
@@ -1270,7 +1287,6 @@ class AddFormComponent {
         document.getElementById('nicCategory').addEventListener('change', (e) => this.handleNicCategoryChange(e.target.value));
         document.getElementById('nicBrand').addEventListener('change', (e) => this.handleNicBrandChange(e.target.value));
         document.getElementById('nicSeries').addEventListener('change', (e) => this.handleNicSeriesChange(e.target.value));
-        document.getElementById('nicFamily').addEventListener('change', (e) => this.handleNicFamilyChange(e.target.value));
         document.getElementById('nicModel').addEventListener('change', (e) => this.handleNicModelChange(e.target.value));
     }
 
@@ -1287,7 +1303,6 @@ class AddFormComponent {
         const brandSelect = document.getElementById('nicBrand');
         this.resetSelect(brandSelect, 'Select Brand');
         this.resetSelect(document.getElementById('nicSeries'), 'Select Series');
-        this.resetSelect(document.getElementById('nicFamily'), 'Select Family');
         this.resetSelect(document.getElementById('nicModel'), 'Select Model');
         document.getElementById('nicInfoContainer').style.display = 'none';
 
@@ -1302,7 +1317,6 @@ class AddFormComponent {
         const category = document.getElementById('nicCategory').value;
         const seriesSelect = document.getElementById('nicSeries');
         this.resetSelect(seriesSelect, 'Select Series');
-        this.resetSelect(document.getElementById('nicFamily'), 'Select Family');
         this.resetSelect(document.getElementById('nicModel'), 'Select Model');
         document.getElementById('nicInfoContainer').style.display = 'none';
 
@@ -1316,35 +1330,32 @@ class AddFormComponent {
     handleNicSeriesChange(selectedSeries) {
         const category = document.getElementById('nicCategory').value;
         const brand = document.getElementById('nicBrand').value;
-        const familySelect = document.getElementById('nicFamily');
-        this.resetSelect(familySelect, 'Select Family');
-        this.resetSelect(document.getElementById('nicModel'), 'Select Model');
+        const modelSelect = document.getElementById('nicModel');
+        this.resetSelect(modelSelect, 'Select Model');
         document.getElementById('nicInfoContainer').style.display = 'none';
 
         if (selectedSeries) {
             const matchingNics = this.nicData.filter(nic => nic.category === category && nic.brand === brand);
-            const families = [];
-            
+            let models = [];
             matchingNics.forEach(nic => {
                 const series = nic.series.find(s => s.name === selectedSeries);
-                if (series && series.families) {
-                    series.families.forEach(f => {
-                        if (!families.includes(f.name)) {
-                            families.push(f.name);
+                if (series && series.models) {
+                    series.models.forEach(modelObj => {
+                        if (modelObj.model && !models.includes(modelObj.model)) {
+                            models.push(modelObj.model);
                         }
                     });
                 }
             });
-            
-            families.forEach(f => familySelect.add(new Option(f, f)));
-            familySelect.disabled = false;
+            models.forEach(m => modelSelect.add(new Option(m, m)));
+            modelSelect.disabled = false;
         }
     }
 
     handleNicFamilyChange(selectedFamily) {
         const category = document.getElementById('nicCategory').value;
         const brand = document.getElementById('nicBrand').value;
-        const series = document.getElementById('nicSeries').value;
+        const series = document.getElementById('nicSeries').value;  
         const modelSelect = document.getElementById('nicModel');
         this.resetSelect(modelSelect, 'Select Model');
         document.getElementById('nicInfoContainer').style.display = 'none';
@@ -1376,7 +1387,6 @@ class AddFormComponent {
         const category = document.getElementById('nicCategory').value;
         const brand = document.getElementById('nicBrand').value;
         const series = document.getElementById('nicSeries').value;
-        const family = document.getElementById('nicFamily').value;
         const infoContainer = document.getElementById('nicInfoContainer');
         const infoDiv = document.getElementById('nicInfo');
 
@@ -1384,18 +1394,16 @@ class AddFormComponent {
             const matchingNics = this.nicData.filter(nic => nic.category === category && nic.brand === brand);
             let familyDetails = null;
             let nicDetails = null;
-            
+
             matchingNics.forEach(nic => {
                 const matchingSeries = nic.series.find(s => s.name === series);
-                if (matchingSeries && matchingSeries.families) {
-                    const matchingFamily = matchingSeries.families.find(f => f.name === family);
-                    if (matchingFamily && matchingFamily.port_configurations) {
-                        const config = matchingFamily.port_configurations.find(p => p.model === selectedModel);
-                        if (config) {
-                            familyDetails = matchingFamily;
-                            nicDetails = config;
+                if (matchingSeries?.models) {
+                    matchingSeries.models.forEach(m => {
+                        if (m.model === selectedModel) {
+                            nicDetails = m;          // matched model
+                            familyDetails = matchingSeries; // the series
                         }
-                    }
+                    });
                 }
             });
 
@@ -1410,23 +1418,19 @@ class AddFormComponent {
                     </div>
                     <div class="form-group">
                         <label class="form-label">Speeds Supported</label>
-                        <p class="form-static-text">${nicDetails.speeds_supported?.join(', ') || 'N/A'}</p>
+                        <p class="form-static-text">${nicDetails.speeds?.join(', ') || 'N/A'}</p>
                     </div>
                     <div class="form-group">
                         <label class="form-label">Form Factor</label>
-                        <p class="form-static-text">${familyDetails.interface_requirements?.slot_height || 'N/A'}</p>
+                        <p class="form-static-text">${nicDetails.interface || 'N/A'}</p>
                     </div>
                     <div class="form-group">
                         <label class="form-label">Power</label>
-                        <p class="form-static-text">${familyDetails.power_requirements?.typical_power || 'N/A'}</p>
+                        <p class="form-static-text">${nicDetails.power || 'N/A'}</p>
                     </div>
                     <div class="form-group">
-                        <label class="form-label">SR-IOV</label>
-                        <p class="form-static-text">${virtualization?.sr_iov?.supported ? 'Yes' : 'No'}</p>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">RDMA</label>
-                        <p class="form-static-text">${rdma?.roce_v2 || rdma?.iwarp ? 'Yes' : 'No'}</p>
+                        <label class="form-label">Features</label>
+                        <p class="form-static-text">${nicDetails.features}</p>
                     </div>
                 `;
                 infoContainer.style.display = 'block';
@@ -1437,17 +1441,255 @@ class AddFormComponent {
         }
     }
 
-    async initializeNicForm() {
+    async initializeChassisForm() {
         try {
-            const response = await fetch('../All-JSON/nic-jsons/nic-level-3.json');
-            if (!response.ok) throw new Error('Failed to load NIC data.');
-            this.nicData = await response.json();
-            this.renderNicForm();
-            this.setupNicFormEventListeners();
-            this.populateNicCategories();
+            const response = await fetch('../All-JSON/chasis-jsons/chasis-level-3.json');
+            if (!response.ok) throw new Error('Failed to load Chasis data.');
+            this.chassisData = await response.json();
+            this.renderChassisForm();
+            this.setupChassisFormEventListeners();
+            this.populateChassisCategories();
         } catch (error) {
-            console.error('Error initializing NIC form:', error);
-            this.formContainer.innerHTML = `<p class="form-error">Could not load NIC form data. Please try again.</p>`;
+            console.error('Error initializing Chassis form:', error);
+            this.formContainer.innerHTML = `<p class="form-error">Could not load Chassis form data. Please try again.</p>`;
+        }
+    }
+
+    renderChassisForm() {
+        this.formContainer.innerHTML = `
+            <div class="form-section">
+                <h4 class="form-section-title">Chassis Selection</h4>
+                <div class="form-grid two-column">
+                    <div class="form-group">
+                        <label for="chassisManufacturers" class="form-label required">Manufacturers</label>
+                        <select id="chassisManufacturers" name="category" class="form-select" required>
+                            <option value="">Select Category</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="chassisSeries" class="form-label required">Series</label>
+                        <select id="chassisSeries" name="series" class="form-select" required disabled>
+                            <option value="">Select Series</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="chassisBrand" class="form-label required">Brand</label>
+                        <select id="chassisBrand" name="brand" class="form-select" required disabled>
+                            <option value="">Select Brand</option>
+                        </select>
+                    </div>
+                    <div class="form-group form-column-span-2">
+                        <label for="chassisModel" class="form-label required">Model</label>
+                        <select id="chassisModel" name="model" class="form-select" required disabled>
+                            <option value="">Select Model</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <div class="form-section" id="chassisInfoContainer" style="display: none;">
+                <h4 class="form-section-title">Chassis Information</h4>
+                <div id="chassisInfo" class="form-grid two-column"></div>
+            </div>
+            <div class="form-section">
+                <h4 class="form-section-title">Inventory Details</h4>
+                <div class="form-grid two-column">
+                    <div class="form-group">
+                        <label for="serialNumber" class="form-label required">Serial Number</label>
+                        <input type="text" id="serialNumber" name="serialNumber" class="form-input" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="status" class="form-label required">Status</label>
+                        <select id="status" name="status" class="form-select" required>
+                            <option value="1">Available</option>
+                            <option value="2">In Use</option>
+                            <option value="0">Failed</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="location" class="form-label">Location</label>
+                        <input type="text" id="location" name="location" class="form-input">
+                    </div>
+                    <div class="form-group">
+                        <label for="purchaseDate" class="form-label">Purchase Date</label>
+                        <input type="date" id="purchaseDate" name="purchaseDate" class="form-input" value="${new Date().toISOString().slice(0, 10)}">
+                    </div>
+                    <div class="form-group">
+                        <label for="warrantyEndDate" class="form-label">Warranty End Date</label>
+                        <input type="date" id="warrantyEndDate" name="warrantyEndDate" class="form-input">
+                    </div>
+                    <div class="form-group">
+                        <label for="componentUuid" class="form-label">Component UUID</label>
+                        <input type="text" id="componentUuid" name="componentUuid" class="form-input" readonly>
+                    </div>
+                    <div class="form-group form-column-span-2">
+                        <label for="notes" class="form-label">Notes</label>
+                        <textarea id="notes" name="notes" class="form-textarea" rows="3"></textarea>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    setupChassisFormEventListeners() {
+        document.getElementById('chassisManufacturers').addEventListener('change', (e) => this.handleChassisCategoryChange(e.target.value));
+        // document.getElementById('chassisBrand').addEventListener('change', (e) => this.handleChassisBrandChange(e.target.value));
+        document.getElementById('chassisSeries').addEventListener('change', (e) => this.handleChassisSeriesChange(e.target.value));
+        document.getElementById('chassisModel').addEventListener('change', (e) => this.handleChassisModelChange(e.target.value));
+    }
+
+    populateChassisCategories() {
+        const manufacturerSelect = document.getElementById('chassisManufacturers');
+        const manufacturers = this.chassisData?.chassis_specifications?.manufacturers || [];
+        const categories = [...new Set(manufacturers.map(m => m.manufacturer))];
+        categories.forEach(category => {
+            const option = new Option(category, category);
+            manufacturerSelect.add(option);
+        });
+    }
+
+    handleChassisCategoryChange(selectedCategory) {
+        const brandSelect = document.getElementById('chassisBrand');
+        const seriesSelect = document.getElementById('chassisSeries');
+        const modelSelect = document.getElementById('chassisModel');
+
+        this.resetSelect(brandSelect, 'Select Brand');
+        this.resetSelect(seriesSelect, 'Select Series');
+        this.resetSelect(modelSelect, 'Select Model');
+        document.getElementById('chassisInfoContainer').style.display = 'none';
+
+        if (selectedCategory) {
+            const manufacturers = this.chassisData?.chassis_specifications?.manufacturers || [];
+            const selectedManufacturer = manufacturers.find(
+                m => m.manufacturer === selectedCategory
+            );
+
+            if (selectedManufacturer && selectedManufacturer.series) {
+                const seriesList = [...new Set(selectedManufacturer.series.map(s => s.series_name))];
+                seriesList.forEach(seriesName => {
+                    const option = new Option(seriesName, seriesName);
+                    seriesSelect.add(option);
+                });
+                seriesSelect.disabled = false;
+            }
+        }
+    }
+
+    handleChassisBrandChange(selectedBrand) {
+        const category = document.getElementById('chassisManufacturers').value;
+        const seriesSelect = document.getElementById('chassisSeries');
+        this.resetSelect(seriesSelect, 'Select Series');
+        this.resetSelect(document.getElementById('chassisModel'), 'Select Model');
+        document.getElementById('chassisInfoContainer').style.display = 'none';
+
+        if (selectedBrand) {
+            const series = [...new Set(this.nicData.filter(nic => nic.category === category && nic.brand === selectedBrand).flatMap(nic => nic.series.map(s => s.name)))];
+            series.forEach(s => {
+                const option = new Option(s, s);
+                seriesSelect.add(option);
+            });
+        }
+    }
+
+    handleChassisSeriesChange(selectedSeries) {
+        const category = document.getElementById('chassisManufacturers').value;
+        const brand = document.getElementById('chassisBrand').value;
+        const modelSelect = document.getElementById('chassisModel');
+        this.resetSelect(modelSelect, 'Select Model');
+        document.getElementById('chassisInfoContainer').style.display = 'none';
+
+        if (selectedSeries) {
+            const manufacturers = this.chassisData?.chassis_specifications?.manufacturers || [];
+            const selectedManufacturer = manufacturers.find(m => m.manufacturer === category);
+
+            const selectedSeriesObj = selectedManufacturer.series.find(s => s.series_name === selectedSeries);
+            if (!selectedSeriesObj || !selectedSeriesObj.models) return;
+            this.resetSelect(modelSelect, 'Select Model');
+            selectedSeriesObj.models.forEach(modelObj => {
+                if (modelObj.model) {
+                    const option = new Option(modelObj.model, modelObj.uuid);
+                    modelSelect.add(option);
+                }
+            });
+            modelSelect.disabled = false;
+        }
+    }
+
+    handleChassisFamilyChange(selectedFamily) {
+        const category = document.getElementById('chassisManufacturers').value;
+        const brand = document.getElementById('chassisBrand').value;
+        const series = document.getElementById('chassisSeries').value;  
+        const modelSelect = document.getElementById('chassisModel');
+        this.resetSelect(modelSelect, 'Select Model');
+        document.getElementById('chassisInfoContainer').style.display = 'none';
+
+        if (selectedFamily) {
+            const matchingNics = this.nicData.filter(nic => nic.category === category && nic.brand === brand);
+            const models = [];
+            
+            matchingNics.forEach(nic => {
+                const matchingSeries = nic.series.find(s => s.name === series);
+                if (matchingSeries && matchingSeries.families) {
+                    const family = matchingSeries.families.find(f => f.name === selectedFamily);
+                    if (family && family.port_configurations) {
+                        family.port_configurations.forEach(config => {
+                            if (!models.includes(config.model)) {
+                                models.push(config.model);
+                            }
+                        });
+                    }
+                }
+            });
+            
+            models.forEach(m => modelSelect.add(new Option(m, m)));
+            modelSelect.disabled = false;
+        }
+    }
+
+    handleChassisModelChange(selectedModel) {
+        const category = document.getElementById('chassisManufacturers').value;
+        const brand = document.getElementById('chassisBrand').value;
+        const series = document.getElementById('chassisSeries').value;
+        const infoContainer = document.getElementById('chassisInfoContainer');
+        const infoDiv = document.getElementById('chassisInfo');
+        if (selectedModel) {
+            const manufacturers = this.chassisData?.chassis_specifications?.manufacturers || [];
+            const selectedManufacturer = manufacturers.find(m => m.manufacturer === category);
+
+            if (!selectedManufacturer) return;
+
+            let seriesDetails = null;
+            let modelDetails = null;
+            selectedManufacturer.series.forEach(seriesObj => {
+                if (seriesObj.models) {
+
+                    const foundModel = seriesObj.models.find(m => m.uuid === selectedModel);
+                    if (foundModel) {
+                        modelDetails = foundModel;
+                        seriesDetails = seriesObj;     
+                    }
+                }
+            });
+
+            if (modelDetails && seriesDetails) {
+                infoDiv.innerHTML = `
+                    <div class="form-group">
+                        <label class="form-label">Hot Swap</label>
+                        <p class="form-static-text">${modelDetails.drive_bays.bay_configuration[0].hot_swap || 'N/A'}</p>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Chassis Type</label>
+                        <p class="form-static-text">${modelDetails.chassis_type || 'N/A'}</p>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Form Factor</label>
+                        <p class="form-static-text">${modelDetails.form_factor || 'N/A'}</p>
+                    </div>
+                `;
+                infoContainer.style.display = 'block';
+                document.getElementById('componentUuid').value = modelDetails.uuid || '';
+            }
+        } else {
+            infoContainer.style.display = 'none';
         }
     }
 
@@ -1522,9 +1764,8 @@ class AddFormComponent {
             componentDetails = this.nicData
                 ?.filter(nic => nic.category === data.category && nic.brand === data.brand)
                 .flatMap(nic => nic.series)
-                .find(s => s.name === data.series)
-                ?.families.find(f => f.name === data.family)
-                ?.port_configurations.find(p => p.model === data.model);
+                ?.find(s => s.name === data.series)
+                ?.models.find(m => m.model === data.model);
         }
 
         if (['cpu', 'motherboard', 'ram', 'storage', 'caddy'].includes(this.componentType)) {
@@ -1537,7 +1778,7 @@ class AddFormComponent {
             } else if (this.componentType === 'storage') {
                 modelName = `${componentDetails.brand} ${componentDetails.series} ${componentDetails.subtype} ${componentDetails.capacity_GB}GB`;
             } else if (this.componentType === 'nic') {
-                modelName = `${componentDetails.brand} ${componentDetails.series} ${componentDetails.family} ${componentDetails.model_prefix}`;
+                modelName = `${componentDetails.brand} ${componentDetails.series} ${componentDetails.family} ${componentDetails.model}`;
             } else {
                 modelName = componentDetails.model;
             }

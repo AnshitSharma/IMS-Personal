@@ -892,12 +892,10 @@ body {
     justify-content: space-between;
     align-items: flex-start;
     margin-bottom: 16px;
-    gap: 12px;
 }
 
 .server-config-info {
     flex: 1;
-    min-width: 0;
 }
 
 .server-config-title-wrapper {
@@ -905,7 +903,6 @@ body {
     align-items: center;
     gap: 12px;
     margin-bottom: 8px;
-    min-width: 0;
 }
 
 .server-icon-wrapper {
@@ -916,7 +913,6 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    flex-shrink: 0;
 }
 
 .server-icon-wrapper i {
@@ -929,9 +925,6 @@ body {
     font-weight: 700;
     color: var(--text-color);
     margin: 0 0 4px 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
 }
 
 .server-config-description {

@@ -11,7 +11,6 @@ window.api = {
     getToken() {
         return localStorage.getItem('bdc_token');
     },
-
     // Set auth token
     setToken(token) {
         if (token) {
@@ -20,7 +19,6 @@ window.api = {
             localStorage.removeItem('bdc_token');
         }
     },
-
     // Get refresh token
     getRefreshToken() {
         return localStorage.getItem('bdc_refresh_token');
@@ -60,7 +58,6 @@ window.api = {
     // Make API request with automatic token refresh
     async request(action, data = {}, method = 'POST') {
         const token = this.getToken();
-        
         // Always use FormData for consistency with API expectations
         const formData = new FormData();
         formData.append('action', action);
@@ -136,9 +133,8 @@ window.api = {
         const refreshToken = this.getRefreshToken();
         if (!refreshToken) {
             return false;
-        }
-
-        try {
+        } 
+        try {            
             const formData = new FormData();
             formData.append('action', 'auth-refresh');
             formData.append('refresh_token', refreshToken);
@@ -184,6 +180,7 @@ window.api = {
     // Authentication endpoints
     auth: {
         async login(username, password) {
+            
             const result = await api.request('auth-login', {
                 username: username,
                 password: password
@@ -483,6 +480,7 @@ window.api = {
 
 // Initialize API authentication check on page load
 document.addEventListener('DOMContentLoaded', async () => {
+    
     // Skip auth check if on login page
     if (window.location.pathname.includes('login')) {
         return;
@@ -494,7 +492,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         window.location.href = '/ims_frontend/';
         return;
     }
-
     // Verify token is still valid
     const isValid = await api.auth.verifyToken();
     if (!isValid) {
@@ -503,7 +500,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (!refreshed) {
             // Redirect to login if refresh failed
             api.handleAuthFailure();
+        } else {
         }
+    } else {
     }
 });
 
