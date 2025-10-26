@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BDC Inventory Management System</title>
+    <link rel="stylesheet" href="css/dashboard.css">
+    <link rel="stylesheet" href="../forms/css/forms.css">
+    <link rel="stylesheet" href="../css/toast.css">
+    <link rel="stylesheet" href="../server/server-builder.css">
+    <link rel="stylesheet" href="../server/pcpartpicker-style.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+    <!-- Navigation Header -->
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="nav-brand">
+                <i class="fas fa-server"></i>
+                <span>BDC Inventory</span>
+            </div>
+            
+            <div class="nav-menu">
+                <div class="nav-search">
+                    <i class="fas fa-search"></i>
+                    <input type="text" id="globalSearch" placeholder="Search components...">
+                </div>
+                
+                <div class="nav-user">
+                    <div class="user-info">
+                        <span id="userDisplayName">Loading...</span>
+                        <span id="userRole">User</span>
+                    </div>
+                    <div class="user-avatar">
+                        <i class="fas fa-user"></i>
+                    </div>
+                    <div class="dropdown">
+                        <button class="dropdown-btn">
+                            <i class="fas fa-chevron-down"></i>
+                        </button>
+                        <div class="dropdown-content">
+                            <a href="#" id="changePassword">
+                                <i class="fas fa-key"></i> Change Password
+                            </a>
+                            <a href="#" id="logoutBtn">
+                                <i class="fas fa-sign-out-alt"></i> Logout
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Container -->
+    <div class="main-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h3>Components</h3>
+            </div>
+            
+            <ul class="sidebar-menu">
+                <li class="menu-item active" data-component="dashboard">
+                    <i class="fas fa-tachometer-alt"></i>
+                    <span>Dashboard</span>
+                </li>
+                <li class="menu-item" data-component="cpu">
+                    <i class="fas fa-microchip"></i>
+                    <span>CPUs</span>
+                    <span class="count" id="cpuCount">0</span>
+                </li>
+                <li class="menu-item" data-component="ram">
+                    <i class="fas fa-memory"></i>
+                    <span>RAM</span>
+                    <span class="count" id="ramCount">0</span>
+                </li>
+                <li class="menu-item" data-component="storage">
+                    <i class="fas fa-hdd"></i>
+                    <span>Storage</span>
+                    <span class="count" id="storageCount">0</span>
+                </li>
+                <li class="menu-item" data-component="motherboard">
+                    <i class="fas fa-th-large"></i>
+                    <span>Motherboards</span>
+                    <span class="count" id="motherboardCount">0</span>
+                </li>
+                <li class="menu-item" data-component="nic">
+                    <i class="fas fa-network-wired"></i>
+                    <span>Network Cards</span>
+                    <span class="count" id="nicCount">0</span>
+                </li>
+                <li class="menu-item" data-component="caddy">
+                    <i class="fas fa-box"></i>
+                    <span>Caddies</span>
+                    <span class="count" id="caddyCount">0</span>
+                </li>
+                <li class="menu-item" data-component="chassis">
+                    <i class="fas fa-server"></i>
+                    <span>Chassis</span>
+                    <span class="count" id="chassisCount">0</span>
+                </li>
+                <li class="menu-item" data-component="pciecard">
+                    <i class="fas fa-credit-card"></i>
+                    <span>PCIe Cards</span>
+                    <span class="count" id="pciecardCount">0</span>
+                </li>
+                <li class="menu-item" data-component="servers">
+                    <i class="fas fa-cubes"></i>
+                    <span>Servers</span>
+                    <span class="count" id="serversCount">0</span>
+                </li>
+            </ul>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Dashboard Overview -->
+            <div id="dashboardView" class="content-section active">
+                <div class="content-header">
+                    <h2>Dashboard Overview</h2>
+                    <div class="header-actions">
+                        <button class="btn btn-primary" id="refreshDashboard">
+                            <i class="fas fa-sync-alt"></i> Refresh
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Stats Cards -->
+                <div class="stats-grid">
+                    <div class="stat-card cpu-card">
+                        <div class="stat-icon">
+                            <i class="fas fa-microchip"></i>
+                        </div>
+                        <div class="stat-info">
+                            <h3 id="dashCpuTotal">0</h3>
+                            <p>CPUs</p>
+                            <div class="stat-breakdown">
+                                <span class="available">Available: <span id="dashCpuAvailable">0</span></span>
+                                <span class="in-use">In Use: <span id="dashCpuInUse">0</span></span>
+                                <span class="failed">Failed: <span id="dashCpuFailed">0</span></span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="stat-card ram-card">
+                        <div class="stat-icon">
+                            <i class="fas fa-memory"></i>
+                        </div>
+                        <div class="stat-info">
+                            <h3 id="dashRamTotal">0</h3>
+                            <p>RAM Modules</p>
+                            <div class="stat-breakdown">
+                                <span class="available">Available: <span id="dashRamAvailable">0</span></span>
+                                <span class="in-use">In Use: <span id="dashRamInUse">0</span></span>
+                                <span class="failed">Failed: <span id="dashRamFailed">0</span></span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="stat-card storage-card">
+                        <div class="stat-icon">
+                            <i class="fas fa-hdd"></i>
+                        </div>
+                        <div class="stat-info">
+                            <h3 id="dashStorageTotal">0</h3>
+                            <p>Storage Devices</p>
+                            <div class="stat-breakdown">
+                                <span class="available">Available: <span id="dashStorageAvailable">0</span></span>
+                                <span class="in-use">In Use: <span id="dashStorageInUse">0</span></span>
+                                <span class="failed">Failed: <span id="dashStorageFailed">0</span></span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="stat-card motherboard-card">
+                        <div class="stat-icon">
+                            <i class="fas fa-th-large"></i>
+                        </div>
+                        <div class="stat-info">
+                            <h3 id="dashMotherboardTotal">0</h3>
+                            <p>Motherboards</p>
+                            <div class="stat-breakdown">
+                                <span class="available">Available: <span id="dashMotherboardAvailable">0</span></span>
+                                <span class="in-use">In Use: <span id="dashMotherboardInUse">0</span></span>
+                                <span class="failed">Failed: <span id="dashMotherboardFailed">0</span></span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="stat-card nic-card">
+                        <div class="stat-icon">
+                            <i class="fas fa-network-wired"></i>
+                        </div>
+                        <div class="stat-info">
+                            <h3 id="dashNicTotal">0</h3>
+                            <p>Network Cards</p>
+                            <div class="stat-breakdown">
+                                <span class="available">Available: <span id="dashNicAvailable">0</span></span>
+                                <span class="in-use">In Use: <span id="dashNicInUse">0</span></span>
+                                <span class="failed">Failed: <span id="dashNicFailed">0</span></span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="stat-card caddy-card">
+                        <div class="stat-icon">
+                            <i class="fas fa-box"></i>
+                        </div>
+                        <div class="stat-info">
+                            <h3 id="dashCaddyTotal">0</h3>
+                            <p>Caddies</p>
+                            <div class="stat-breakdown">
+                                <span class="available">Available: <span id="dashCaddyAvailable">0</span></span>
+                                <span class="in-use">In Use: <span id="dashCaddyInUse">0</span></span>
+                                <span class="failed">Failed: <span id="dashCaddyFailed">0</span></span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="stat-card chassis-card">
+                        <div class="stat-icon">
+                            <i class="fas fa-server"></i>
+                        </div>
+                        <div class="stat-info">
+                            <h3 id="dashChassisTotal">0</h3>
+                            <p>Chassis</p>
+                            <div class="stat-breakdown">
+                                <span class="available">Available: <span id="dashChassisAvailable">0</span></span>
+                                <span class="in-use">In Use: <span id="dashChassisInUse">0</span></span>
+                                <span class="failed">Failed: <span id="dashChassisFailed">0</span></span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="stat-card pciecard-card">
+                        <div class="stat-icon">
+                            <i class="fas fa-credit-card"></i>
+                        </div>
+                        <div class="stat-info">
+                            <h3 id="dashPciecardTotal">0</h3>
+                            <p>PCIe Cards</p>
+                            <div class="stat-breakdown">
+                                <span class="available">Available: <span id="dashPciecardAvailable">0</span></span>
+                                <span class="in-use">In Use: <span id="dashPciecardInUse">0</span></span>
+                                <span class="failed">Failed: <span id="dashPciecardFailed">0</span></span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="stat-card servers-card">
+                        <div class="stat-icon">
+                            <i class="fas fa-cubes"></i>
+                        </div>
+                        <div class="stat-info">
+                            <h3 id="dashServersTotal">0</h3>
+                            <p>Servers</p>
+                            <div class="stat-breakdown">
+                                <span class="draft">Draft: <span id="dashServersDraft">0</span></span>
+                                <span class="validated">Validated: <span id="dashServersValidated">0</span></span>
+                                <span class="built">Built: <span id="dashServersBuilt">0</span></span>
+                                <span class="finalized">Finalized: <span id="dashServersFinalized">0</span></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Recent Activity -->
+                <div class="recent-activity">
+                    <div class="section-header">
+                        <h3>Recent Activity</h3>
+                        <a href="#" class="view-all">View All</a>
+                    </div>
+                    <div class="activity-list" id="recentActivity">
+                        <!-- Activity items will be populated by JavaScript -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Component Lists -->
+            <div id="componentView" class="content-section">
+                <div class="content-header">
+                    <h2 id="componentTitle">Components</h2>
+                    <div class="header-actions">
+                        <div class="search-filter">
+                            <input type="text" id="componentSearch" placeholder="Search components...">
+                            <select id="statusFilter">
+                                <option value="">All Status</option>
+                                <option value="1">Available</option>
+                                <option value="2">In Use</option>
+                                <option value="0">Failed</option>
+                            </select>
+                        </div>
+                        <button class="btn btn-primary" id="addComponentBtn">
+                            <i class="fas fa-plus"></i> Add Component
+                        </button>
+                        <button class="btn btn-secondary" id="refreshComponents">
+                            <i class="fas fa-sync-alt"></i> Refresh
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Components Table -->
+                <div class="table-container">
+                    <table class="components-table" id="componentsTable">
+                        <thead id="componentsTableHeader">
+                            <tr>
+                                <th>
+                                    <input type="checkbox" id="selectAllComponents">
+                                </th>
+                                <th>Serial Number</th>
+                                <th>Status</th>
+                                <th>Server UUID</th>
+                                <th>Location</th>
+                                <th>Purchase Date</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="componentsTableBody">
+                            <!-- Table rows will be populated by JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Pagination -->
+                <div class="pagination-container">
+                    <div class="pagination-info">
+                        <span id="paginationInfo">Showing 0 of 0 items</span>
+                    </div>
+                    <div class="pagination" id="pagination">
+                        <!-- Pagination buttons will be populated by JavaScript -->
+                    </div>
+                </div>
+
+                <!-- Bulk Actions -->
+                <div class="bulk-actions" id="bulkActions" style="display: none;">
+                    <div class="bulk-info">
+                        <span id="selectedCount">0</span> items selected
+                    </div>
+                    <div class="bulk-buttons">
+                        <button class="btn btn-secondary" id="bulkUpdateStatus">
+                            <i class="fas fa-edit"></i> Update Status
+                        </button>
+                        <button class="btn btn-danger" id="bulkDelete">
+                            <i class="fas fa-trash"></i> Delete Selected
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Server View -->
+            <div id="serverView" class="content-section">
+                <div class="content-header">
+                    <h2><i class="fas fa-server"></i> Server Management</h2>
+                    <div class="header-actions">
+                        <div class="search-filter">
+                            <input type="text" id="serverSearch" placeholder="Search servers...">
+                            <select id="serverStatusFilter">
+                                <option value="">All Status</option>
+                                <option value="0">Draft</option>
+                                <option value="1">Validated</option>
+                                <option value="2">Built</option>
+                                <option value="3">Finalized</option>
+                            </select>
+                        </div>
+                        <button class="btn btn-primary" id="addServerBtn">
+                            <i class="fas fa-plus"></i> Create New Server
+                        </button>
+                        <button class="btn btn-secondary" id="refreshServers">
+                            <i class="fas fa-sync-alt"></i> Refresh
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Server Cards Grid -->
+                <div id="serverCardsGrid" class="stats-grid" style="margin-top: 24px;">
+                    <!-- Server cards will be loaded here -->
+                </div>
+
+                <!-- Pagination -->
+                <div class="pagination-container" id="serverPaginationContainer" style="display: none;">
+                    <div class="pagination-info">
+                        <span id="serverPaginationInfo">Showing 0 of 0 items</span>
+                    </div>
+                    <div class="pagination" id="serverPagination">
+                        <!-- Pagination buttons will be populated by JavaScript -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Server Builder View -->
+            <div id="serverBuilderView" class="content-section">
+                <div class="content-header">
+                    <div style="display: flex; align-items: center; gap: 16px;">
+                        <button class="btn btn-secondary" onclick="dashboard.switchView('servers')" title="Back to Server List">
+                            <i class="fas fa-arrow-left"></i>
+                        </button>
+                        <div>
+                            <h2 id="serverBuilderTitle"><i class="fas fa-wrench"></i> Server Builder</h2>
+                            <p id="serverBuilderSubtitle" style="font-size: 14px; color: var(--text-secondary); margin: 4px 0 0 0;"></p>
+                        </div>
+                    </div>
+                    <div class="header-actions">
+                        <button class="btn btn-success" id="validateConfigBtn" style="display: none;">
+                            <i class="fas fa-check-circle"></i> Validate Configuration
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Server Builder Content -->
+                <div id="serverBuilderContent">
+                    <!-- Will be populated dynamically -->
+                </div>
+            </div>
+
+            <!-- Component Configuration View -->
+            <div id="componentConfigView" class="content-section">
+                <div class="content-header">
+                    <div style="display: flex; align-items: center; gap: 16px;">
+                        <button class="btn btn-secondary" onclick="dashboard.switchView('serverBuilder')" title="Back to Server Builder">
+                            <i class="fas fa-arrow-left"></i>
+                        </button>
+                        <div>
+                            <h2 id="componentConfigTitle"><i class="fas fa-cogs"></i> Component Configuration</h2>
+                            <p id="componentConfigSubtitle" style="font-size: 14px; color: var(--text-secondary); margin: 4px 0 0 0;"></p>
+                        </div>
+                    </div>
+                    <div class="header-actions">
+                        <button class="btn btn-primary" id="addSelectedComponentBtn" style="display: none;">
+                            <i class="fas fa-plus"></i> Add Selected Component
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Component Configuration Content -->
+                <div id="componentConfigContent">
+                    <!-- Will be populated dynamically -->
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modal Container -->
+    <div id="modalContainer" class="modal-overlay" style="display: none;">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 id="modalTitle">Modal Title</h3>
+                <button class="modal-close" id="modalClose">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body" id="modalBody">
+                <!-- Modal content will be loaded here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" class="loading-overlay" style="display: none;">
+        <div class="loading-spinner">
+            <i class="fas fa-spinner fa-spin"></i>
+            <p>Loading...</p>
+        </div>
+    </div>
+
+    <!-- Alert Container -->
+    <div id="alertContainer" class="alert-container"></div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/axios@1.6.0/dist/axios.min.js"></script>
+    <script src="../js/toast.js"></script>
+    <script src="js/utils.js"></script>
+    <script src="js/api.js"></script>
+    <script src="../server/server-api.js"></script>
+    <script src="../server/pcpartpicker-builder.js"></script>
+    <script src="js/dashboard.js"></script>
+</body>
+</html>

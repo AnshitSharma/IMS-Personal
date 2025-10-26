@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Server Builder - BDC IMS</title>
+    <link rel="stylesheet" href="../dashboard/css/dashboard.css">
+    <link rel="stylesheet" href="../forms/css/forms.css">
+    <link rel="stylesheet" href="../css/toast.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="server-builder.css" rel="stylesheet">
+    <link href="server-theme.css" rel="stylesheet">
+    <link href="pcpartpicker-style.css" rel="stylesheet">
+</head>
+<body>
+    <!-- Navigation Header -->
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="nav-brand">
+                <i class="fas fa-server"></i>
+                <span>BDC Inventory</span>
+            </div>
+
+            <div class="nav-menu">
+                <div class="nav-search">
+                    <i class="fas fa-search"></i>
+                    <input type="text" id="globalSearch" placeholder="Search components...">
+                </div>
+
+                <div class="nav-user">
+                    <div class="user-info">
+                        <span id="userDisplayName">Loading...</span>
+                        <span id="userRole">User</span>
+                    </div>
+                    <div class="user-avatar">
+                        <i class="fas fa-user"></i>
+                    </div>
+                    <div class="dropdown">
+                        <button class="dropdown-btn">
+                            <i class="fas fa-chevron-down"></i>
+                        </button>
+                        <div class="dropdown-content">
+                            <a href="#" id="changePassword">
+                                <i class="fas fa-key"></i> Change Password
+                            </a>
+                            <a href="#" id="logoutBtn">
+                                <i class="fas fa-sign-out-alt"></i> Logout
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Container -->
+    <div class="main-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h3>Components</h3>
+            </div>
+
+            <ul class="sidebar-menu">
+                <li class="menu-item" data-component="dashboard" onclick="window.location.href='../dashboard/index.html'">
+                    <i class="fas fa-tachometer-alt"></i>
+                    <span>Dashboard</span>
+                </li>
+                <li class="menu-item" data-component="cpu">
+                    <i class="fas fa-microchip"></i>
+                    <span>CPUs</span>
+                    <span class="count" id="cpuCount">0</span>
+                </li>
+                <li class="menu-item" data-component="ram">
+                    <i class="fas fa-memory"></i>
+                    <span>RAM</span>
+                    <span class="count" id="ramCount">0</span>
+                </li>
+                <li class="menu-item" data-component="storage">
+                    <i class="fas fa-hdd"></i>
+                    <span>Storage</span>
+                    <span class="count" id="storageCount">0</span>
+                </li>
+                <li class="menu-item" data-component="motherboard">
+                    <i class="fas fa-th-large"></i>
+                    <span>Motherboards</span>
+                    <span class="count" id="motherboardCount">0</span>
+                </li>
+                <li class="menu-item" data-component="nic">
+                    <i class="fas fa-network-wired"></i>
+                    <span>Network Cards</span>
+                    <span class="count" id="nicCount">0</span>
+                </li>
+                <li class="menu-item" data-component="caddy">
+                    <i class="fas fa-box"></i>
+                    <span>Caddies</span>
+                    <span class="count" id="caddyCount">0</span>
+                </li>
+                <li class="menu-item" data-component="chassis">
+                    <i class="fas fa-server"></i>
+                    <span>Chassis</span>
+                    <span class="count" id="chassisCount">0</span>
+                </li>
+                <li class="menu-item" data-component="pciecard">
+                    <i class="fas fa-credit-card"></i>
+                    <span>PCIe Cards</span>
+                    <span class="count" id="pciecardCount">0</span>
+                </li>
+                <li class="menu-item active" data-component="servers">
+                    <i class="fas fa-cubes"></i>
+                    <span>Servers</span>
+                    <span class="count" id="serversCount">0</span>
+                </li>
+            </ul>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <div class="content-section active">
+                <div class="content-header">
+                    <h2><i class="fas fa-tools"></i> Server Builder</h2>
+                    <div class="header-actions">
+                        <button class="btn btn-secondary" onclick="window.location.href='index.html'">
+                            <i class="fas fa-arrow-left"></i> Back to List
+                        </button>
+                    </div>
+                </div>
+
+                <!-- App Container -->
+                <div id="app">
+                    <div style="text-align: center; padding: 4rem 2rem;">
+                        <div class="loading-spinner">
+                            <i class="fas fa-spinner fa-spin"></i>
+                            <p>Loading server configuration...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" class="loading-overlay" style="display: none;">
+        <div class="loading-spinner">
+            <i class="fas fa-spinner fa-spin"></i>
+            <p>Loading...</p>
+        </div>
+    </div>
+
+    <!-- Alert Container -->
+    <div id="alertContainer" class="alert-container"></div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/axios@1.6.0/dist/axios.min.js"></script>
+    <script src="../js/toast.js"></script>
+    <script src="../dashboard/js/utils.js"></script>
+    <script src="../dashboard/js/api.js"></script>
+    <script src="server-api.js"></script>
+    <script src="pcpartpicker-builder.js"></script>
+    <script src="server-builder.js"></script>
+</body>
+</html>

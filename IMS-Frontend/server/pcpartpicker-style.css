@@ -1,0 +1,818 @@
+/* ============================================
+   PC Part Picker Style Server Builder
+   ============================================ */
+
+:root {
+    /* BDC IMS Color Scheme - Neutral & Relaxing */
+    --pcpp-primary: #9BA9B2;
+    --pcpp-primary-hover: #8899a3;
+    --pcpp-success: #8fbc8f;
+    --pcpp-warning: #d4a574;
+    --pcpp-danger: #c88888;
+    --pcpp-info: #89b4c9;
+
+    /* Text Colors */
+    --text-primary: #2E2E2E;
+    --text-secondary: #6B6B6B;
+    --text-muted: #8E8E8E;
+
+    /* Backgrounds */
+    --bg-white: #FFFFFF;
+    --bg-gray-50: #F6F6F6;
+    --bg-gray-100: #F6F6F6;
+    --bg-gray-200: #DCDCDC;
+
+    /* Borders */
+    --border-color: #DCDCDC;
+    --border-dark: #8E8E8E;
+
+    /* Shadows */
+    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+
+    /* Transitions */
+    --transition: all 0.2s ease-in-out;
+}
+
+/* ============================================
+   Main Layout
+   ============================================ */
+
+.pcpp-container {
+    margin: 0 auto;
+    padding: 2rem;
+    background: var(--bg-gray-50);
+    min-height: 100vh;
+}
+
+.pcpp-header {
+    margin-bottom: 1rem;
+}
+
+.pcpp-title {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 0.5rem;
+}
+
+.pcpp-subtitle {
+    color: var(--text-secondary);
+    font-size: 1rem;
+}
+
+/* ============================================
+   Compatibility Warning Banner
+   ============================================ */
+
+.compatibility-banner {
+    background: linear-gradient(135deg, rgba(212, 165, 116, 0.15), rgba(212, 165, 116, 0.25));
+    border: 1px solid var(--pcpp-warning);
+    border-radius: 8px;
+    padding: 1rem 1.5rem;
+    margin-bottom: 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.compatibility-banner.warning {
+    background: linear-gradient(135deg, rgba(212, 165, 116, 0.15), rgba(212, 165, 116, 0.25));
+    border-color: var(--pcpp-warning);
+}
+
+.compatibility-banner.success {
+    background: linear-gradient(135deg, rgba(143, 188, 143, 0.15), rgba(143, 188, 143, 0.25));
+    border-color: var(--pcpp-success);
+}
+
+.compatibility-banner i {
+    font-size: 1.25rem;
+    color: var(--pcpp-warning);
+}
+
+.compatibility-banner.success i {
+    color: var(--pcpp-success);
+}
+
+.compatibility-text {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.power-estimate {
+    background: linear-gradient(135deg, rgba(137, 180, 201, 0.15), rgba(137, 180, 201, 0.25));
+    border: 1px solid var(--pcpp-info);
+    border-radius: 8px;
+    padding: 1rem 1.5rem;
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 20px;
+    justify-content: center;
+}
+
+/* ============================================
+   Component Selection Table
+   ============================================ */
+
+.component-table-container {
+    background: var(--bg-white);
+    border-radius: 12px;
+    box-shadow: var(--shadow-md);
+    overflow: hidden;
+    margin-bottom: 2rem;
+}
+
+.component-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.component-table thead {
+    text-align: left;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.component-table th{
+    font-size: 0.8rem;
+    font-weight: 600;
+    padding: 0.4rem 2rem;
+    text-transform: uppercase;
+    color: var(--text-primary);
+}
+
+.component-table td {
+    padding: 1rem;
+    border-bottom: 1px solid var(--border-color);
+    /* vertical-align: top; */
+}
+
+.component-row {
+    transition: var(--transition);
+}
+
+.component-row:hover {
+    background: var(--bg-gray-50);
+}
+
+.component-cell {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.component-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    background: var(--bg-gray-100);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--pcpp-primary);
+    font-size: 1.25rem;
+}
+
+.component-info {
+    flex: 1;
+}
+
+.component-name {
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 0.25rem;
+}
+
+.component-specs {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    line-height: 1.4;
+}
+
+.component-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.375rem 0.75rem;
+    border-radius: 6px;
+    font-size: 0.8125rem;
+    font-weight: 500;
+}
+
+.component-status.available {
+    background: rgba(143, 188, 143, 0.1);
+    color: var(--pcpp-success);
+}
+
+.component-status.in-stock {
+    background: rgba(143, 188, 143, 0.1);
+    color: var(--pcpp-success);
+}
+
+.component-status.out-of-stock {
+    background: rgba(200, 136, 136, 0.1);
+    color: var(--pcpp-danger);
+}
+
+.component-status.soon {
+    background: rgba(212, 165, 116, 0.1);
+    color: var(--pcpp-warning);
+}
+
+.price-cell {
+    text-align: right;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.price-original {
+    text-decoration: line-through;
+    color: var(--text-muted);
+    font-size: 0.875rem;
+    margin-right: 0.5rem;
+}
+
+.price-final {
+    font-size: 1.125rem;
+    color: var(--pcpp-primary);
+}
+
+.promo-badge {
+    background: var(--pcpp-success);
+    color: white;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    margin-left: 0.5rem;
+}
+
+.action-buttons {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.btn-add, .btn-remove {
+    padding: 0.5rem 1rem;
+    border: none;
+    border-radius: 6px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: var(--transition);
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.btn-add {
+    background: var(--pcpp-primary);
+    color: white;
+}
+
+.btn-add:hover {
+    background: var(--pcpp-primary-hover);
+    transform: translateY(-1px);
+}
+
+.btn-remove {
+    background: var(--pcpp-danger);
+    color: white;
+}
+
+.btn-remove:hover {
+    background: #b87777;
+    transform: translateY(-1px);
+}
+
+.btn-add:disabled, .btn-remove:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+}
+
+/* ============================================
+   Pricing Summary
+   ============================================ */
+
+.pricing-summary {
+    background: var(--bg-white);
+    border-radius: 12px;
+    padding: 2rem;
+    box-shadow: var(--shadow-md);
+    margin-bottom: 2rem;
+}
+
+.pricing-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+}
+
+.pricing-title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.pricing-total {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--pcpp-primary);
+}
+
+.pricing-breakdown {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.pricing-breakdown:last-child {
+    border-bottom: none;
+    font-weight: 600;
+    font-size: 1.125rem;
+}
+
+.pricing-label {
+    color: var(--text-secondary);
+}
+
+.pricing-value {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.pricing-value.promo {
+    color: var(--pcpp-success);
+}
+
+.pricing-value.total {
+    color: var(--pcpp-primary);
+    font-size: 1.25rem;
+}
+
+.buy-button {
+    width: 100%;
+    background: linear-gradient(135deg, var(--pcpp-success), #7aad7a);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 1rem 2rem;
+    font-size: 1.125rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: var(--transition);
+    margin-top: 1.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+}
+
+.buy-button:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-lg);
+}
+
+.buy-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+}
+
+/* ============================================
+   Promos and Discounts
+   ============================================ */
+
+.promos-section {
+    background: var(--bg-white);
+    border-radius: 12px;
+    padding: 1.5rem;
+    box-shadow: var(--shadow-sm);
+    margin-bottom: 2rem;
+}
+
+.promos-title {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 1rem;
+}
+
+.promo-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.promo-item:last-child {
+    border-bottom: none;
+}
+
+.promo-description {
+    color: var(--text-secondary);
+}
+
+.promo-value {
+    font-weight: 600;
+    color: var(--pcpp-success);
+}
+
+.disclaimer {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: 1rem;
+    font-style: italic;
+}
+
+/* ============================================
+   Potential Issues
+   ============================================ */
+
+.issues-section {
+    background: var(--bg-white);
+    border-radius: 12px;
+    padding: 1.5rem;
+    box-shadow: var(--shadow-sm);
+    margin-bottom: 2rem;
+}
+
+.issues-title {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 1rem;
+}
+
+.issue-item {
+    gap: 0.75rem;
+    padding: 1rem;
+    border-radius: 8px;
+    margin-bottom: 0.75rem;
+}
+
+.issue-item:last-child {
+    margin-bottom: 0;
+}
+
+.issue-item.warning {
+    background: rgba(212, 165, 116, 0.1);
+    border: 1px solid var(--pcpp-warning);
+}
+
+.issue-item.info {
+    background: rgba(137, 180, 201, 0.1);
+    border: 1px solid var(--pcpp-info);
+}
+
+.issue-icon {
+    font-size: 1.25rem;
+    margin-top: 0.125rem;
+}
+
+.issue-item.warning .issue-icon {
+    color: var(--pcpp-warning);
+}
+
+.issue-item.info .issue-icon {
+    color: var(--pcpp-info);
+}
+
+.issue-text {
+    flex: 1;
+    color: var(--text-primary);
+    line-height: 1.5;
+}
+
+/* ============================================
+   Motherboard Usage Diagram
+   ============================================ */
+
+.motherboard-section {
+    background: var(--bg-white);
+    border-radius: 12px;
+    padding: 2rem;
+    box-shadow: var(--shadow-sm);
+    margin-bottom: 2rem;
+}
+
+.motherboard-title {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 1.5rem;
+}
+
+.motherboard-diagram {
+    display: grid;
+    grid-template-columns: 1fr 2fr 1fr;
+    gap: 2rem;
+    align-items: start;
+}
+
+.motherboard-visual {
+    background: var(--bg-gray-100);
+    border: 2px solid var(--border-color);
+    border-radius: 12px;
+    padding: 2rem;
+    text-align: center;
+    position: relative;
+}
+
+.motherboard-name {
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 1rem;
+}
+
+.socket-section, .memory-section, .expansion-section {
+    background: var(--bg-white);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 1rem;
+}
+
+.section-title {
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 0.75rem;
+    font-size: 0.875rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.socket-item, .memory-slot, .expansion-slot {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--border-color);
+    font-size: 0.875rem;
+}
+
+.socket-item:last-child, .memory-slot:last-child, .expansion-slot:last-child {
+    border-bottom: none;
+}
+
+.slot-label {
+    color: var(--text-secondary);
+}
+
+.slot-component {
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
+.slot-empty {
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+.slot-covered {
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+/* ============================================
+   Price History Graph
+   ============================================ */
+
+.price-history-section {
+    background: var(--bg-white);
+    border-radius: 12px;
+    padding: 2rem;
+    box-shadow: var(--shadow-sm);
+}
+
+.price-history-title {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 1.5rem;
+}
+
+.price-chart {
+    height: 300px;
+    background: var(--bg-gray-50);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-secondary);
+    font-style: italic;
+}
+
+/* ============================================
+   Responsive Design
+   ============================================ */
+
+@media (max-width: 1024px) {
+    .component-table {
+        font-size: 0.875rem;
+    }
+    
+    .component-table th,
+    .component-table td {
+        padding: 0.75rem 0.5rem;
+    }
+    
+    .motherboard-diagram {
+        grid-template-columns: 1fr;
+        gap: 1rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .pcpp-container {
+        padding: 1rem;
+    }
+    
+    .component-table-container {
+        overflow-x: auto;
+    }
+    
+    .component-table {
+        min-width: 800px;
+    }
+    
+    .pricing-summary {
+        padding: 1.5rem;
+    }
+    
+    .pricing-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1rem;
+    }
+    
+    .compatibility-banner {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.5rem;
+    }
+    
+    .power-estimate {
+        margin-left: 0;
+        margin-top: 0.5rem;
+    }
+}
+
+/* ============================================
+   Component Selection Interface
+   ============================================ */
+
+.component-selection-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+    gap: 1.5rem;
+    margin-top: 1rem;
+}
+
+.component-selection-card {
+    background: var(--bg-white);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 1.5rem;
+    transition: var(--transition);
+    box-shadow: var(--shadow-sm);
+}
+
+.component-selection-card:hover {
+    border-color: var(--pcpp-primary);
+    box-shadow: var(--shadow-md);
+    transform: translateY(-2px);
+}
+
+.component-card-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.component-card-header .component-icon {
+    width: 50px;
+    height: 50px;
+    border-radius: 10px;
+    background: var(--bg-gray-100);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--pcpp-primary);
+    font-size: 1.5rem;
+    flex-shrink: 0;
+}
+
+.component-card-header .component-info {
+    flex: 1;
+}
+
+.component-card-header .component-info h4 {
+    margin: 0 0 0.5rem 0;
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.component-card-header .component-info p {
+    margin: 0;
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    line-height: 1.4;
+}
+
+.component-status {
+    flex-shrink: 0;
+}
+
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.375rem 0.75rem;
+    border-radius: 6px;
+    font-size: 0.8125rem;
+    font-weight: 500;
+}
+
+.status-badge.available {
+    background: rgba(143, 188, 143, 0.1);
+    color: var(--pcpp-success);
+}
+
+.status-badge.in-use {
+    background: rgba(212, 165, 116, 0.1);
+    color: var(--pcpp-warning);
+}
+
+.component-card-details {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+    padding: 1rem;
+    background: var(--bg-gray-50);
+    border-radius: 8px;
+}
+
+.detail-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+}
+
+.detail-item i {
+    width: 16px;
+    color: var(--pcpp-primary);
+}
+
+.component-card-actions {
+    display: flex;
+    gap: 0.75rem;
+}
+
+.component-card-actions .btn {
+    flex: 1;
+    justify-content: center;
+}
+
+@media (max-width: 480px) {
+    .pcpp-title {
+        font-size: 1.5rem;
+    }
+    
+    .component-icon {
+        width: 32px;
+        height: 32px;
+        font-size: 1rem;
+    }
+    
+    .btn-add, .btn-remove {
+        padding: 0.375rem 0.75rem;
+        font-size: 0.8125rem;
+    }
+    
+    .pricing-total {
+        font-size: 1.5rem;
+    }
+    
+    .component-selection-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .component-card-actions {
+        flex-direction: column;
+    }
+}

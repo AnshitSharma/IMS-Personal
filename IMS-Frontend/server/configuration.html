@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Server Configuration - BDC IMS</title>
+    <link rel="stylesheet" href="../dashboard/css/dashboard.css">
+    <link rel="stylesheet" href="../forms/css/forms.css">
+    <link rel="stylesheet" href="../css/toast.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="server-theme.css" rel="stylesheet">
+    <link href="configuration.css" rel="stylesheet">
+</head>
+<body>
+    <!-- Shared Navigation Header -->
+    <div id="navbar-placeholder"></div>
+
+    <!-- Main Container -->
+    <div class="main-container">
+        <!-- Mobile Filter Button -->
+        <button class="mobile-filter-btn" id="mobile-filter-btn">
+            <i class="fas fa-filter"></i> Filters
+        </button>
+
+        <!-- Filter Overlay for Mobile -->
+        <div class="filter-overlay"></div>
+
+        <!-- Left Sidebar -->
+        <aside class="config-sidebar" id="config-sidebar">
+            <!-- Mobile Filter Header -->
+            <div class="mobile-filter-header">
+                <h3>Filters</h3>
+                <button class="mobile-filter-close">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+
+            <!-- Part List Section -->
+            <div class="part-list-section">
+                <div class="part-list-header">
+                    <i class="fas fa-microchip"></i>
+                    <h3>Part List</h3>
+                </div>
+                <div class="compatibility-filter">
+                    <input type="checkbox" id="compatibilityFilter" checked>
+                    <label for="compatibilityFilter">Compatibility Filter</label>
+                </div>
+                <div class="part-summary">
+                    <div class="summary-item">
+                        <span class="summary-label">PARTS</span>
+                        <span class="summary-value" id="partsCount">0</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Filters Section -->
+            <div class="filters-section">
+                <h4>Filters</h4>
+
+                <!-- Manufacturer Filter -->
+                <div class="filter-group">
+                    <label>MANUFACTURER</label>
+                    <div class="radio-group">
+                        <input type="radio" id="manufacturerAll" name="manufacturer" value="all" checked>
+                        <label for="manufacturerAll">All</label>
+                        <input type="radio" id="manufacturerAMD" name="manufacturer" value="amd">
+                        <label for="manufacturerAMD">AMD</label>
+                        <input type="radio" id="manufacturerIntel" name="manufacturer" value="intel">
+                        <label for="manufacturerIntel">Intel</label>
+                    </div>
+                </div>
+
+
+
+                <!-- Core Count Filter -->
+                <div class="filter-group">
+                    <label>CORE COUNT</label>
+                    <div class="range-filter">
+                        <input type="range" id="coreCountRange" min="1" max="64" value="1" class="slider">
+                        <div class="range-labels">
+                            <span>1</span>
+                            <span>64</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Thread Count Filter -->
+                <div class="filter-group">
+                    <label>THREAD COUNT</label>
+                    <div class="range-filter">
+                        <input type="range" id="threadCountRange" min="1" max="128" value="1" class="slider">
+                        <div class="range-labels">
+                            <span>1</span>
+                            <span>128</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Performance Core Clock Filter -->
+                <div class="filter-group">
+                    <label>PERFORMANCE CORE CLOCK</label>
+                    <div class="range-filter">
+                        <input type="range" id="coreClockRange" min="1.1" max="4.7" step="0.1" value="1.1" class="slider">
+                        <div class="range-labels">
+                            <span>1.1 GHz</span>
+                            <span>4.7 GHz</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- L2 Cache Filter -->
+                <div class="filter-group">
+                    <label>L2 CACHE</label>
+                    <div class="range-filter">
+                        <input type="range" id="l2CacheRange" min="0.25" max="40" step="0.25" value="0.25" class="slider">
+                        <div class="range-labels">
+                            <span>0.25 MB</span>
+                            <span>40 MB</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- L3 Cache Filter -->
+                <div class="filter-group">
+                    <label>L3 CACHE</label>
+                    <div class="range-filter">
+                        <input type="range" id="l3CacheRange" min="1" max="200" value="1" class="slider">
+                        <div class="range-labels">
+                            <span>1 MB</span>
+                            <span>200 MB</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Mobile Filter Footer -->
+            <div class="mobile-filter-footer">
+                <button class="mobile-filter-apply">Apply Filters</button>
+            </div>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="config-main-content">
+            <!-- Header -->
+            <div class="config-header">
+                <div class="header-left">
+                    <button class="btn btn-secondary" id="backButton" style="display: none; margin-right: 1rem;">
+                        <i class="fas fa-arrow-left"></i> Back to Builder
+                    </button>
+
+                    <h1>Choose A CPU</h1>
+                </div>
+                <div class="header-actions">
+                    <div class="search-box">
+                        <i class="fas fa-search"></i>
+                        <input type="text" id="componentSearch" placeholder="CPUs">
+                    </div>
+                    <div class="header-links">
+                        <button class="btn btn-primary" id="addFromFilter">
+                            Add From Filter
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Component Count -->
+            <div class="component-count">
+                <span id="componentCount">1430 Compatible Products</span>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="action-buttons">
+                <button class="btn btn-secondary" id="selectAll">Select All</button>
+                <button class="btn btn-secondary" id="selectNone">Select None</button>
+            </div>
+
+            <!-- Component List -->
+            <div class="component-list-container">
+                <div class="component-list-header" id="componentListHeader">
+                    <!-- Column headers will be loaded here -->
+                </div>
+                <div class="component-list" id="componentList">
+                    <!-- Components will be loaded here -->
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Compatibility Warning Banner -->
+    <div class="compatibility-banner" id="compatibilityBanner">
+        <div class="banner-content">
+            <div class="banner-icon">
+                <i class="fas fa-exclamation-triangle"></i>
+            </div>
+            <div class="banner-message">
+                <span id="bannerMessage">Checking component compatibility...</span>
+            </div>
+            <div class="banner-actions">
+                <button class="btn btn-sm btn-primary" id="viewDetails">View Details</button>
+                <button class="btn btn-sm btn-secondary" id="dismissBanner">Dismiss</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" class="loading-overlay" style="display: none;">
+        <div class="loading-spinner">
+            <i class="fas fa-spinner fa-spin"></i>
+            <p>Loading...</p>
+        </div>
+    </div>
+
+    <!-- Alert Container -->
+    <div id="alertContainer" class="alert-container"></div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/axios@1.6.0/dist/axios.min.js"></script>
+    <script src="../js/toast.js"></script>
+    <script src="../dashboard/js/utils.js"></script>
+    <script src="../dashboard/js/api.js"></script>
+    <script src="../components/navbar.js"></script>
+    <script src="server-api.js"></script>
+    <script src="configuration.js"></script>
+</body>
+</html>
