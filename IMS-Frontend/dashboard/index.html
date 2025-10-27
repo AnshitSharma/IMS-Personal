@@ -8,6 +8,7 @@
     <link rel="stylesheet" href="../forms/css/forms.css">
     <link rel="stylesheet" href="../css/toast.css">
     <link rel="stylesheet" href="../server/server-builder.css">
+    <link rel="stylesheet" href="../server/pcpartpicker-style.css">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
 </head>
 <body>
@@ -411,6 +412,31 @@
                     <!-- Will be populated dynamically -->
                 </div>
             </div>
+
+            <!-- Component Configuration View -->
+            <div id="componentConfigView" class="content-section">
+                <div class="content-header">
+                    <div style="display: flex; align-items: center; gap: 16px;">
+                        <button class="btn btn-secondary" onclick="dashboard.switchView('serverBuilder')" title="Back to Server Builder">
+                            <i class="fas fa-arrow-left"></i>
+                        </button>
+                        <div>
+                            <h2 id="componentConfigTitle"><i class="fas fa-cogs"></i> Component Configuration</h2>
+                            <p id="componentConfigSubtitle" style="font-size: 14px; color: var(--text-secondary); margin: 4px 0 0 0;"></p>
+                        </div>
+                    </div>
+                    <div class="header-actions">
+                        <button class="btn btn-primary" id="addSelectedComponentBtn" style="display: none;">
+                            <i class="fas fa-plus"></i> Add Selected Component
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Component Configuration Content -->
+                <div id="componentConfigContent">
+                    <!-- Will be populated dynamically -->
+                </div>
+            </div>
         </main>
     </div>
 
@@ -446,6 +472,7 @@
     <script src="js/utils.js"></script>
     <script src="js/api.js"></script>
     <script src="../server/server-api.js"></script>
+    <script src="../server/pcpartpicker-builder.js"></script>
     <script src="js/dashboard.js"></script>
 </body>
 </html>

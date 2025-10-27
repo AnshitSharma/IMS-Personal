@@ -117,9 +117,38 @@ class Dashboard {
         if (refreshServers) {
             refreshServers.addEventListener('click', async (e) => {
                 e.preventDefault();
-                await this.loadServerList();
+                await this.loadServerList(true);
             });
         }
+
+        // Server search - filter on frontend only
+
+        const serverSearch = document.getElementById('serverSearch');
+
+        if (serverSearch) {
+
+            serverSearch.addEventListener('input', utils.debounce((e) => {
+
+                this.filterAndRenderServers();
+
+            }, 300));
+
+        }
+
+        // Server status filter - filter on frontend only
+
+        const serverStatusFilter = document.getElementById('serverStatusFilter');
+
+        if (serverStatusFilter) {
+
+            serverStatusFilter.addEventListener('change', (e) => {
+
+                this.filterAndRenderServers();
+
+            });
+
+        }
+
 
         // Modal
         const modalClose = document.getElementById('modalClose');
@@ -201,6 +230,18 @@ class Dashboard {
         } else if (component === 'servers') {
             document.getElementById('serverView').classList.add('active');
             await this.loadServerList();
+        } else if (component === 'serverBuilder') {
+
+            document.getElementById('serverBuilderView').classList.add('active');
+
+            await this.loadServerBuilder();
+
+        } else if (component === 'componentConfig') {
+
+            document.getElementById('componentConfigView').classList.add('active');
+
+            await this.loadComponentConfig();
+
         } else {
             document.getElementById('componentView').classList.add('active');
             document.getElementById('componentTitle').textContent = component.charAt(0).toUpperCase() + component.slice(1) + ' Components';
@@ -254,18 +295,10 @@ class Dashboard {
         };
         
         components.forEach(component => {
-            let stat = stats[component];
-            // Check for alternative names if main name not found
-            if (!stat && alternativeNames[component]) {
-                for (const altName of alternativeNames[component]) {
-                    if (stats[altName]) {
-                        stat = stats[altName];
-                        break;
-                    }
-                }
-            }
-            
-            if (stat) {
+             if (stats[component]) {
+
+                const stat = stats[component];
+
                 const componentName = component.charAt(0).toUpperCase() + component.slice(1);
                 const totalEl = document.getElementById(`dash${componentName}Total`);
                 const availEl = document.getElementById(`dash${componentName}Available`);
@@ -276,18 +309,6 @@ class Dashboard {
                 if (availEl) availEl.textContent = stat.available || 0;
                 if (inUseEl) inUseEl.textContent = stat.in_use || 0;
                 if (failedEl) failedEl.textContent = stat.failed || 0;
-            } else {
-                // Set default values for missing components
-                const componentName = component.charAt(0).toUpperCase() + component.slice(1);
-                const totalEl = document.getElementById(`dash${componentName}Total`);
-                const availEl = document.getElementById(`dash${componentName}Available`);
-                const inUseEl = document.getElementById(`dash${componentName}InUse`);
-                const failedEl = document.getElementById(`dash${componentName}Failed`);
-
-                if (totalEl) totalEl.textContent = 0;
-                if (availEl) availEl.textContent = 0;
-                if (inUseEl) inUseEl.textContent = 0;
-                if (failedEl) failedEl.textContent = 0;
             }
         });
         if (stats.servers) {
@@ -321,32 +342,12 @@ class Dashboard {
 
     updateSidebarCounts(stats) {
         const components = ['cpu', 'ram', 'storage', 'motherboard', 'nic', 'caddy', 'chassis', 'pciecard', 'servers'];
-
-        // Check for alternative naming conventions
-        const alternativeNames = {
-            'chassis': ['chasis', 'cabinet', 'case'],
-            'pciecard': ['pci', 'pcie', 'pci-card', 'pcie-card']
-        };
         
         components.forEach(component => {
             const countElement = document.getElementById(`${component}Count`);
-            let componentData = stats[component];
-            
-            // Check for alternative names if main name not found
-            if (!componentData && alternativeNames[component]) {
-                for (const altName of alternativeNames[component]) {
-                    if (stats[altName]) {
-                        componentData = stats[altName];
-                        break;
-                    }
-                }
-            }
-            
-            if (countElement && componentData) {
-                countElement.textContent = componentData.total || 0;
-            } else if (countElement) {
-                // Set to 0 if no data available
-                countElement.textContent = 0;
+            if (countElement && stats[component]) {
+
+                countElement.textContent = stats[component].total || 0;
             }
         });
     }
@@ -397,87 +398,163 @@ class Dashboard {
         }
     }
 
-    async loadServerList() {
-        if (this.loadingStates.servers) {
+     async loadServerList(forceRefresh = false) {
+
+        if (this.loadingStates.servers && !forceRefresh) {
             return;
         }
         try {
             this.loadingStates.servers = true;
-            utils.showLoading(true, `Loading servers...`);
-            const params = {}; 
-            const result = await api.servers.listConfigs(params);
-            if (result.success && result.data && result.data.configurations) {
-                this.renderServerList(result.data.configurations);
-                if (result.data.pagination) this.renderPagination(result.data.pagination);
-            } else {
-                console.error('Invalid server list response:', result);
-                this.renderServerList([]);
+            // Only fetch from API if we don't have cached data or forcing refresh
+
+            if (!this.allServers || forceRefresh) {
+
+                utils.showLoading(true, `Loading servers...`);
+
+                const params = {};  // No search/filter params - get all servers
+
+                const result = await api.servers.listConfigs(params);
+
+
+
+                if (result.success && result.data && result.data.configurations) {
+
+                    this.allServers = result.data.configurations;
+                } else {
+
+                    console.error('Invalid server list response:', result);
+
+                    this.allServers = [];
+
+                }
+            
             }
-        } catch (error) {
+            // Apply frontend filtering
+
+            this.filterAndRenderServers();
+        }  catch (error) {
+
             console.error(`Error loading servers:`, error);
+
             utils.showAlert(`Failed to load servers`, 'error');
+
             this.renderServerList([]);
-        } finally {
+
+        }  finally {
             this.loadingStates.servers = false;
             utils.showLoading(false);
         }
     }
 
-    renderComponentTable(components, componentType) {
-        const tbody = document.getElementById('componentsTableBody');
-        if (components.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="7" class="empty-state"><div style="text-align: center;
-             padding: 40px;"><i class="fas fa-box-open" style="font-size: 48px; color: var(--text-muted); 
-             margin-bottom: 16px;"></i><h3>No Components Found</h3><p>No ${componentType} components match 
-             your search criteria.</p><button class="btn btn-primary" onclick="dashboard.showAddForm()"><i 
-             class="fas fa-plus"></i> Add First ${componentType.toUpperCase()}</button></div></td></tr>`;
+    filterAndRenderServers() {
+
+        if (!this.allServers) {
+
+            this.renderServerList([]);
             return;
         }
-        let normalizedComponents = [];
-        for (const component of components) {
-            normalizedComponents.push({
-                ID: component.ID || component.id || component.uuid || component.component_uuid || '',
-                SerialNumber: component.SerialNumber || component.serial_number || component.serial || component.uuid || component.component_uuid || '',
-                UUID: component.UUID || component.uuid || component.component_uuid || '',
-                Status: component.Status || component.status || '',
-                ServerUUID: component.ServerUUID || component.server_uuid || '',
-                Location: component.Location || component.location || '',
-                PurchaseDate: component.PurchaseDate || component.purchase_date || '',
-                ...component
+        const search = document.getElementById('serverSearch')?.value?.trim().toLowerCase() || '';
+
+        const status = document.getElementById('serverStatusFilter')?.value || '';
+
+
+
+        // Filter servers on frontend
+
+        let filteredServers = this.allServers;
+
+
+
+        // Apply search filter
+
+        if (search) {
+
+            filteredServers = filteredServers.filter(server => {
+
+                const name = (server.server_name || '').toLowerCase();
+
+                const description = (server.description || '').toLowerCase();
+
+                const location = (server.location || '').toLowerCase();
+
+                const notes = (server.notes || '').toLowerCase();
+
+
+
+                return name.includes(search) ||
+
+                       description.includes(search) ||
+
+                       location.includes(search) ||
+
+                       notes.includes(search);
             });
         }
         let html = '';
 
-        for (const component of normalizedComponents) {
-            html += `
-                <tr>
-                    <td><input type="checkbox" class="component-checkbox" value="${component.ID}" onchange="dashboard.handleItemSelection(this)"></td>
-                    <td>
-                        <strong>${utils.escapeHtml(component.SerialNumber || '-')}</strong>
-                        ${component.UUID ? `<br><small style="color: var(--text-muted); font-family: monospace;">${component.UUID}</small>` : ''}
-                    </td>
-                    <td>${utils.createStatusBadge(component.Status)}</td>
-                    <td>${component.ServerUUID ? `<code>${utils.truncateText(component.ServerUUID, 20)}</code>` : '-'}</td>
-                    <td>${utils.escapeHtml(component.Location || '-')}</td>
-                    <td>${utils.formatDate(component.PurchaseDate)}</td>
-                    <td>
-                        <div class="action-buttons">
-                            <button class="action-btn edit" onclick="dashboard.showEditForm('${componentType}', '${component.ID}')" title="Edit">
-                                <i class="fas fa-edit"></i>
-                            </button>
-                            <button class="action-btn delete" onclick="dashboard.handleDeleteComponent('${componentType}', '${component.ID}')" title="Delete">
-                                <i class="fas fa-trash"></i>
-                            </button>
-                        </div>
-                    </td>
-                </tr>
-            `;
+         // Apply status filter
+
+        if (status) {
+
+            filteredServers = filteredServers.filter(server => {
+
+                return server.configuration_status == status;
+
+            });
         }
-        if (tbody) {
-            tbody.innerHTML = html;
-        } else {
-            console.warn('tbody element not found.');
+                // Render filtered results
+
+        this.renderServerList(filteredServers);
+
+    }
+
+
+
+    renderComponentTable(components, componentType) {
+
+        const tbody = document.getElementById('componentsTableBody');
+
+        if (!tbody) return;
+
+        if (components.length === 0) {
+
+            tbody.innerHTML = `<tr><td colspan="7" class="empty-state"><div style="text-align: center; padding: 40px;"><i class="fas fa-box-open" style="font-size: 48px; color: var(--text-muted); margin-bottom: 16px;"></i><h3>No Components Found</h3><p>No ${componentType} components match your search criteria.</p><button class="btn btn-primary" onclick="dashboard.showAddForm()"><i class="fas fa-plus"></i> Add First ${componentType.toUpperCase()}</button></div></td></tr>`;
+
+            return;
+
         }
+
+        tbody.innerHTML = components.map(component => `
+
+            <tr>
+
+                <td><input type="checkbox" class="component-checkbox" value="${component.ID}" onchange="dashboard.handleItemSelection(this)"></td>
+
+                <td><strong>${utils.escapeHtml(component.SerialNumber)}</strong>${component.UUID ? `<br><small style="color: var(--text-muted); font-family: monospace;">${component.UUID}</small>` : ''}</td>
+
+                <td>${utils.createStatusBadge(component.Status)}</td>
+
+                <td>${component.ServerUUID ? `<code>${utils.truncateText(component.ServerUUID, 20)}</code>` : '-'}</td>
+
+                <td>${utils.escapeHtml(component.Location || '-')}</td>
+
+                <td>${utils.formatDate(component.PurchaseDate)}</td>
+
+                <td>
+
+                    <div class="action-buttons">
+
+                        <button class="action-btn edit" onclick="dashboard.showEditForm('${componentType}', ${component.ID})" title="Edit"><i class="fas fa-edit"></i></button>
+
+                        <button class="action-btn delete" onclick="dashboard.handleDeleteComponent('${componentType}', ${component.ID})" title="Delete"><i class="fas fa-trash"></i></button>
+
+                    </div>
+
+                </td>
+
+            </tr>
+
+        `).join('');
     }
 
     renderServerList(servers) {
@@ -517,15 +594,16 @@ class Dashboard {
                                 <i class="fas fa-server"></i>
                             </div>
                             <div>
-                                <h3 class="server-config-title">
-                                    ${utils.escapeHtml(server.server_name || 'Unnamed Server')}
-                                </h3>
+                                <div style="min-width: 0; flex: 1;">
+                                    <h3 class="server-config-title" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                        ${utils.escapeHtml(server.server_name || 'Unnamed Server')}
+                                    </h3>
                                 ${getStatusBadge(server.configuration_status)}
                             </div>
                         </div>
                         ${server.description ? `<p class="server-config-description">${utils.escapeHtml(server.description)}</p>` : ''}
                     </div>
-                    <button class="btn btn-danger" style="padding: 8px 12px; font-size: 12px;"
+                    <button class="btn btn-danger" style="padding: 8px 12px; font-size: 12px; flex-shrink: 0;"
                             onclick="event.stopPropagation(); dashboard.handleDeleteServer('${server.config_uuid}')"
                             title="Delete Server">
                         <i class="fas fa-trash"></i>
@@ -538,7 +616,7 @@ class Dashboard {
                             <i class="fas fa-microchip"></i>
                         </div>
                         <div class="server-stat-label">Components</div>
-                        <div class="server-stat-value">${server.total_components || 0}</div>
+                        <div class="server-stat-value">${server.total_components_types || 0}</div>
                     </div>
                 </div>
 
@@ -672,51 +750,17 @@ class Dashboard {
             this.showModal(`Add New ${this.currentComponent.toUpperCase()}`, formHtml);
             
             const scriptSrc = '../forms/js/add-form.js';
-            const existingScript = document.querySelector(`script[src="${scriptSrc}"]`);
             
-            if (!existingScript) {
+            if (!document.querySelector(`script[src="${scriptSrc}"]`)) {
                 const script = document.createElement('script');
                 script.src = scriptSrc;
                 script.onload = () => { 
-                    // Add a small delay to ensure the script is fully executed
-                    setTimeout(() => {
-                        if (typeof initializeAddComponentForm === 'function') {
-                            initializeAddComponentForm(this.currentComponent);
-                        } else {
-                            console.error('initializeAddComponentForm function not found after script load');
-                        }
-                    }, 100);
-                };
-                script.onerror = (error) => {
-                    console.error('Script loading error:', error);
-                    console.error('Failed to load script:', scriptSrc);
+                    if (typeof initializeAddComponentForm === 'function') initializeAddComponentForm(this.currentComponent);
                 };
                 document.body.appendChild(script);
-                
-                // Fallback: check if function is available after a delay
-                setTimeout(() => {
-                    if (typeof initializeAddComponentForm === 'function') {
-                        initializeAddComponentForm(this.currentComponent);
-                    } else {
-                        console.error('Fallback: initializeAddComponentForm function still not found after 1 second');
-                        // Try to manually create a basic form if the script fails
-                        this.initializeBasicForm();
-                    }
-                }, 1000);
             } else {
                 if (typeof initializeAddComponentForm === 'function') {
                     initializeAddComponentForm(this.currentComponent);
-                    
-                    // Check if form was populated after initialization
-                    setTimeout(() => {
-                        const formFields = document.getElementById('formFields');
-                        if (formFields) {
-                        } else {
-                            console.error('formFields element not found after initialization');
-                        }
-                    }, 500);
-                } else {
-                    console.error('initializeAddComponentForm function not found in existing script');
                 }
             }
         } catch (error) {
@@ -727,78 +771,7 @@ class Dashboard {
         }
     }
 
-    initializeBasicForm() {
-        const formContainer = document.getElementById('formFields');
-        if (formContainer) {
-            formContainer.innerHTML = `
-                <div class="form-section">
-                    <h4 class="form-section-title">Basic ${this.currentComponent.toUpperCase()} Form</h4>
-                    <div class="form-grid two-column">
-                        <div class="form-group">
-                            <label for="serialNumber" class="form-label required">Serial Number</label>
-                            <input type="text" id="serialNumber" name="serialNumber" class="form-input" required>
-                        </div>
-                        <div class="form-group">
-                            <label for="status" class="form-label required">Status</label>
-                            <select id="status" name="status" class="form-select" required>
-                                <option value="1">Available</option>
-                                <option value="2">In Use</option>
-                                <option value="0">Failed</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label for="location" class="form-label">Location</label>
-                            <input type="text" id="location" name="location" class="form-input">
-                        </div>
-                        <div class="form-group">
-                            <label for="purchaseDate" class="form-label">Purchase Date</label>
-                            <input type="date" id="purchaseDate" name="purchaseDate" class="form-input" value="${new Date().toISOString().slice(0, 10)}">
-                        </div>
-                        <div class="form-group form-column-span-2">
-                            <label for="notes" class="form-label">Notes</label>
-                            <textarea id="notes" name="notes" class="form-textarea" rows="3"></textarea>
-                        </div>
-                    </div>
-                </div>
-            `;
-            
-            // Set up basic form submission
-            const form = document.getElementById('addComponentForm');
-            if (form) {
-                form.addEventListener('submit', async (e) => {
-                    e.preventDefault();
-                    const formData = new FormData(form);
-                    const data = Object.fromEntries(formData.entries());
-                    
-                    try {
-                        const result = await window.api.components.add(this.currentComponent, {
-                            uuid: utils.generateUUID(),
-                            serial_number: data.serialNumber,
-                            status: data.status,
-                            server_uuid: null,
-                            location: data.location,
-                            rack_position: null,
-                            purchase_date: data.purchaseDate,
-                            warranty_end_date: null,
-                            flag: 'Backup',
-                            notes: data.notes
-                        });
-                        
-                        if (result.success) {
-                            utils.showAlert('Component added successfully!', 'success');
-                            this.closeModal();
-                            this.loadComponentList(this.currentComponent);
-                        } else {
-                            utils.showAlert(result.message || 'Failed to add component.', 'error');
-                        }
-                    } catch (error) {
-                        console.error('Error adding component:', error);
-                        utils.showAlert('An error occurred while adding the component.', 'error');
-                    }
-                });
-            }
-        }
-    }
+
 
     async showAddServerForm() {
         const formContent = `
@@ -886,7 +859,7 @@ class Dashboard {
 
         // Update title
         document.getElementById('serverBuilderTitle').innerHTML = `<i class="fas fa-wrench"></i> ${serverName || 'Server Builder'}`;
-        document.getElementById('serverBuilderSubtitle').textContent = `Configuration ID: ${configUuid}`;
+        document.getElementById('serverBuilderSubtitle').textContent = `PC Part Picker Style Interface`;
 
         // Store current config
         this.currentServerConfig = {
@@ -895,7 +868,33 @@ class Dashboard {
         };
 
         // Load server configuration
-        await this.loadServerConfiguration(configUuid);
+        // Use PC part picker builder if available
+
+        if (window.pcppBuilder) {
+
+            try {
+
+                window.pcppBuilder.currentConfig = null;
+
+                await window.pcppBuilder.loadExistingConfig(configUuid);
+
+                // The PC part picker builder will now render directly to serverBuilderContent
+
+            } catch (error) {
+
+                console.error('Error loading PC part picker builder:', error);
+
+                this.showServerBuilderError('Failed to load server builder: ' + error.message);
+
+            }
+
+        } else {
+
+            // Load server configuration with fallback
+
+            await this.loadServerConfiguration(configUuid);
+
+        }
     }
 
     async loadServerConfiguration(configUuid) {
@@ -1649,18 +1648,7 @@ class Dashboard {
             modal.style.zIndex = '9999';
             
             const firstInput = modalBody.querySelector('input, select, textarea, button');
-            if (firstInput) {
-                setTimeout(() => firstInput.focus(), 100);
-            } else {
-            }
-            // Check if modal is actually visible
-            setTimeout(() => {const rect = modal.getBoundingClientRect(); }, 100);
-        } else {
-            console.error('Modal elements not found:', {
-                modal: !!modal,
-                modalTitle: !!modalTitle,
-                modalBody: !!modalBody
-            });
+            if (firstInput) setTimeout(() => firstInput.focus(), 100);
         }
         
         window.closeModal = () => this.closeModal();
@@ -1757,10 +1745,402 @@ class Dashboard {
         else await this.loadComponentList(this.currentComponent);
     }
 
+    async loadServerBuilder() {
+
+        try {
+
+            const urlParams = utils.getURLParams();
+
+            const configUuid = urlParams.config || (this.currentServerConfig && this.currentServerConfig.uuid);
+
+            
+
+            if (!configUuid) {
+
+                console.error('No server configuration UUID provided');
+
+                this.showServerBuilderError('No server configuration selected');
+
+                return;
+
+            }
+
+
+
+            // Update header
+
+            document.getElementById('serverBuilderTitle').innerHTML = '<i class="fas fa-wrench"></i> Server Builder';
+
+            document.getElementById('serverBuilderSubtitle').textContent = 'PC Part Picker Style Interface';
+
+
+
+            // Use PC part picker builder if available
+
+            if (window.pcppBuilder) {
+
+                window.pcppBuilder.currentConfig = null;
+
+                await window.pcppBuilder.loadExistingConfig(configUuid);
+
+                // The PC part picker builder will now render directly to serverBuilderContent
+
+            } else {
+
+                this.showServerBuilderError('PC Part Picker Builder not available');
+
+            }
+
+        } catch (error) {
+
+            console.error('Error loading server builder:', error);
+
+            this.showServerBuilderError('Failed to load server builder: ' + error.message);
+
+        }
+
+    }
+
+    async loadComponentConfig() {
+
+        try {
+
+            const urlParams = utils.getURLParams();
+
+            const configUuid = urlParams.config;
+
+            const componentType = urlParams.type;
+
+            
+
+            if (!configUuid || !componentType) {
+
+                console.error('Missing configuration UUID or component type');
+
+                this.showComponentConfigError('Missing configuration parameters');
+
+                return;
+
+            }
+
+
+
+            // Update header
+
+            document.getElementById('componentConfigTitle').innerHTML = `<i class="fas fa-cogs"></i> Configure ${componentType.toUpperCase()}`;
+
+            document.getElementById('componentConfigSubtitle').textContent = `Select ${componentType} components for your server configuration`;
+
+
+
+            // Load compatible components
+
+            await this.loadCompatibleComponents(configUuid, componentType);
+
+        } catch (error) {
+
+            console.error('Error loading component configuration:', error);
+
+            this.showComponentConfigError('Failed to load component configuration: ' + error.message);
+
+        }
+
+    }
+
+    async loadCompatibleComponents(configUuid, componentType) {
+
+        try {
+
+            utils.showLoading(true, `Loading compatible ${componentType} components...`);
+
+            
+
+            const result = await serverAPI.getCompatibleComponents(configUuid, componentType, true);
+
+            
+
+            if (result.success && result.data && result.data.data && result.data.data.compatible_components) {
+
+                const components = result.data.data.compatible_components;
+
+                this.renderComponentSelection(components, componentType, configUuid);
+
+            } else {
+
+                this.showComponentConfigError('No compatible components found');
+
+            }
+
+        } catch (error) {
+
+            console.error('Error loading compatible components:', error);
+
+            this.showComponentConfigError('Failed to load compatible components');
+
+        } finally {
+
+            utils.showLoading(false);
+
+        }
+
+    }
+
+    renderComponentSelection(components, componentType, configUuid) {
+
+        const container = document.getElementById('componentConfigContent');
+
+        
+
+        if (components.length === 0) {
+
+            container.innerHTML = `
+
+                <div class="empty-state" style="text-align: center; padding: 60px 24px;">
+
+                    <i class="fas fa-inbox" style="font-size: 64px; color: var(--text-muted); margin-bottom: 16px;"></i>
+
+                    <h3>No Compatible Components</h3>
+
+                    <p>No compatible ${componentType} components found for this configuration.</p>
+
+                    <button class="btn btn-secondary" onclick="dashboard.switchView('serverBuilder')">
+
+                        <i class="fas fa-arrow-left"></i> Back to Server Builder
+
+                    </button>
+
+                </div>
+
+            `;
+
+            return;
+
+        }
+
+
+
+        const componentCards = components.map(component => `
+
+            <div class="component-selection-card" data-uuid="${component.uuid}">
+
+                <div class="component-card-header">
+
+                    <div class="component-icon">
+
+                        <i class="fas fa-${this.getComponentIcon(componentType)}"></i>
+
+                    </div>
+
+                    <div class="component-info">
+
+                        <h4>${component.serial_number || component.uuid}</h4>
+
+                        <p>${component.notes || 'No description available'}</p>
+
+                    </div>
+
+                    <div class="component-status">
+
+                        <span class="status-badge ${component.status === 1 ? 'available' : 'in-use'}">
+
+                            ${component.status === 1 ? 'Available' : 'In Use'}
+
+                        </span>
+
+                    </div>
+
+                </div>
+
+                <div class="component-card-details">
+
+                    ${component.location ? `<div class="detail-item"><i class="fas fa-map-marker-alt"></i> ${component.location}</div>` : ''}
+
+                    ${component.compatibility_score ? `<div class="detail-item"><i class="fas fa-check-circle"></i> ${Math.round(component.compatibility_score * 100)}% Compatible</div>` : ''}
+
+                    ${component.compatibility_reason ? `<div class="detail-item"><i class="fas fa-info-circle"></i> ${component.compatibility_reason}</div>` : ''}
+
+                </div>
+
+                <div class="component-card-actions">
+
+                    <button class="btn btn-primary" onclick="dashboard.selectComponent('${component.uuid}', '${componentType}', '${configUuid}')">
+
+                        <i class="fas fa-plus"></i> Add to Configuration
+
+                    </button>
+
+                    <button class="btn btn-secondary" onclick="dashboard.viewComponentDetails('${component.uuid}', '${componentType}')">
+
+                        <i class="fas fa-info-circle"></i> View Details
+
+                    </button>
+
+                </div>
+
+            </div>
+
+        `).join('');
+
+
+
+        container.innerHTML = `
+
+            <div class="component-selection-grid">
+
+                ${componentCards}
+
+            </div>
+
+        `;
+
+    }
+
+    getComponentIcon(componentType) {
+
+        const iconMap = {
+
+            'cpu': 'microchip',
+
+            'motherboard': 'th-large',
+
+            'ram': 'memory',
+
+            'storage': 'hdd',
+
+            'chassis': 'server',
+
+            'caddy': 'box',
+
+            'pciecard': 'credit-card',
+
+            'nic': 'network-wired'
+
+        };
+
+        return iconMap[componentType] || 'cog';
+
+    }
+
+    async selectComponent(componentUuid, componentType, configUuid) {
+
+        try {
+
+            utils.showLoading(true, 'Adding component to configuration...');
+
+            
+
+            const result = await serverAPI.addComponentToServer(configUuid, componentType, componentUuid, 1, '', false);
+
+            
+
+            if (result.success) {
+
+                utils.showAlert('Component added successfully!', 'success');
+
+                // Go back to server builder
+
+                await this.switchView('serverBuilder');
+
+            } else {
+
+                utils.showAlert('Failed to add component: ' + (result.message || 'Unknown error'), 'error');
+
+            }
+
+        } catch (error) {
+
+            console.error('Error adding component:', error);
+
+            utils.showAlert('Failed to add component', 'error');
+
+        } finally {
+
+            utils.showLoading(false);
+
+        }
+
+    }
+
+    async viewComponentDetails(componentUuid, componentType) {
+
+        // This would open a modal with detailed component information
+
+        utils.showAlert('Component details feature coming soon!', 'info');
+
+    }
+
+    showServerBuilderError(message) {
+
+        document.getElementById('serverBuilderContent').innerHTML = `
+
+            <div class="empty-state" style="text-align: center; padding: 60px 24px;">
+
+                <i class="fas fa-exclamation-triangle" style="font-size: 64px; color: var(--danger-color); margin-bottom: 16px;"></i>
+
+                <h3>Server Builder Error</h3>
+
+                <p>${message}</p>
+
+                <button class="btn btn-primary" onclick="dashboard.switchView('servers')">
+
+                    <i class="fas fa-arrow-left"></i> Back to Server List
+
+                </button>
+
+            </div>
+
+        `;
+
+    }
+
+    showComponentConfigError(message) {
+
+        document.getElementById('componentConfigContent').innerHTML = `
+
+            <div class="empty-state" style="text-align: center; padding: 60px 24px;">
+
+                <i class="fas fa-exclamation-triangle" style="font-size: 64px; color: var(--danger-color); margin-bottom: 16px;"></i>
+
+                <h3>Component Configuration Error</h3>
+
+                <p>${message}</p>
+
+                <button class="btn btn-primary" onclick="dashboard.switchView('serverBuilder')">
+
+                    <i class="fas fa-arrow-left"></i> Back to Server Builder
+
+                </button>
+
+            </div>
+
+        `;
+
+    }
+
     handleInitialView() {
         const urlParams = utils.getURLParams();
         const view = urlParams.view || 'dashboard';
-        if (view !== 'dashboard') this.switchView(view);
+        if (view !== 'dashboard') {
+
+            // Handle special case for serverBuilder with config parameter
+
+            if (view === 'serverBuilder' && urlParams.config) {
+
+                // Store the config for the server builder
+
+                this.currentServerConfig = {
+
+                    uuid: urlParams.config,
+
+                    name: 'Server Configuration'
+
+                };
+
+            }
+
+            this.switchView(view);
+
+        }
     }
 }
 

@@ -494,7 +494,8 @@ class ComponentCompatibility {
             'nic' => 'nicinventory',
             'caddy' => 'caddyinventory',
             'pciecard' => 'pciecardinventory',
-            'chassis' => 'chassisinventory'
+            'chassis' => 'chassisinventory',
+            'hbacard' => 'hbacardinventory'
         ];
 
         $table = $tableMap[$type] ?? null;
@@ -530,7 +531,8 @@ class ComponentCompatibility {
             'storage' => __DIR__ . '/../../All-JSON/storage-jsons/storagedetail.json',
             'nic' => __DIR__ . '/../../All-JSON/nic-jsons/nic-level-3.json',
             'caddy' => __DIR__ . '/../../All-JSON/caddy-jsons/caddy_details.json',
-            'pciecard' => __DIR__ . '/../../All-JSON/pci-jsons/pci-level-3.json'
+            'pciecard' => __DIR__ . '/../../All-JSON/pci-jsons/pci-level-3.json',
+            'hbacard' => __DIR__ . '/../../All-JSON/hbacard-jsons/hbacard-level-3.json'
         ];
     }
 
@@ -3577,6 +3579,321 @@ class ComponentCompatibility {
     }
 
     /**
+     * Check HBA Card compatibility with existing server components
+     * Rules:
+     * 1. If no storage devices: Check PCIe slot availability
+     * 2. If storage devices exist: Match HBA protocol with storage interface
+     * 3. Check HBA port capacity vs number of storage devices
+     */
+    public function checkHBADecentralizedCompatibility($hbaCardComponent, $existingComponents) {
+        try {
+            $result = [
+                'compatible' => true,
+                'compatibility_score' => 1.0,
+                'issues' => [],
+                'warnings' => [],
+                'recommendations' => [],
+                'details' => [],
+                'compatibility_summary' => ''
+            ];
+
+            // Get HBA card specifications from JSON
+            $hbaCardData = $this->getComponentData('hbacard', $hbaCardComponent['uuid']);
+            if (!$hbaCardData) {
+                $result['compatible'] = false;
+                $result['compatibility_score'] = 0.0;
+                $result['issues'][] = 'HBA card specifications not found in JSON database';
+                $result['compatibility_summary'] = 'HBA card not found in specification database';
+                $result['recommendations'][] = 'Verify HBA card UUID exists in JSON specification files';
+                return $result;
+            }
+
+            // Extract HBA card properties
+            $hbaProtocol = $hbaCardData['protocol'] ?? '';
+            $hbaInternalPorts = $hbaCardData['internal_ports'] ?? 0;
+            $hbaExternalPorts = $hbaCardData['external_ports'] ?? 0;
+            $hbaMaxDevices = $hbaCardData['max_devices'] ?? $hbaInternalPorts;
+            $hbaInterface = $hbaCardData['interface'] ?? '';
+            $hbaSlotRequired = $hbaCardData['slot_compatibility']['required_slot'] ?? 'PCIe x8';
+
+            // Extract PCIe generation and slot size from HBA
+            $hbaGeneration = $this->extractPCIeGeneration($hbaCardData);
+            $hbaSlotSize = $this->extractPCIeSlotSize($hbaCardData);
+
+            // CASE 1: Empty configuration - check basic PCIe requirements
+            if (empty($existingComponents)) {
+                $result['details'][] = 'No existing components - HBA card will be compatible once motherboard is added';
+                $result['warnings'][] = 'Ensure motherboard has available ' . $hbaSlotRequired . ' slot';
+                $result['compatibility_summary'] = 'Compatible - requires motherboard with ' . $hbaSlotRequired . ' slot';
+                return $result;
+            }
+
+            // Analyze existing components
+            $storageDevices = [];
+            $hasMotherboard = false;
+            $slotAvailability = [
+                'total_slots' => 0,
+                'used_slots' => 0,
+                'available_by_size' => ['x1' => 0, 'x4' => 0, 'x8' => 0, 'x16' => 0],
+                'motherboard_generation' => null,
+                'has_riser_card' => false,
+                'riser_added_slots' => 0
+            ];
+
+            foreach ($existingComponents as $existingComp) {
+                $compType = $existingComp['type'];
+                $compUuid = $existingComp['uuid'];
+
+                if ($compType === 'storage') {
+                    // Get storage device details
+                    $storageData = $this->getComponentData('storage', $compUuid);
+                    if ($storageData) {
+                        $storageDevices[] = [
+                            'uuid' => $compUuid,
+                            'interface' => $storageData['interface'] ?? 'Unknown',
+                            'subtype' => $storageData['subtype'] ?? 'Unknown'
+                        ];
+                    }
+                } elseif ($compType === 'motherboard') {
+                    $hasMotherboard = true;
+                    // Analyze motherboard for PCIe slots
+                    $mbCompatResult = $this->analyzeExistingMotherboardForPCIe(
+                        $existingComp, $slotAvailability
+                    );
+                    if (!$mbCompatResult['compatible']) {
+                        $result['compatible'] = false;
+                        $result['issues'] = array_merge($result['issues'], $mbCompatResult['issues']);
+                    }
+                    $result['details'] = array_merge($result['details'], $mbCompatResult['details']);
+                } elseif ($compType === 'pciecard') {
+                    // Count PCIe cards for slot usage
+                    $pcieCompatResult = $this->analyzeExistingPCIeCardForPCIe(
+                        $existingComp, $slotAvailability
+                    );
+                    $result['details'] = array_merge($result['details'], $pcieCompatResult['details']);
+                } elseif ($compType === 'nic') {
+                    // Count NICs for slot usage
+                    $nicCompatResult = $this->analyzeExistingNICForPCIe(
+                        $existingComp, $slotAvailability
+                    );
+                    $result['details'] = array_merge($result['details'], $nicCompatResult['details']);
+                } elseif ($compType === 'hbacard') {
+                    // Count existing HBA cards for slot usage
+                    $slotAvailability['used_slots']++;
+                    $result['details'][] = 'Existing HBA card detected - slot already in use';
+                }
+            }
+
+            // CASE 2: No storage devices - check PCIe slot availability
+            if (empty($storageDevices)) {
+                if (!$hasMotherboard) {
+                    $result['warnings'][] = 'No motherboard in configuration - cannot verify PCIe slot availability';
+                    $result['compatibility_summary'] = 'Compatible - pending motherboard addition';
+                    return $result;
+                }
+
+                // Check if slots are available
+                $availableSlots = $slotAvailability['total_slots'] - $slotAvailability['used_slots'];
+
+                if ($availableSlots <= 0) {
+                    $result['compatible'] = false;
+                    $result['compatibility_score'] = 0.0;
+                    $result['issues'][] = 'No available PCIe slots on motherboard for HBA card';
+                    $result['recommendations'][] = 'Remove existing PCIe cards or choose motherboard with more slots';
+                    $result['compatibility_summary'] = 'Incompatible - No available PCIe slots';
+                    return $result;
+                }
+
+                // Check slot size compatibility
+                $slotSizeCompatible = $this->checkPCIeSlotSizeCompatibility($hbaSlotSize, $slotAvailability);
+                if (!$slotSizeCompatible) {
+                    $result['compatible'] = false;
+                    $result['compatibility_score'] = 0.0;
+                    $result['issues'][] = "No available {$hbaSlotRequired} slot on motherboard";
+                    $result['recommendations'][] = "HBA card requires {$hbaSlotRequired} slot";
+                    $result['compatibility_summary'] = "Incompatible - Requires {$hbaSlotRequired} slot";
+                    return $result;
+                }
+
+                // Check PCIe generation compatibility
+                if ($slotAvailability['motherboard_generation'] && $hbaGeneration) {
+                    $mbGen = (int)$slotAvailability['motherboard_generation'];
+                    $hbaGen = (int)$hbaGeneration;
+
+                    if ($hbaGen > $mbGen) {
+                        $result['warnings'][] = "HBA card is PCIe {$hbaGen}.0 but motherboard supports PCIe {$mbGen}.0 - card will run at reduced speed";
+                        $result['compatibility_score'] = 0.9;
+                    }
+                }
+
+                $result['details'][] = 'No storage devices found - HBA card can be added';
+                $result['details'][] = "Available PCIe slots: {$availableSlots}";
+                $result['compatibility_summary'] = "Compatible - {$availableSlots} available PCIe slot(s)";
+                return $result;
+            }
+
+            // CASE 3: Storage devices exist - check protocol compatibility
+            $storageCount = count($storageDevices);
+            $result['details'][] = "Found {$storageCount} storage device(s) in configuration";
+
+            // Extract unique storage interfaces
+            $storageInterfaces = array_unique(array_column($storageDevices, 'interface'));
+            $result['details'][] = 'Storage interfaces detected: ' . implode(', ', $storageInterfaces);
+
+            // Check if HBA protocol supports all storage interfaces
+            $incompatibleInterfaces = [];
+            foreach ($storageInterfaces as $storageInterface) {
+                if (!$this->isHBAProtocolCompatible($hbaProtocol, $storageInterface)) {
+                    $incompatibleInterfaces[] = $storageInterface;
+                }
+            }
+
+            if (!empty($incompatibleInterfaces)) {
+                $result['compatible'] = false;
+                $result['compatibility_score'] = 0.0;
+                $result['issues'][] = "HBA protocol '{$hbaProtocol}' incompatible with storage interfaces: " . implode(', ', $incompatibleInterfaces);
+                $result['recommendations'][] = 'Use HBA card with matching protocol or choose tri-mode HBA (SAS/SATA/NVMe)';
+                $result['compatibility_summary'] = 'Incompatible - Protocol mismatch';
+                return $result;
+            }
+
+            // Check if HBA has enough ports for storage devices
+            if ($hbaInternalPorts > 0 && $storageCount > $hbaInternalPorts) {
+                $result['compatible'] = false;
+                $result['compatibility_score'] = 0.0;
+                $result['issues'][] = "HBA card has {$hbaInternalPorts} internal ports but configuration has {$storageCount} storage devices";
+                $result['recommendations'][] = "Remove " . ($storageCount - $hbaInternalPorts) . " storage device(s) or choose HBA with more ports";
+                $result['compatibility_summary'] = 'Incompatible - Insufficient ports';
+                return $result;
+            }
+
+            // Check max devices capacity
+            if ($hbaMaxDevices > 0 && $storageCount > $hbaMaxDevices) {
+                $result['compatible'] = false;
+                $result['compatibility_score'] = 0.0;
+                $result['issues'][] = "HBA card supports max {$hbaMaxDevices} devices but configuration has {$storageCount} storage devices";
+                $result['recommendations'][] = "Reduce storage devices to {$hbaMaxDevices} or choose HBA with higher capacity";
+                $result['compatibility_summary'] = 'Incompatible - Exceeds max device capacity';
+                return $result;
+            }
+
+            // Check PCIe slot availability (if motherboard exists)
+            if ($hasMotherboard) {
+                $availableSlots = $slotAvailability['total_slots'] - $slotAvailability['used_slots'];
+
+                if ($availableSlots <= 0) {
+                    $result['compatible'] = false;
+                    $result['compatibility_score'] = 0.0;
+                    $result['issues'][] = 'No available PCIe slots on motherboard for HBA card';
+                    $result['recommendations'][] = 'Remove existing PCIe cards or choose motherboard with more slots';
+                    $result['compatibility_summary'] = 'Incompatible - No available PCIe slots';
+                    return $result;
+                }
+
+                // Check slot size compatibility
+                $slotSizeCompatible = $this->checkPCIeSlotSizeCompatibility($hbaSlotSize, $slotAvailability);
+                if (!$slotSizeCompatible) {
+                    $result['compatible'] = false;
+                    $result['compatibility_score'] = 0.0;
+                    $result['issues'][] = "No available {$hbaSlotRequired} slot on motherboard";
+                    $result['recommendations'][] = "HBA card requires {$hbaSlotRequired} slot";
+                    $result['compatibility_summary'] = "Incompatible - Requires {$hbaSlotRequired} slot";
+                    return $result;
+                }
+            }
+
+            // All checks passed
+            $result['details'][] = "HBA card protocol '{$hbaProtocol}' is compatible with storage interfaces";
+            $result['details'][] = "HBA card has sufficient capacity: {$hbaInternalPorts} ports for {$storageCount} devices";
+            $result['compatibility_summary'] = "Compatible - Protocol match, sufficient capacity ({$hbaInternalPorts} ports for {$storageCount} devices)";
+
+            return $result;
+
+        } catch (Exception $e) {
+            error_log("HBA card compatibility check error: " . $e->getMessage());
+            return [
+                'compatible' => true,
+                'compatibility_score' => 0.7,
+                'issues' => [],
+                'warnings' => ['HBA compatibility check failed - defaulting to compatible'],
+                'recommendations' => ['Verify HBA card compatibility manually'],
+                'details' => ['Error: ' . $e->getMessage()],
+                'compatibility_summary' => 'Compatibility check failed - assumed compatible'
+            ];
+        }
+    }
+
+    /**
+     * Check if HBA protocol is compatible with storage interface
+     */
+    private function isHBAProtocolCompatible($hbaProtocol, $storageInterface) {
+        // Normalize to uppercase for comparison
+        $hbaProtocol = strtoupper($hbaProtocol);
+        $storageInterface = strtoupper($storageInterface);
+
+        // Tri-mode HBAs support all interfaces
+        if (strpos($hbaProtocol, 'TRI-MODE') !== false ||
+            strpos($hbaProtocol, 'SAS/SATA/NVME') !== false) {
+            return true;
+        }
+
+        // SAS/SATA dual-mode HBAs
+        if (strpos($hbaProtocol, 'SAS/SATA') !== false) {
+            return (strpos($storageInterface, 'SAS') !== false ||
+                    strpos($storageInterface, 'SATA') !== false);
+        }
+
+        // SAS-only HBAs support SAS drives
+        if (strpos($hbaProtocol, 'SAS') !== false && strpos($hbaProtocol, 'SATA') === false) {
+            return strpos($storageInterface, 'SAS') !== false;
+        }
+
+        // SATA-only HBAs support SATA drives
+        if (strpos($hbaProtocol, 'SATA') !== false && strpos($hbaProtocol, 'SAS') === false) {
+            return strpos($storageInterface, 'SATA') !== false;
+        }
+
+        // NVMe-only HBAs support NVMe/PCIe drives
+        if (strpos($hbaProtocol, 'NVME') !== false || strpos($hbaProtocol, 'PCIE') !== false) {
+            return (strpos($storageInterface, 'NVME') !== false ||
+                    strpos($storageInterface, 'PCIE') !== false);
+        }
+
+        // Default: assume incompatible
+        return false;
+    }
+
+    /**
+     * Check if available PCIe slots can accommodate the required slot size
+     */
+    private function checkPCIeSlotSizeCompatibility($requiredSlotSize, $slotAvailability) {
+        // x16 slots can accommodate x16, x8, x4, x1 cards
+        if ($slotAvailability['available_by_size']['x16'] > 0) {
+            return true;
+        }
+
+        // x8 slots can accommodate x8, x4, x1 cards
+        if (in_array($requiredSlotSize, ['x8', 'x4', 'x1']) &&
+            $slotAvailability['available_by_size']['x8'] > 0) {
+            return true;
+        }
+
+        // x4 slots can accommodate x4, x1 cards
+        if (in_array($requiredSlotSize, ['x4', 'x1']) &&
+            $slotAvailability['available_by_size']['x4'] > 0) {
+            return true;
+        }
+
+        // x1 slots can accommodate x1 cards only
+        if ($requiredSlotSize === 'x1' &&
+            $slotAvailability['available_by_size']['x1'] > 0) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
      * Check CPU compatibility with existing server components (decentralized approach)
      */
     public function checkCPUDecentralizedCompatibility($cpuComponent, $existingComponents) {
@@ -3876,36 +4193,73 @@ class ComponentCompatibility {
         try {
             $result = [
                 'compatible' => true,
-                'compatibility_score' => 1.0,
+                'compatibility_score' => 100,
                 'issues' => [],
                 'warnings' => [],
                 'recommendations' => [],
-                'details' => []
+                'details' => [],
+                'score_breakdown' => []
             ];
 
             // If no existing components, chassis is always compatible
             if (empty($existingComponents)) {
                 $result['details'][] = 'No existing components - all chassis compatible';
                 $result['compatibility_summary'] = 'Compatible - no constraints found';
+                $result['compatibility_score'] = 100;
+                $result['score_breakdown'] = [
+                    'base_score' => 100,
+                    'final_score' => 100,
+                    'factors' => ['No existing components to validate against']
+                ];
                 return $result;
             }
 
-            // Get chassis specifications
+            // Get chassis specifications from database
             $chassisData = $this->getComponentData('chassis', $chassisComponent['uuid']);
             if (!$chassisData) {
-                $result['warnings'][] = 'Chassis specifications not found - using basic compatibility';
-                $result['compatibility_score'] = 0.8;
-                $result['compatibility_summary'] = 'Specifications not found - assumed compatible';
+                // Database entry not found - INCOMPATIBLE
+                $result['compatible'] = false;
+                $result['compatibility_score'] = 0;
+                $result['issues'][] = 'Chassis UUID not found in database';
+                $result['compatibility_summary'] = 'INCOMPATIBLE: Chassis not found in chassisinventory table';
+                $result['score_breakdown'] = [
+                    'base_score' => 100,
+                    'penalty_applied' => -100,
+                    'reason' => 'Database entry not found in chassisinventory table',
+                    'final_score' => 0,
+                    'missing_data' => ['Database record for chassis UUID: ' . $chassisComponent['uuid']],
+                    'validation_status' => 'FAILED',
+                    'recommendation' => 'Verify chassis UUID exists in database or add chassis to inventory'
+                ];
                 return $result;
             }
 
-            // Try to load chassis JSON specifications
+            // Try to load chassis JSON specifications - REQUIRED for compatibility
             $chassisSpecs = $this->loadChassisSpecs($chassisComponent['uuid']);
             if (!$chassisSpecs) {
-                $result['warnings'][] = 'Chassis JSON specifications not found - using database data only';
-                $result['compatibility_score'] = 0.7;
-                $result['compatibility_summary'] = 'Limited compatibility data - assumed compatible';
+                // JSON specifications not found - INCOMPATIBLE
+                $result['compatible'] = false;
+                $result['compatibility_score'] = 0;
+                $result['issues'][] = 'Chassis JSON specifications not found';
+                $result['compatibility_summary'] = 'INCOMPATIBLE: JSON specifications missing';
                 $result['details'][] = "loadChassisSpecs() returned NULL for UUID: {$chassisComponent['uuid']}";
+
+                // Enhanced score breakdown for debugging
+                $result['score_breakdown'] = [
+                    'base_score' => 100,
+                    'penalty_applied' => -100,
+                    'reason' => 'JSON specifications not found in All-JSON/chasis-jsons/ directory',
+                    'final_score' => 0,
+                    'missing_data' => [
+                        'JSON specification file for UUID: ' . $chassisComponent['uuid'],
+                        'Expected location: All-JSON/chasis-jsons/*.json',
+                        'Required fields: form_factor, chassis_type, drive_bays, backplane'
+                    ],
+                    'validation_status' => 'FAILED',
+                    'impact' => 'Cannot validate compatibility without JSON specifications',
+                    'recommendation' => 'Add chassis JSON specification file with UUID: ' . $chassisComponent['uuid'],
+                    'severity' => 'CRITICAL'
+                ];
                 return $result;
             }
 
@@ -3968,13 +4322,55 @@ class ComponentCompatibility {
                 }
             }
 
-            // Generate compatibility summary
+            // Generate compatibility summary and score breakdown
             if ($result['compatible']) {
                 $chassisFormFactor = $chassisSpecs['form_factor'] ?? 'Unknown';
                 $chassisType = $chassisSpecs['chassis_type'] ?? 'Server';
                 $result['compatibility_summary'] = "Chassis ({$chassisFormFactor} {$chassisType}) compatible with existing configuration";
+                $result['compatibility_score'] = 100; // Full compatibility
+
+                // Add detailed score breakdown for successful compatibility
+                $scoreFactors = ['Full JSON specifications available' => 100];
+                $validationChecks = [
+                    'json_spec_loaded' => true,
+                    'database_record_found' => true
+                ];
+
+                if (!empty($existingStorageComponents)) {
+                    $validationChecks['storage_bay_validation'] = true;
+                    $scoreFactors['Storage bay compatibility validated'] = 100;
+                }
+
+                if (!empty($existingMotherboardComponents)) {
+                    $validationChecks['motherboard_form_factor_validation'] = true;
+                    $scoreFactors['Motherboard form factor compatibility validated'] = 100;
+                }
+
+                $result['score_breakdown'] = [
+                    'base_score' => 100,
+                    'final_score' => 100,
+                    'validation_checks_performed' => $validationChecks,
+                    'score_factors' => $scoreFactors,
+                    'chassis_specs_loaded' => [
+                        'form_factor' => $chassisFormFactor,
+                        'type' => $chassisType,
+                        'drive_bays' => $chassisSpecs['drive_bays'] ?? 'Unknown',
+                        'backplane' => $chassisSpecs['backplane'] ?? 'Unknown'
+                    ],
+                    'validation_status' => 'COMPLETE',
+                    'data_quality' => 'HIGH'
+                ];
             } else {
                 $result['compatibility_summary'] = "Chassis incompatible: " . implode(', ', $result['issues']);
+                $result['compatibility_score'] = 0; // Incompatible
+
+                $result['score_breakdown'] = [
+                    'base_score' => 100,
+                    'final_score' => 0,
+                    'incompatibility_reasons' => $result['issues'],
+                    'validation_status' => 'FAILED',
+                    'data_quality' => 'HIGH'
+                ];
             }
 
             return $result;
@@ -3982,18 +4378,33 @@ class ComponentCompatibility {
         } catch (Exception $e) {
             error_log("Decentralized chassis compatibility check error: " . $e->getMessage() . "\nStack trace: " . $e->getTraceAsString());
             return [
-                'compatible' => true,
-                'compatibility_score' => 0.7,
-                'issues' => [],
-                'warnings' => ['Compatibility check failed - defaulting to compatible'],
-                'recommendations' => ['Verify chassis compatibility manually'],
+                'compatible' => false,
+                'compatibility_score' => 0,
+                'issues' => ['Exception during validation: ' . $e->getMessage()],
+                'warnings' => ['Compatibility check failed due to exception'],
+                'recommendations' => ['Verify chassis compatibility manually', 'Check error logs'],
                 'details' => [
                     'EXCEPTION_CAUGHT' => $e->getMessage(),
                     'EXCEPTION_FILE' => $e->getFile(),
                     'EXCEPTION_LINE' => $e->getLine(),
                     'EXCEPTION_TRACE' => explode("\n", $e->getTraceAsString())
                 ],
-                'compatibility_summary' => 'EXCEPTION: ' . $e->getMessage() . ' at line ' . $e->getLine()
+                'score_breakdown' => [
+                    'base_score' => 100,
+                    'penalty_applied' => -100,
+                    'reason' => 'Exception occurred during compatibility validation',
+                    'final_score' => 0,
+                    'exception_details' => [
+                        'message' => $e->getMessage(),
+                        'file' => basename($e->getFile()),
+                        'line' => $e->getLine()
+                    ],
+                    'validation_status' => 'ERROR',
+                    'data_quality' => 'UNKNOWN',
+                    'recommendation' => 'Check error logs and verify chassis data integrity',
+                    'severity' => 'CRITICAL'
+                ],
+                'compatibility_summary' => 'INCOMPATIBLE: Exception during validation - ' . $e->getMessage()
             ];
         }
     }
@@ -5121,6 +5532,411 @@ class ComponentCompatibility {
             'mounting_points' => $chassisSpecs['motherboard_compatibility']['mounting_points'] ?? 'standard_atx',
             'max_size' => $chassisSpecs['motherboard_compatibility']['max_motherboard_size'] ?? null
         ];
+    }
+
+    // ==========================================
+    // RISER CARD VALIDATION METHODS
+    // ==========================================
+
+    /**
+     * Validate adding a riser card to server config
+     * Handles cases: with motherboard, without motherboard, with chassis, without chassis
+     *
+     * @param array $riserComponent ['uuid' => 'riser-uuid', 'type' => 'pcie_card']
+     * @param array $existingComponents Array of existing components in config
+     * @return array ['compatible' => bool, 'errors' => array, 'warnings' => array]
+     */
+    public function validateAddRiserCard($riserComponent, $existingComponents) {
+        $riserData = $this->getPCIeCardData($riserComponent['uuid']);
+        $errors = [];
+        $warnings = [];
+
+        // Verify this is actually a riser card
+        if (!$this->isPCIeRiserCard($riserData)) {
+            return [
+                'compatible' => true,
+                'errors' => [],
+                'warnings' => []
+            ];
+        }
+
+        // Find motherboard and chassis in config
+        $motherboard = $this->findComponentByType($existingComponents, 'motherboard');
+        $chassis = $this->findComponentByType($existingComponents, 'chassis');
+        $existingRisers = $this->getExistingRisers($existingComponents);
+
+        // ===== CASE 1: MOTHERBOARD EXISTS =====
+        if ($motherboard) {
+            $motherboardData = $this->getMotherboardData($motherboard['uuid']);
+
+            // Check 1.1: Riser slot availability
+            $slotInfo = $this->getRiserSlotAvailability($motherboardData, $existingComponents);
+            if ($slotInfo['available_slots'] <= 0) {
+                $errors[] = "No riser slots available. Motherboard has {$slotInfo['total_slots']} riser slots, all occupied.";
+            }
+
+            // Check 1.2: Length fit
+            if (!$this->checkRiserLengthFit($riserData, $existingRisers, $motherboardData)) {
+                $totalRiserLength = $this->calculateTotalRiserLength($existingRisers) + ($riserData['dimensions_mm']['length'] ?? 0);
+                $availableLength = $motherboardData['expansion_slots']['riser_compatibility']['available_mounting_length_mm'] ?? 0;
+                $errors[] = "Riser length exceeds available motherboard mounting space. Need: {$totalRiserLength}mm, Available: {$availableLength}mm";
+            }
+
+            // Check 1.3: Spacing/width fit
+            if (!$this->checkRiserSpacingFit($riserData, $motherboardData)) {
+                $riserWidth = $riserData['dimensions_mm']['width'] ?? 0;
+                $slotSpacing = $motherboardData['expansion_slots']['riser_compatibility']['slot_spacing_mm'] ?? 20.32;
+                $errors[] = "Riser width ({$riserWidth}mm) exceeds motherboard slot spacing ({$slotSpacing}mm)";
+            }
+        }
+        // ===== CASE 2: NO MOTHERBOARD =====
+        else {
+            $requiredSlots = count($existingRisers) + 1;
+            $warnings[] = "No motherboard in config. When adding motherboard, ensure it has at least {$requiredSlots} riser slot(s).";
+        }
+
+        // ===== CASE 3: CHASSIS EXISTS =====
+        if ($chassis) {
+            $chassisData = $this->getChassisData($chassis['uuid']);
+
+            // Check 3.1: Height clearance
+            if (!$this->checkRiserHeightClearance($riserData, $chassisData)) {
+                $chassisHeightMm = $chassisData['height'] * 10; // Convert cm to mm
+                $riserClearance = $riserData['clearance_height_mm'] ?? 0;
+                $errors[] = "Riser clearance height ({$riserClearance}mm) exceeds chassis height ({$chassisHeightMm}mm)";
+            }
+        }
+        // ===== CASE 4: NO CHASSIS =====
+        else {
+            $maxRiserHeight = $this->getMaxRiserHeight(array_merge($existingRisers, [$riserData]));
+            $requiredChassisHeight = ceil($maxRiserHeight / 10); // Convert mm to cm, round up
+            $warnings[] = "No chassis in config. When adding chassis, ensure height is at least {$requiredChassisHeight}cm.";
+        }
+
+        return [
+            'compatible' => empty($errors),
+            'errors' => $errors,
+            'warnings' => $warnings
+        ];
+    }
+
+    /**
+     * Validate adding motherboard when risers already exist in config
+     *
+     * @param array $motherboardComponent ['uuid' => 'mb-uuid', 'type' => 'motherboard']
+     * @param array $existingComponents Array of existing components
+     * @return array ['compatible' => bool, 'errors' => array, 'warnings' => array]
+     */
+    public function validateAddMotherboard($motherboardComponent, $existingComponents) {
+        $motherboardData = $this->getMotherboardData($motherboardComponent['uuid']);
+        $errors = [];
+        $warnings = [];
+
+        $existingRisers = $this->getExistingRisers($existingComponents);
+
+        if (count($existingRisers) > 0) {
+            // Check 1: Motherboard has enough riser slots
+            $requiredSlots = count($existingRisers);
+            $availableSlots = $motherboardData['expansion_slots']['riser_compatibility']['max_risers'] ?? 0;
+
+            if ($availableSlots < $requiredSlots) {
+                $errors[] = "Motherboard only has {$availableSlots} riser slot(s), but config has {$requiredSlots} riser(s) already installed";
+            }
+
+            // Check 2: Motherboard length can fit all risers
+            $totalRiserLength = $this->calculateTotalRiserLength($existingRisers);
+            $availableLength = $motherboardData['expansion_slots']['riser_compatibility']['available_mounting_length_mm'] ?? 0;
+
+            if ($totalRiserLength > $availableLength) {
+                $errors[] = "Total riser length ({$totalRiserLength}mm) exceeds motherboard mounting space ({$availableLength}mm)";
+            }
+
+            // Check 3: Slot spacing fits riser widths
+            $slotSpacing = $motherboardData['expansion_slots']['riser_compatibility']['slot_spacing_mm'] ?? 20.32;
+            foreach ($existingRisers as $riser) {
+                $riserWidth = $riser['dimensions_mm']['width'] ?? 0;
+                $riserModel = $riser['model'] ?? 'Unknown';
+
+                if ($riserWidth > ($slotSpacing * 3)) { // Max 3 slots width
+                    $errors[] = "Riser '{$riserModel}' width ({$riserWidth}mm) exceeds motherboard slot spacing capability";
+                }
+            }
+        }
+
+        return [
+            'compatible' => empty($errors),
+            'errors' => $errors,
+            'warnings' => $warnings
+        ];
+    }
+
+    /**
+     * Validate adding chassis when risers already exist in config
+     *
+     * @param array $chassisComponent ['uuid' => 'chassis-uuid', 'type' => 'chassis']
+     * @param array $existingComponents Array of existing components
+     * @return array ['compatible' => bool, 'errors' => array, 'warnings' => array]
+     */
+    public function validateAddChassis($chassisComponent, $existingComponents) {
+        $chassisData = $this->getChassisData($chassisComponent['uuid']);
+        $errors = [];
+        $warnings = [];
+
+        $existingRisers = $this->getExistingRisers($existingComponents);
+
+        if (count($existingRisers) > 0) {
+            // Find the tallest riser in config
+            $maxRiserHeight = 0;
+            $tallestRiser = null;
+
+            foreach ($existingRisers as $riser) {
+                $clearance = $riser['clearance_height_mm'] ?? 0;
+                if ($clearance > $maxRiserHeight) {
+                    $maxRiserHeight = $clearance;
+                    $tallestRiser = $riser['model'] ?? 'Unknown';
+                }
+            }
+
+            // Check: Chassis height must accommodate tallest riser
+            $chassisHeightMm = $chassisData['height'] * 10; // Convert cm to mm
+
+            if ($maxRiserHeight >= $chassisHeightMm) {
+                $errors[] = "Chassis height ({$chassisHeightMm}mm) is too small for existing risers. Tallest riser '{$tallestRiser}' requires {$maxRiserHeight}mm clearance.";
+            }
+        }
+
+        return [
+            'compatible' => empty($errors),
+            'errors' => $errors,
+            'warnings' => $warnings
+        ];
+    }
+
+    /**
+     * Calculate available riser slots on motherboard (tracks like PCIe slots)
+     *
+     * @param array $motherboardData Motherboard specifications
+     * @param array $existingComponents Existing components in config
+     * @return array ['total_slots' => int, 'used_slots' => int, 'available_slots' => int]
+     */
+    private function getRiserSlotAvailability($motherboardData, $existingComponents) {
+        $totalRiserSlots = $motherboardData['expansion_slots']['riser_compatibility']['max_risers'] ?? 0;
+
+        // Count risers already in config
+        $usedRiserSlots = 0;
+        foreach ($existingComponents as $component) {
+            if ($component['component_type'] === 'pciecard') {
+                $pcieData = $this->getPCIeCardData($component['component_uuid']);
+                if ($this->isPCIeRiserCard($pcieData)) {
+                    $usedRiserSlots++;
+                }
+            }
+        }
+
+        return [
+            'total_slots' => $totalRiserSlots,
+            'used_slots' => $usedRiserSlots,
+            'available_slots' => max(0, $totalRiserSlots - $usedRiserSlots)
+        ];
+    }
+
+    /**
+     * Extract all riser cards from existing components
+     *
+     * @param array $existingComponents Array of components
+     * @return array Array of riser card data
+     */
+    private function getExistingRisers($existingComponents) {
+        $risers = [];
+
+        foreach ($existingComponents as $component) {
+            if ($component['component_type'] === 'pciecard') {
+                $pcieData = $this->getPCIeCardData($component['component_uuid']);
+                if ($this->isPCIeRiserCard($pcieData)) {
+                    $risers[] = $pcieData;
+                }
+            }
+        }
+
+        return $risers;
+    }
+
+    /**
+     * Find component by type in existing components
+     *
+     * @param array $existingComponents Array of components
+     * @param string $type Component type to find
+     * @return array|null Component data or null
+     */
+    private function findComponentByType($existingComponents, $type) {
+        foreach ($existingComponents as $component) {
+            if ($component['component_type'] === $type) {
+                return [
+                    'uuid' => $component['component_uuid'],
+                    'type' => $component['component_type']
+                ];
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Check if riser height fits within chassis clearance
+     *
+     * @param array $riserData Riser card specifications
+     * @param array $chassisData Chassis specifications
+     * @return bool True if fits
+     */
+    private function checkRiserHeightClearance($riserData, $chassisData) {
+        $chassisHeightMm = $chassisData['height'] * 10; // Convert cm to mm
+        $riserClearance = $riserData['clearance_height_mm'] ?? 0;
+
+        return $riserClearance < $chassisHeightMm;
+    }
+
+    /**
+     * Check if riser length fits on motherboard
+     *
+     * @param array $riserData Riser card specifications
+     * @param array $existingRisers Array of existing riser cards
+     * @param array $motherboardData Motherboard specifications
+     * @return bool True if fits
+     */
+    private function checkRiserLengthFit($riserData, $existingRisers, $motherboardData) {
+        $riserLength = $riserData['dimensions_mm']['length'] ?? 0;
+        $availableLength = $motherboardData['expansion_slots']['riser_compatibility']['available_mounting_length_mm'] ?? 0;
+
+        $totalUsedLength = $this->calculateTotalRiserLength($existingRisers);
+
+        return ($totalUsedLength + $riserLength) <= $availableLength;
+    }
+
+    /**
+     * Check if riser width fits within motherboard slot spacing
+     *
+     * @param array $riserData Riser card specifications
+     * @param array $motherboardData Motherboard specifications
+     * @return bool True if fits
+     */
+    private function checkRiserSpacingFit($riserData, $motherboardData) {
+        $riserWidth = $riserData['dimensions_mm']['width'] ?? 0;
+        $slotSpacing = $motherboardData['expansion_slots']['riser_compatibility']['slot_spacing_mm'] ?? 20.32;
+
+        // Riser width must fit within slot spacing
+        return $riserWidth <= $slotSpacing;
+    }
+
+    /**
+     * Calculate total length occupied by risers
+     *
+     * @param array $risers Array of riser card data
+     * @return int Total length in mm
+     */
+    private function calculateTotalRiserLength($risers) {
+        $totalLength = 0;
+        foreach ($risers as $riser) {
+            $totalLength += $riser['dimensions_mm']['length'] ?? 0;
+        }
+        return $totalLength;
+    }
+
+    /**
+     * Get maximum riser height from array of risers
+     *
+     * @param array $risers Array of riser card data
+     * @return float Maximum height in mm
+     */
+    private function getMaxRiserHeight($risers) {
+        $maxHeight = 0;
+        foreach ($risers as $riser) {
+            $clearance = $riser['clearance_height_mm'] ?? 0;
+            if ($clearance > $maxHeight) {
+                $maxHeight = $clearance;
+            }
+        }
+        return $maxHeight;
+    }
+
+    /**
+     * Get motherboard data by UUID
+     *
+     * @param string $uuid Motherboard UUID
+     * @return array Motherboard specifications
+     */
+    private function getMotherboardData($uuid) {
+        // Use existing parseMotherboardSpecifications method
+        $result = $this->parseMotherboardSpecifications($uuid);
+        return $result['specifications'] ?? [];
+    }
+
+    /**
+     * Get chassis data by UUID
+     *
+     * @param string $uuid Chassis UUID
+     * @return array Chassis specifications
+     */
+    private function getChassisData($uuid) {
+        // Parse chassis JSON to get specifications
+        $chassisJsonPath = __DIR__ . '/../../All-JSON/chasis-jsons/chasis-level-3.json';
+
+        if (!isset($this->jsonDataCache[$chassisJsonPath])) {
+            if (file_exists($chassisJsonPath)) {
+                $jsonContent = file_get_contents($chassisJsonPath);
+                $data = json_decode($jsonContent, true);
+                $this->jsonDataCache[$chassisJsonPath] = $data['chassis_specifications']['manufacturers'] ?? [];
+            } else {
+                return [];
+            }
+        }
+
+        $manufacturers = $this->jsonDataCache[$chassisJsonPath];
+
+        foreach ($manufacturers as $manufacturer) {
+            foreach ($manufacturer['series'] as $series) {
+                foreach ($series['models'] as $model) {
+                    if ($model['uuid'] === $uuid) {
+                        return $model;
+                    }
+                }
+            }
+        }
+
+        return [];
+    }
+
+    /**
+     * Get PCIe card data by UUID (already exists but making it available)
+     *
+     * @param string $uuid PCIe card UUID
+     * @return array PCIe card specifications
+     */
+    private function getPCIeCardData($uuid) {
+        // Parse PCIe JSON to get specifications
+        $pcieJsonPath = __DIR__ . '/../../All-JSON/pci-jsons/pci-level-3.json';
+
+        if (!isset($this->jsonDataCache[$pcieJsonPath])) {
+            if (file_exists($pcieJsonPath)) {
+                $jsonContent = file_get_contents($pcieJsonPath);
+                $data = json_decode($jsonContent, true);
+                $this->jsonDataCache[$pcieJsonPath] = $data ?? [];
+            } else {
+                return [];
+            }
+        }
+
+        $pcieData = $this->jsonDataCache[$pcieJsonPath];
+
+        foreach ($pcieData as $category) {
+            if (isset($category['models'])) {
+                foreach ($category['models'] as $model) {
+                    if ($model['UUID'] === $uuid) {
+                        return $model;
+                    }
+                }
+            }
+        }
+
+        return [];
     }
 }
 ?>

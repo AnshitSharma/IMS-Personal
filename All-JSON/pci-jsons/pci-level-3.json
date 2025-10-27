@@ -365,6 +365,7 @@
         "cable_type": "Flexible PCIe",
         "cable_length": "150mm",
         "low_profile_only": true,
+        "clearance_height_mm": 64.41,
         "dimensions_mm": {
           "length": 120,
           "width": 80,
@@ -398,6 +399,7 @@
         "cable_type": "Flexible PCIe",
         "cable_length": "150mm",
         "low_profile_only": true,
+        "clearance_height_mm": 64.41,
         "dimensions_mm": {
           "length": 180,
           "width": 80,
@@ -431,6 +433,7 @@
         "cable_type": "Flexible PCIe",
         "cable_length": "200mm",
         "low_profile_only": false,
+        "clearance_height_mm": 106.68,
         "dimensions_mm": {
           "length": 180,
           "width": 120,
@@ -465,6 +468,7 @@
         "cable_type": "Flexible PCIe",
         "cable_length": "200mm",
         "low_profile_only": false,
+        "clearance_height_mm": 106.68,
         "dimensions_mm": {
           "length": 220,
           "width": 120,
@@ -499,6 +503,7 @@
         "cable_type": "Flexible PCIe",
         "cable_length": "200mm",
         "low_profile_only": false,
+        "clearance_height_mm": 106.68,
         "dimensions_mm": {
           "length": 220,
           "width": 120,
@@ -542,6 +547,7 @@
         "cable_type": "PCIe Riser",
         "cable_length": "N/A",
         "low_profile_only": false,
+        "clearance_height_mm": 106.68,
         "dimensions_mm": {
           "length": 175,
           "width": 115,
@@ -576,6 +582,7 @@
         "cable_type": "PCIe Riser",
         "cable_length": "N/A",
         "low_profile_only": false,
+        "clearance_height_mm": 106.68,
         "dimensions_mm": {
           "length": 220,
           "width": 115,
@@ -619,6 +626,7 @@
         "cable_type": "PCIe Riser",
         "cable_length": "N/A",
         "low_profile_only": false,
+        "clearance_height_mm": 106.68,
         "dimensions_mm": {
           "length": 180,
           "width": 110,
@@ -653,6 +661,7 @@
         "cable_type": "PCIe Riser",
         "cable_length": "N/A",
         "low_profile_only": false,
+        "clearance_height_mm": 106.68,
         "dimensions_mm": {
           "length": 200,
           "width": 110,
@@ -687,6 +696,7 @@
         "cable_type": "PCIe Riser",
         "cable_length": "N/A",
         "low_profile_only": false,
+        "clearance_height_mm": 106.68,
         "dimensions_mm": {
           "length": 230,
           "width": 110,
@@ -730,6 +740,7 @@
         "cable_type": "Flexible PCIe",
         "cable_length": "250mm",
         "low_profile_only": false,
+        "clearance_height_mm": 167.64,
         "dimensions_mm": {
           "length": 280,
           "width": 140,
@@ -764,6 +775,7 @@
         "cable_type": "Flexible PCIe",
         "cable_length": "250mm",
         "low_profile_only": false,
+        "clearance_height_mm": 167.64,
         "dimensions_mm": {
           "length": 320,
           "width": 140,
@@ -798,6 +810,7 @@
         "cable_type": "Flexible PCIe",
         "cable_length": "200mm",
         "low_profile_only": false,
+        "clearance_height_mm": 106.68,
         "dimensions_mm": {
           "length": 200,
           "width": 120,
@@ -841,6 +854,7 @@
         "cable_type": "Direct mount",
         "cable_length": "N/A",
         "low_profile_only": false,
+        "clearance_height_mm": 106.68,
         "dimensions_mm": {
           "length": 140,
           "width": 100,
@@ -875,6 +889,7 @@
         "cable_type": "Flexible PCIe",
         "cable_length": "180mm",
         "low_profile_only": false,
+        "clearance_height_mm": 106.68,
         "dimensions_mm": {
           "length": 210,
           "width": 115,
@@ -918,6 +933,7 @@
         "cable_type": "PCIe Riser",
         "cable_length": "N/A",
         "low_profile_only": false,
+        "clearance_height_mm": 106.68,
         "dimensions_mm": {
           "length": 178,
           "width": 112,
@@ -952,6 +968,7 @@
         "cable_type": "PCIe Riser",
         "cable_length": "N/A",
         "low_profile_only": false,
+        "clearance_height_mm": 106.68,
         "dimensions_mm": {
           "length": 218,
           "width": 112,
@@ -986,6 +1003,7 @@
         "cable_type": "PCIe Riser",
         "cable_length": "N/A",
         "low_profile_only": true,
+        "clearance_height_mm": 64.41,
         "dimensions_mm": {
           "length": 220,
           "width": 112,
@@ -1029,6 +1047,7 @@
         "cable_type": "PCIe Riser",
         "cable_length": "N/A",
         "low_profile_only": false,
+        "clearance_height_mm": 106.68,
         "dimensions_mm": {
           "length": 175,
           "width": 110,
@@ -1063,6 +1082,7 @@
         "cable_type": "PCIe Riser",
         "cable_length": "N/A",
         "low_profile_only": false,
+        "clearance_height_mm": 106.68,
         "dimensions_mm": {
           "length": 215,
           "width": 110,

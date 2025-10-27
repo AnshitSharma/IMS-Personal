@@ -224,14 +224,11 @@ class FlexibleCompatibilityValidator {
     }
 
     /**
-     * Get PCIe card (NIC/GPU/etc) specifications
+     * Get PCIe card (NIC/GPU/etc) specifications from JSON
      */
     private function getPCIeCardSpecs($componentType, $componentUuid) {
-        // Get from database inventory
-        $table = $this->componentTables[$componentType];
-        $stmt = $this->pdo->prepare("SELECT * FROM $table WHERE UUID = ?");
-        $stmt->execute([$componentUuid]);
-        return $stmt->fetch(PDO::FETCH_ASSOC);
+        // Get from JSON specifications (includes component_subtype for riser cards, HBA cards, etc.)
+        return $this->dataUtils->getPCIeCardByUUID($componentUuid);
     }
 
     /**
@@ -804,10 +801,76 @@ class FlexibleCompatibilityValidator {
             }
         }
 
+        // REVERSE CHECKS (Existing Riser Cards → Motherboard)
+        if (!empty($existing['pciecard'])) {
+            require_once __DIR__ . '/ExpansionSlotTracker.php';
+            $slotTracker = new ExpansionSlotTracker($this->pdo);
+
+            // Count existing riser cards
+            $existingRiserCount = 0;
+            foreach ($existing['pciecard'] as $card) {
+                $cardSpecs = $this->getComponentFromInventory('pciecard', $card['component_uuid']);
+                if ($cardSpecs && isset($cardSpecs['component_subtype']) && $cardSpecs['component_subtype'] === 'Riser Card') {
+                    $existingRiserCount++;
+                }
+            }
+
+            // Check if motherboard has enough riser slots
+            if ($existingRiserCount > 0) {
+                // Load motherboard riser slots
+                $riserSlots = $slotTracker->loadMotherboardRiserSlots($motherboardUuid);
+
+                if (!$riserSlots['success']) {
+                    $errors[] = [
+                        'type' => 'no_riser_slot_support',
+                        'severity' => 'critical',
+                        'message' => "Configuration has $existingRiserCount riser card(s), but motherboard does not support risers",
+                        'details' => [
+                            'existing_riser_count' => $existingRiserCount,
+                            'motherboard_riser_slots' => 0
+                        ],
+                        'resolution' => "Remove all $existingRiserCount riser card(s) OR choose motherboard with riser support"
+                    ];
+                } else {
+                    $motherboardRiserSlots = count($riserSlots['slots']);
+
+                    if ($existingRiserCount > $motherboardRiserSlots) {
+                        $errors[] = [
+                            'type' => 'insufficient_riser_slots',
+                            'severity' => 'critical',
+                            'message' => "Configuration has $existingRiserCount riser card(s), motherboard only has $motherboardRiserSlots riser slots",
+                            'details' => [
+                                'existing_riser_count' => $existingRiserCount,
+                                'motherboard_riser_slots' => $motherboardRiserSlots,
+                                'excess_risers' => $existingRiserCount - $motherboardRiserSlots
+                            ],
+                            'resolution' => "Remove " . ($existingRiserCount - $motherboardRiserSlots) . " riser card(s) OR choose motherboard with $existingRiserCount riser slots"
+                        ];
+                    } else {
+                        $info[] = [
+                            'type' => 'riser_compatibility_check',
+                            'message' => "Motherboard supports $motherboardRiserSlots riser slots, $existingRiserCount riser(s) in configuration"
+                        ];
+                    }
+                }
+            }
+        }
+
         // REVERSE CHECKS (Existing PCIe cards → Motherboard)
         $pcieDevices = array_merge($existing['nic'], $existing['pciecard']);
-        if (!empty($pcieDevices)) {
-            $pcieCount = count($pcieDevices);
+
+        // Filter out riser cards from PCIe count (they use riser slots, not PCIe slots)
+        $nonRiserPCIeDevices = [];
+        foreach ($pcieDevices as $device) {
+            $deviceSpecs = $this->getComponentFromInventory($device['component_type'], $device['component_uuid']);
+            $isRiser = $deviceSpecs && isset($deviceSpecs['component_subtype']) && $deviceSpecs['component_subtype'] === 'Riser Card';
+            if (!$isRiser) {
+                $nonRiserPCIeDevices[] = $device;
+            }
+        }
+
+        if (!empty($nonRiserPCIeDevices)) {
+            $pcieCount = count($nonRiserPCIeDevices);
             $totalPCIeSlots = is_array($motherboardPCIeSlots) ? count($motherboardPCIeSlots) : 0;
 
             if ($pcieCount > $totalPCIeSlots) {
@@ -818,14 +881,14 @@ class FlexibleCompatibilityValidator {
                     'details' => [
                         'existing_pcie_count' => $pcieCount,
                         'motherboard_slots' => $totalPCIeSlots,
-                        'existing_pcie_devices' => array_column($pcieDevices, 'component_uuid')
+                        'existing_pcie_devices' => array_column($nonRiserPCIeDevices, 'component_uuid')
                     ],
                     'resolution' => "Remove " . ($pcieCount - $totalPCIeSlots) . " PCIe card(s) OR choose motherboard with $pcieCount slots"
                 ];
             }
 
             // Check PCIe slot size compatibility
-            foreach ($pcieDevices as $device) {
+            foreach ($nonRiserPCIeDevices as $device) {
                 $deviceSpecs = $this->getComponentFromInventory($device['component_type'], $device['component_uuid']);
                 if ($deviceSpecs) {
                     $requiredSlotSize = $this->extractPCIeSlotSize($deviceSpecs);
@@ -933,6 +996,19 @@ class FlexibleCompatibilityValidator {
             // Extract numeric value (e.g., "PCIe 4.0" → 4.0)
             preg_match('/(\d+\.?\d*)/', $version, $matches);
             return $matches[1] ?? null;
+        }
+
+        // If no explicit version field, try to extract from interface field
+        if (!$version && isset($componentSpecs['interface'])) {
+            $interface = $componentSpecs['interface'];
+            // Match "PCIe 3.0" or "PCIe 4.0" etc.
+            if (preg_match('/PCIe.*?(\d\.\d)/', $interface, $matches)) {
+                return $matches[1];
+            }
+            // Match "3.0" or "4.0" etc.
+            if (preg_match('/(\d)\.0/', $interface, $matches)) {
+                return $matches[1] . '.0';
+            }
         }
 
         return $version;
@@ -1665,14 +1741,14 @@ class FlexibleCompatibilityValidator {
         $warnings = [];
         $info = [];
 
-        // Get device specs
-        $deviceSpecs = $this->getComponentFromInventory($deviceType, $deviceUuid);
+        // Get device specs from JSON (includes component_subtype for riser cards, HBA cards, etc.)
+        $deviceSpecs = $this->getComponentSpecs($deviceType, $deviceUuid);
         if (!$deviceSpecs) {
             return [
                 'validation_status' => 'blocked',
                 'critical_errors' => [[
                     'type' => 'pcie_device_not_found',
-                    'message' => ucfirst($deviceType) . " $deviceUuid not found in inventory"
+                    'message' => ucfirst($deviceType) . " $deviceUuid not found in JSON specifications"
                 ]],
                 'warnings' => [],
                 'info_messages' => []
@@ -1682,6 +1758,105 @@ class FlexibleCompatibilityValidator {
         // Extract PCIe specifications
         $deviceSlotSize = $this->extractPCIeSlotSize($deviceSpecs);
         $devicePCIeVersion = $this->extractPCIeVersion($deviceSpecs);
+
+        // Check if this is a riser card
+        $isRiserCard = isset($deviceSpecs['component_subtype']) && $deviceSpecs['component_subtype'] === 'Riser Card';
+
+        // RISER CARD SPECIFIC VALIDATION
+        if ($isRiserCard) {
+            require_once __DIR__ . '/ExpansionSlotTracker.php';
+            $slotTracker = new ExpansionSlotTracker($this->pdo);
+
+            // Extract riser slot requirements
+            $riserSlotType = $deviceSlotSize; // x8 or x16
+            $riserModel = $deviceSpecs['model'] ?? 'Unknown Riser';
+
+            // If motherboard exists, check riser slot availability and compatibility
+            if ($existing['motherboard']) {
+                $riserAvailability = $slotTracker->getRiserSlotAvailability($configUuid);
+
+                if (!$riserAvailability['success']) {
+                    $errors[] = [
+                        'type' => 'no_riser_slot_support',
+                        'severity' => 'critical',
+                        'message' => "Motherboard does not support riser cards",
+                        'resolution' => "Choose motherboard with riser card support"
+                    ];
+                } else {
+                    $totalRiserSlots = count($riserAvailability['total_slots']);
+                    $usedRiserSlots = count($riserAvailability['used_slots']);
+                    $availableRiserSlots = count($riserAvailability['available_slots']);
+
+                    if ($availableRiserSlots === 0) {
+                        $errors[] = [
+                            'type' => 'riser_slots_exhausted',
+                            'severity' => 'critical',
+                            'message' => "Motherboard has $totalRiserSlots riser slots, all occupied",
+                            'resolution' => "Remove existing riser card OR choose motherboard with more riser slots"
+                        ];
+                    } else {
+                        // Check slot size compatibility
+                        $compatibleSlot = $slotTracker->assignRiserSlotBySize($configUuid, $riserSlotType);
+
+                        if ($compatibleSlot === null) {
+                            // No compatible slot available
+                            $errors[] = [
+                                'type' => 'riser_slot_size_incompatible',
+                                'severity' => 'critical',
+                                'message' => "Riser card requires $riserSlotType slot, but no compatible slots available",
+                                'details' => [
+                                    'riser_model' => $riserModel,
+                                    'required_slot_type' => $riserSlotType,
+                                    'available_slots' => array_map(function($slot) {
+                                        return $slot['slot_type'] ?? 'unknown';
+                                    }, $riserAvailability['available_slots'])
+                                ],
+                                'resolution' => "Remove existing riser card to free up $riserSlotType slot OR choose smaller riser card"
+                            ];
+                        } else {
+                            // Compatible slot found
+                            $assignedSlotType = $compatibleSlot['slot_type'] ?? 'unknown';
+
+                            if ($assignedSlotType !== $riserSlotType) {
+                                // Using oversized slot - warn but allow
+                                $warnings[] = [
+                                    'type' => 'riser_slot_oversized',
+                                    'message' => "Riser card ($riserSlotType) will be installed in larger $assignedSlotType slot",
+                                    'details' => [
+                                        'riser_required' => $riserSlotType,
+                                        'slot_assigned' => $assignedSlotType,
+                                        'note' => 'This is acceptable but not optimal for slot utilization'
+                                    ]
+                                ];
+                            }
+
+                            $info[] = [
+                                'type' => 'riser_slot_available',
+                                'message' => "Compatible riser slot available: $availableRiserSlots of $totalRiserSlots slots free",
+                                'assigned_slot' => $compatibleSlot['slot_id'],
+                                'slot_type' => $assignedSlotType
+                            ];
+                        }
+                    }
+                }
+            } else {
+                // No motherboard - allow but inform
+                $info[] = [
+                    'type' => 'no_motherboard_for_riser',
+                    'message' => 'Riser card will be validated when motherboard is added'
+                ];
+            }
+
+            // Determine validation status for riser card
+            $status = empty($errors) ? (empty($warnings) ? 'allowed' : 'allowed_with_warnings') : 'blocked';
+
+            return [
+                'validation_status' => $status,
+                'critical_errors' => $errors,
+                'warnings' => $warnings,
+                'info_messages' => $info
+            ];
+        }
 
         // HBA Card Specific Checks
         $isHBACard = isset($deviceSpecs['component_subtype']) && $deviceSpecs['component_subtype'] === 'HBA Card';
@@ -1773,8 +1948,17 @@ class FlexibleCompatibilityValidator {
                 $motherboardPCIeSlots = $this->dataUtils->extractPCIeSlots($motherboardSpecs);
                 $motherboardPCIeVersion = $this->dataUtils->extractPCIeVersion($motherboardSpecs);
 
-                // Slot availability check
-                $usedSlots = count($existing['nic']) + count($existing['pciecard']);
+                // Slot availability check - exclude riser cards (they use riser_card_slots, not pcie_slots)
+                $nonRiserPCIeCardCount = 0;
+                foreach ($existing['pciecard'] as $card) {
+                    $cardSpecs = $this->getComponentSpecs('pciecard', $card['component_uuid']);
+                    $isRiser = $cardSpecs && isset($cardSpecs['component_subtype']) && $cardSpecs['component_subtype'] === 'Riser Card';
+                    if (!$isRiser) {
+                        $nonRiserPCIeCardCount++;
+                    }
+                }
+
+                $usedSlots = count($existing['nic']) + $nonRiserPCIeCardCount;
                 $totalSlots = is_array($motherboardPCIeSlots) ? count($motherboardPCIeSlots) : 0;
 
                 if ($usedSlots >= $totalSlots) {

@@ -21,28 +21,29 @@ class ServerConfiguration {
     public static function create($pdo, $configData) {
         try {
             $configUuid = self::generateUuid();
-            
+
             $stmt = $pdo->prepare("
-                INSERT INTO server_configurations 
-                (config_uuid, server_name, description, created_by, configuration_status, created_at, updated_at) 
-                VALUES (?, ?, ?, ?, ?, NOW(), NOW())
+                INSERT INTO server_configurations
+                (config_uuid, server_name, description, created_by, configuration_status, is_test, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, NOW(), NOW())
             ");
-            
+
             $result = $stmt->execute([
                 $configUuid,
                 $configData['server_name'],
                 $configData['description'] ?? '',
                 $configData['created_by'],
-                $configData['configuration_status'] ?? 0
+                $configData['configuration_status'] ?? 0,
+                $configData['is_test'] ?? 0
             ]);
-            
+
             if ($result) {
                 // Load the created configuration
                 return self::loadByUuid($pdo, $configUuid);
             }
-            
+
             return false;
-            
+
         } catch (Exception $e) {
             error_log("Error creating server configuration: " . $e->getMessage());
             return false;
@@ -345,9 +346,17 @@ class ServerConfiguration {
             3 => 'Deployed',
             4 => 'Archived'
         ];
-        
+
         $status = $this->data['configuration_status'] ?? 0;
-        return $statusMap[$status] ?? 'Unknown';
+        $statusText = $statusMap[$status] ?? 'Unknown';
+
+        // Add prefix for test builds
+        $isTest = $this->data['is_test'] ?? 0;
+        if ($isTest == 1) {
+            $statusText = 'Test Build - ' . $statusText;
+        }
+
+        return $statusText;
     }
     
     /**

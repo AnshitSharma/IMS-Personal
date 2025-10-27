@@ -1091,7 +1091,7 @@ function getDashboardData($pdo, $user) {
     
     try {
         // Get component counts
-        $componentTypes = ['cpu', 'ram', 'storage', 'motherboard', 'nic', 'caddy'];
+        $componentTypes = ['cpu', 'ram', 'storage', 'motherboard', 'nic', 'caddy', 'pciecard', 'chassis', 'hbacard'];
         $componentCounts = [];
         $totalComponents = 0;
         
@@ -1163,7 +1163,7 @@ function getDashboardData($pdo, $user) {
  */
 function performGlobalSearch($pdo, $query, $limit, $user) {
     $results = [];
-    $componentTypes = ['cpu', 'ram', 'storage', 'motherboard', 'nic', 'caddy'];
+    $componentTypes = ['cpu', 'ram', 'storage', 'motherboard', 'nic', 'caddy', 'pciecard', 'chassis', 'hbacard'];
     
     try {
         foreach ($componentTypes as $type) {
@@ -1208,7 +1208,8 @@ function getComponentTableName($type) {
         'motherboard' => 'motherboardinventory',
         'nic' => 'nicinventory',
         'caddy' => 'caddyinventory',
-        'pciecard' => 'pciecardinventory'
+        'pciecard' => 'pciecardinventory',
+        'hbacard' => 'hbacardinventory'
     ];
 
     return $tableMap[$type] ?? $type;

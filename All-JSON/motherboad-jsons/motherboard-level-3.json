@@ -56,7 +56,20 @@
               "pcie_lanes": 16,
               "pcie_generation": 5
             }
-          ]
+          ],
+          "riser_slots": [
+            {
+              "count": 4,
+              "slot_type": "standard",
+              "form_factor_support": ["1U", "2U"],
+              "max_height_mm": 106.68
+            }
+          ],
+          "riser_compatibility": {
+            "max_risers": 4,
+            "slot_spacing_mm": 20.32,
+            "available_mounting_length_mm": 280
+          }
         },
         "storage": {
           "sata": {
@@ -641,7 +654,12 @@
               "riser_card_required": true,
               "supported_riser_models": ["RSC-RR1U-E8"]
             }
-          ]
+          ],
+          "riser_compatibility": {
+            "max_risers": 2,
+            "slot_spacing_mm": 20.32,
+            "available_mounting_length_mm": 150
+          }
         },
         "storage": {
           "sata": {

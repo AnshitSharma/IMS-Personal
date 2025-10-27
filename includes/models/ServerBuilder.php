@@ -223,33 +223,37 @@ class ServerBuilder {
                 }
             }
             
-            // Get server configuration location and rack position for component assignment
-            $stmt = $this->pdo->prepare("SELECT location, rack_position FROM server_configurations WHERE config_uuid = ?");
+            // Get server configuration location, rack position, and is_test flag for component assignment
+            $stmt = $this->pdo->prepare("SELECT location, rack_position, is_test FROM server_configurations WHERE config_uuid = ?");
             $stmt->execute([$configUuid]);
             $serverConfig = $stmt->fetch(PDO::FETCH_ASSOC);
             $serverLocation = $serverConfig['location'] ?? null;
             $serverRackPosition = $serverConfig['rack_position'] ?? null;
-            
+            $isTest = $serverConfig['is_test'] ?? 0;
+
             // Log server configuration data for component assignment
-            error_log("Component assignment: Server $configUuid has Location='$serverLocation', RackPosition='$serverRackPosition'");
-            
+            error_log("Component assignment: Server $configUuid has Location='$serverLocation', RackPosition='$serverRackPosition', is_test='$isTest'");
+
             // ALL VALIDATIONS COMPLETE - Begin transaction only after all checks pass
             $this->pdo->beginTransaction();
-            
+
             // Add component to configuration_components table
             $quantity = $options['quantity'] ?? 1;
             $slotPosition = $options['slot_position'] ?? null;
             $notes = $options['notes'] ?? '';
-            
+
             $stmt = $this->pdo->prepare("
-                INSERT INTO server_configuration_components 
-                (config_uuid, component_type, component_uuid, quantity, slot_position, notes, added_at) 
+                INSERT INTO server_configuration_components
+                (config_uuid, component_type, component_uuid, quantity, slot_position, notes, added_at)
                 VALUES (?, ?, ?, ?, ?, ?, NOW())
             ");
             $stmt->execute([$configUuid, $componentType, $componentUuid, $quantity, $slotPosition, $notes]);
-            
-            // Update component status to "In Use" AND set ServerUUID, location, rack position, and installation date
-            $this->updateComponentStatusAndServerUuid($componentType, $componentUuid, 2, $configUuid, "Added to configuration $configUuid", $serverLocation, $serverRackPosition);
+
+            // Update component status to "In Use" ONLY for real builds (not test builds)
+            if (!$isTest) {
+                // Update component status to "In Use" AND set ServerUUID, location, rack position, and installation date
+                $this->updateComponentStatusAndServerUuid($componentType, $componentUuid, 2, $configUuid, "Added to configuration $configUuid", $serverLocation, $serverRackPosition);
+            }
             
             // Update the main server_configurations table with component info
             $this->updateServerConfigurationTable($configUuid, $componentType, $componentUuid, $quantity, 'add');
@@ -291,18 +295,25 @@ class ServerBuilder {
     
     /**
      * Remove component from server configuration
+     * UPDATED: Now checks is_test flag to conditionally update component status
      */
     public function removeComponent($configUuid, $componentType, $componentUuid) {
         try {
             $this->pdo->beginTransaction();
-            
+
+            // Get is_test flag from server configuration
+            $stmt = $this->pdo->prepare("SELECT is_test FROM server_configurations WHERE config_uuid = ?");
+            $stmt->execute([$configUuid]);
+            $config = $stmt->fetch(PDO::FETCH_ASSOC);
+            $isTest = $config['is_test'] ?? 0;
+
             // Remove from configuration_components table
             $stmt = $this->pdo->prepare("
-                DELETE FROM server_configuration_components 
+                DELETE FROM server_configuration_components
                 WHERE config_uuid = ? AND component_type = ? AND component_uuid = ?
             ");
             $stmt->execute([$configUuid, $componentType, $componentUuid]);
-            
+
             if ($stmt->rowCount() === 0) {
                 $this->pdo->rollback();
                 return [
@@ -310,26 +321,29 @@ class ServerBuilder {
                     'message' => "Component not found in configuration"
                 ];
             }
-            
-            // Update component status back to "Available" and clear ServerUUID, installation date, and rack position
-            $this->updateComponentStatusAndServerUuid($componentType, $componentUuid, 1, null, "Removed from configuration $configUuid");
-            
+
+            // Update component status back to "Available" ONLY for real builds (not test builds)
+            if (!$isTest) {
+                // Update component status back to "Available" and clear ServerUUID, installation date, and rack position
+                $this->updateComponentStatusAndServerUuid($componentType, $componentUuid, 1, null, "Removed from configuration $configUuid");
+            }
+
             // Update the main server_configurations table
             $this->updateServerConfigurationTable($configUuid, $componentType, $componentUuid, 0, 'remove');
-            
+
             // Update calculated fields
             $this->updateConfigurationMetrics($configUuid);
-            
+
             // Log the action
             $this->logConfigurationAction($configUuid, 'remove_component', $componentType, $componentUuid);
-            
+
             $this->pdo->commit();
-            
+
             return [
                 'success' => true,
                 'message' => "Component removed successfully"
             ];
-            
+
         } catch (Exception $e) {
             $this->pdo->rollback();
             error_log("Error removing component from configuration: " . $e->getMessage());
@@ -3563,12 +3577,12 @@ class ServerBuilder {
     }
 
     /**
-     * Validate PCIe slot assignments using existing PCIeSlotTracker
+     * Validate PCIe slot assignments using ExpansionSlotTracker
      */
     private function validatePCIeSlots($configUuid, &$result) {
         try {
-            require_once __DIR__ . '/PCIeSlotTracker.php';
-            $slotTracker = new PCIeSlotTracker($this->pdo);
+            require_once __DIR__ . '/ExpansionSlotTracker.php';
+            $slotTracker = new ExpansionSlotTracker($this->pdo);
 
             $pcieValidation = $slotTracker->validateAllSlots($configUuid);
 

@@ -27,59 +27,11 @@
             "width": 76.0,
             "height": 56.5
           },
-          "recommended_cooling": {
-            "type": "Active Heatsink with Fan",
-            "min_airflow_CFM": 35,
-            "thermal_solution_power_W": 350
-          },
-          "inventory": {
-            "quantity_available": 8,
-            "quantity_reserved": 2,
-            "location": "Rack B4, Storage Unit 12",
-            "status": "Available",
-            "condition": "New",
-            "purchase_date": "2023-09-15",
-            "warranty_expiration": "2026-09-15",
-            "serial_numbers": [],
-            "sys_score": ""
-          },
           "power_efficiency": {
             "idle_power_W": 65,
-            "avg_power_under_load_W": 280,
+            "avg_power_under_load_W": 280,  
             "perf_per_watt_score": 8.2
           },
-          "compatible_motherboards": [
-            {
-              "brand": "Supermicro",
-              "models": ["X13DRG-H", "X13DRi-N"]
-            },
-            {
-              "brand": "ASUS",
-              "models": ["Pro WS W790E-SAGE SE"]
-            },
-            {
-              "brand": "GIGABYTE",
-              "models": ["MZ93-FS0", "MC63-4S0"]
-            }
-          ],
-          "compatible_servers": [
-            {
-              "brand": "Dell",
-              "models": ["PowerEdge R760", "PowerEdge R860"]
-            },
-            {
-              "brand": "HPE",
-              "models": ["ProLiant DL380 Gen11", "ProLiant DL560 Gen11"]
-            },
-            {
-              "brand": "Lenovo",
-              "models": ["ThinkSystem SR650 V3", "ThinkSystem SR850 V3"]
-            },
-            {
-              "brand": "Supermicro",
-              "models": ["SuperServer 1029U-TR4", "SuperServer 2029U-TR4"]
-            }
-          ],
           "UUID": "545e143b-57b3-419e-86e5-1df6f7aa8fd3"
         },
         {
@@ -104,60 +56,12 @@
             "width": 76.0,
             "height": 56.5
           },
-          "recommended_cooling": {
-            "type": "Active Heatsink with Fan",
-            "min_airflow_CFM": 30,
-            "thermal_solution_power_W": 300
-          },
-          "inventory": {
-            "quantity_available": 11,
-            "quantity_reserved": 3,
-            "location": "Rack B4, Storage Unit 13",
-            "status": "Available",
-            "condition": "New",
-            "purchase_date": "2023-09-20",
-            "warranty_expiration": "2026-09-20",
-            "serial_numbers": [],
-            "sys_score": ""
-          },
           "power_efficiency": {
             "idle_power_W": 60,
             "avg_power_under_load_W": 265,
             "perf_per_watt_score": 8.4
           },
-          "compatible_motherboards": [
-            {
-              "brand": "Supermicro",
-              "models": ["X13DRG-H", "X13DRi-N", "X13DRI-T"]
-            },
-            {
-              "brand": "ASUS",
-              "models": ["Pro WS W790E-SAGE SE"]
-            },
-            {
-              "brand": "GIGABYTE",
-              "models": ["MZ93-FS0", "MC63-4S0"]
-            }
-          ],
-          "compatible_servers": [
-            {
-              "brand": "Dell",
-              "models": ["PowerEdge R760", "PowerEdge R860"]
-            },
-            {
-              "brand": "HPE",
-              "models": ["ProLiant DL380 Gen11", "ProLiant DL560 Gen11"]
-            },
-            {
-              "brand": "Lenovo",
-              "models": ["ThinkSystem SR650 V3", "ThinkSystem SR850 V3"]
-            },
-            {
-              "brand": "Supermicro",
-              "models": ["SuperServer 1029U-TR4", "SuperServer 2029U-TR4"]
-            }
-          ],
-        "UUID": "545e143b-57b3-419e-86e5-1df6f7aa8fxx"
+          "UUID": "545e143b-57b3-419e-86e5-1df6f7aa8fxx"
 
         }
       ]
@@ -174,44 +78,8 @@
             "idle_power_W": 65,
             "avg_power_under_load_W": 245,
             "perf_per_watt_score": 9.3
-          },
-          "inventory": {
-            "serial_numbers": [],
-            "sys_score": ""
-          },
-          "compatible_motherboards": [
-            {
-              "brand": "Supermicro",
-              "models": ["H13DSU-iN", "H13DSG-O-CPU"]
-            },
-            {
-              "brand": "GIGABYTE",
-              "models": ["MZ83-SP0", "MZ83-SP1"]
-            },
-            {
-              "brand": "ASRock Rack",
-              "models": ["ROMED8-9001", "ROMED8-9002"]
-            }
-          ],
-          "compatible_servers": [
-            {
-              "brand": "Dell",
-              "models": ["PowerEdge R7625", "PowerEdge R9625"]
-            },
-            {
-              "brand": "HPE",
-              "models": ["ProLiant DL385 Gen11", "ProLiant DL585 Gen11"]
-            },
-            {
-              "brand": "Lenovo",
-              "models": ["ThinkSystem SR675 V3", "ThinkSystem SR665 V3"]
-            },
-            {
-              "brand": "Supermicro",
-              "models": ["AS-2145GH-TNRT", "AS-2145SH-TNRT"]
-            }
-          ]
-         
+          }
+
         },
         {
           "model": "EPYC 9374F",
@@ -235,59 +103,11 @@
             "width": 75.4,
             "height": 58.5
           },
-          "recommended_cooling": {
-            "type": "Active Heatsink with Fan",
-            "min_airflow_CFM": 38,
-            "thermal_solution_power_W": 320
-          },
-          "inventory": {
-            "quantity_available": 12,
-            "quantity_reserved": 3,
-            "location": "Rack C2, Storage Unit 07",
-            "status": "Available",
-            "condition": "New",
-            "purchase_date": "2023-08-22",
-            "warranty_expiration": "2026-08-22",
-            "serial_numbers": [],
-            "sys_score": ""
-          },
           "power_efficiency": {
             "idle_power_W": 68,
             "avg_power_under_load_W": 285,
             "perf_per_watt_score": 8.7
           },
-          "compatible_motherboards": [
-            {
-              "brand": "Supermicro",
-              "models": ["H13DSU-iN", "H13DSG-O-CPU"]
-            },
-            {
-              "brand": "GIGABYTE",
-              "models": ["MZ83-SP0", "MZ83-SP1"]
-            },
-            {
-              "brand": "ASRock Rack",
-              "models": ["ROMED8-9001", "ROMED8-9002"]
-            }
-          ],
-          "compatible_servers": [
-            {
-              "brand": "Dell",
-              "models": ["PowerEdge R7625", "PowerEdge R9625"]
-            },
-            {
-              "brand": "HPE",
-              "models": ["ProLiant DL385 Gen11", "ProLiant DL585 Gen11"]
-            },
-            {
-              "brand": "Lenovo",
-              "models": ["ThinkSystem SR675 V3", "ThinkSystem SR665 V3"]
-            },
-            {
-              "brand": "Supermicro",
-              "models": ["AS-2145GH-TNRT", "AS-2145SH-TNRT"]
-            }
-          ],
           "UUID": "d3b5f1c2-9f4e-4c2a-8e6b-7a9f3e2d1c4b"
           
         }

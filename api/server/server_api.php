@@ -5,7 +5,7 @@ require_once __DIR__ . '/../../includes/models/ServerBuilder.php';
 require_once __DIR__ . '/../../includes/models/ServerConfiguration.php';
 require_once __DIR__ . '/../../includes/models/CompatibilityEngine.php';
 require_once __DIR__ . '/../../includes/models/FlexibleCompatibilityValidator.php';
-require_once __DIR__ . '/../../includes/models/PCIeSlotTracker.php';
+require_once __DIR__ . '/../../includes/models/ExpansionSlotTracker.php';
 
 
 header('Content-Type: application/json');
@@ -390,7 +390,7 @@ function handleAddComponent($serverBuilder, $user) {
     }
 
     // Basic component type validation
-    $validComponentTypes = ['chassis', 'cpu', 'motherboard', 'ram', 'storage', 'nic', 'caddy', 'pciecard'];
+    $validComponentTypes = ['chassis', 'cpu', 'motherboard', 'ram', 'storage', 'nic', 'caddy', 'pciecard', 'hbacard'];
     if (!in_array($componentType, $validComponentTypes)) {
         send_json_response(0, 1, 400, "Invalid component type. Valid types: " . implode(', ', $validComponentTypes));
     }
@@ -520,11 +520,139 @@ function handleAddComponent($serverBuilder, $user) {
             $validationInfo = ["Validation service unavailable - component added without compatibility checks"];
         }
 
-        // PCIe slot assignment for PCIe cards and NICs
+        // NEW: Riser Card Specific Validation (bidirectional checks)
+        require_once __DIR__ . '/../../includes/models/ComponentCompatibility.php';
+        $componentCompatibility = new ComponentCompatibility($pdo);
+
+        // Get existing components in config for riser validation
+        $stmt = $pdo->prepare("
+            SELECT component_uuid, component_type
+            FROM server_configuration_components
+            WHERE config_uuid = ?
+        ");
+        $stmt->execute([$configUuid]);
+        $existingComponents = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        if ($componentType === 'pciecard') {
+            // Validate adding riser card
+            $riserValidation = $componentCompatibility->validateAddRiserCard(
+                ['uuid' => $componentUuid, 'type' => 'pcie_card'],
+                $existingComponents
+            );
+
+            if (!$riserValidation['compatible']) {
+                error_log("Riser card validation failed: " . json_encode($riserValidation['errors']));
+                send_json_response(0, 1, 400,
+                    "Cannot add riser card due to compatibility issues",
+                    [
+                        'component_type' => $componentType,
+                        'component_uuid' => $componentUuid,
+                        'validation_status' => 'blocked',
+                        'errors' => $riserValidation['errors'],
+                        'warnings' => $riserValidation['warnings']
+                    ]
+                );
+            }
+
+            // Add warnings to response if any
+            if (!empty($riserValidation['warnings'])) {
+                $validationWarnings = array_merge($validationWarnings, $riserValidation['warnings']);
+            }
+        }
+
+        if ($componentType === 'motherboard') {
+            // Validate adding motherboard when risers exist
+            $motherboardValidation = $componentCompatibility->validateAddMotherboard(
+                ['uuid' => $componentUuid, 'type' => 'motherboard'],
+                $existingComponents
+            );
+
+            if (!$motherboardValidation['compatible']) {
+                error_log("Motherboard validation with existing risers failed: " . json_encode($motherboardValidation['errors']));
+                send_json_response(0, 1, 400,
+                    "Cannot add motherboard - incompatible with existing riser cards",
+                    [
+                        'component_type' => $componentType,
+                        'component_uuid' => $componentUuid,
+                        'validation_status' => 'blocked',
+                        'errors' => $motherboardValidation['errors'],
+                        'suggestion' => 'Choose a motherboard with sufficient riser slots and mounting space'
+                    ]
+                );
+            }
+
+            // Add warnings if any
+            if (!empty($motherboardValidation['warnings'])) {
+                $validationWarnings = array_merge($validationWarnings, $motherboardValidation['warnings']);
+            }
+        }
+
+        if ($componentType === 'chassis') {
+            // Validate adding chassis when risers exist
+            $chassisValidation = $componentCompatibility->validateAddChassis(
+                ['uuid' => $componentUuid, 'type' => 'chassis'],
+                $existingComponents
+            );
+
+            if (!$chassisValidation['compatible']) {
+                error_log("Chassis validation with existing risers failed: " . json_encode($chassisValidation['errors']));
+                send_json_response(0, 1, 400,
+                    "Cannot add chassis - insufficient height for existing riser cards",
+                    [
+                        'component_type' => $componentType,
+                        'component_uuid' => $componentUuid,
+                        'validation_status' => 'blocked',
+                        'errors' => $chassisValidation['errors'],
+                        'suggestion' => 'Choose a taller chassis that can accommodate your riser cards'
+                    ]
+                );
+            }
+
+            // Add warnings if any
+            if (!empty($chassisValidation['warnings'])) {
+                $validationWarnings = array_merge($validationWarnings, $chassisValidation['warnings']);
+            }
+        }
+
+        if ($componentType === 'hbacard') {
+            // Validate adding HBA card - check storage device compatibility and PCIe slots
+            $hbaValidation = $componentCompatibility->checkHBADecentralizedCompatibility(
+                ['uuid' => $componentUuid, 'type' => 'hbacard'],
+                array_map(function($comp) {
+                    return [
+                        'type' => $comp['component_type'],
+                        'uuid' => $comp['component_uuid']
+                    ];
+                }, $existingComponents)
+            );
+
+            if (!$hbaValidation['compatible']) {
+                error_log("HBA card validation failed: " . json_encode($hbaValidation['issues']));
+                send_json_response(0, 1, 400,
+                    "Cannot add HBA card due to compatibility issues",
+                    [
+                        'component_type' => $componentType,
+                        'component_uuid' => $componentUuid,
+                        'validation_status' => 'blocked',
+                        'errors' => $hbaValidation['issues'],
+                        'warnings' => $hbaValidation['warnings'] ?? [],
+                        'recommendations' => $hbaValidation['recommendations'] ?? [],
+                        'compatibility_summary' => $hbaValidation['compatibility_summary']
+                    ]
+                );
+            }
+
+            // Add warnings to response if any
+            if (!empty($hbaValidation['warnings'])) {
+                $validationWarnings = array_merge($validationWarnings, $hbaValidation['warnings']);
+            }
+        }
+
+        // Expansion slot assignment for PCIe cards, NICs, and Risers
         $assignedSlot = null;
         if ($componentType === 'pciecard' || $componentType === 'nic') {
             try {
-                $slotTracker = new PCIeSlotTracker($pdo);
+                $slotTracker = new ExpansionSlotTracker($pdo);
 
                 // Check if motherboard exists
                 $stmt = $pdo->prepare("
@@ -543,21 +671,53 @@ function handleAddComponent($serverBuilder, $user) {
                     $cardSpecs = $componentDataService->getComponentSpecifications($componentType, $componentUuid, $componentDetails);
 
                     if ($cardSpecs) {
-                        // Extract PCIe slot size
-                        $cardSlotSize = extractPCIeSlotSizeFromSpecs($cardSpecs);
+                        // Check component subtype to determine if riser or regular PCIe card
+                        $componentSubtype = $cardSpecs['component_subtype'] ?? null;
 
-                        if ($cardSlotSize) {
-                            // Assign optimal slot
-                            $assignedSlot = $slotTracker->assignSlot($configUuid, $cardSlotSize);
-                            if ($assignedSlot) {
-                                $slotPosition = $assignedSlot;
-                                error_log("Assigned PCIe slot: $assignedSlot");
+                        if ($componentSubtype === 'Riser Card') {
+                            // Assign to riser slot with size awareness
+                            $riserSlotSize = extractPCIeSlotSizeFromSpecs($cardSpecs); // Get riser slot requirements
+
+                            if ($riserSlotSize) {
+                                // Use size-aware assignment
+                                $assignedSlotInfo = $slotTracker->assignRiserSlotBySize($configUuid, $riserSlotSize);
+                                if ($assignedSlotInfo) {
+                                    $assignedSlot = $assignedSlotInfo['slot_id'];
+                                    $slotPosition = $assignedSlot;
+                                    $assignedSlotType = $assignedSlotInfo['slot_type'] ?? 'unknown';
+                                    error_log("Assigned riser slot: $assignedSlot (type: $assignedSlotType) for riser card $componentUuid (requires: $riserSlotSize)");
+                                } else {
+                                    error_log("WARNING: No compatible riser slots for riser card $componentUuid (requires: $riserSlotSize)");
+                                }
+                            } else {
+                                // Fallback to legacy assignment if size cannot be determined
+                                $assignedSlot = $slotTracker->assignRiserSlot($configUuid);
+                                if ($assignedSlot) {
+                                    $slotPosition = $assignedSlot;
+                                    error_log("Assigned riser slot (legacy): $assignedSlot for riser card $componentUuid");
+                                } else {
+                                    error_log("WARNING: No available riser slots for riser card $componentUuid");
+                                }
+                            }
+                        } else {
+                            // Regular PCIe card/NIC - assign to PCIe slot
+                            $cardSlotSize = extractPCIeSlotSizeFromSpecs($cardSpecs);
+
+                            if ($cardSlotSize) {
+                                // Assign optimal PCIe slot
+                                $assignedSlot = $slotTracker->assignSlot($configUuid, $cardSlotSize);
+                                if ($assignedSlot) {
+                                    $slotPosition = $assignedSlot;
+                                    error_log("Assigned PCIe slot: $assignedSlot for card $componentUuid");
+                                } else {
+                                    error_log("WARNING: No available PCIe slots for card $componentUuid (requires $cardSlotSize)");
+                                }
                             }
                         }
                     }
                 }
-            } catch (Exception $pcieError) {
-                error_log("PCIe slot assignment error: " . $pcieError->getMessage());
+            } catch (Exception $slotError) {
+                error_log("Expansion slot assignment error: " . $slotError->getMessage());
                 // Continue without slot assignment
             }
         }
@@ -569,7 +729,46 @@ function handleAddComponent($serverBuilder, $user) {
             'notes' => $notes,
             'override_used' => $override
         ]);
-        
+
+        // VALIDATION: If this is a riser card and slot_position was manually provided (not auto-assigned),
+        // ensure it follows the 'riser_' prefix convention
+        if ($result['success'] && $componentType === 'pciecard' && !empty($_POST['slot_position'])) {
+            try {
+                require_once __DIR__ . '/../../includes/models/DataExtractionUtilities.php';
+                $dataUtils = new DataExtractionUtilities($pdo);
+                $cardSpecs = $dataUtils->getPCIeCardByUUID($componentUuid);
+
+                $isRiserCard = isset($cardSpecs['component_subtype']) &&
+                               $cardSpecs['component_subtype'] === 'Riser Card';
+
+                if ($isRiserCard) {
+                    $providedSlotPosition = $_POST['slot_position'];
+
+                    // Check if provided slot_position follows riser_ prefix convention
+                    if (strpos($providedSlotPosition, 'riser_') !== 0) {
+                        // Auto-correct: convert "slot 1" to "riser_slot_1"
+                        $correctedPosition = 'riser_' . str_replace(' ', '_', strtolower(trim($providedSlotPosition)));
+
+                        error_log("Auto-correcting riser card slot_position: '$providedSlotPosition' -> '$correctedPosition'");
+
+                        // Update the slot_position in database
+                        $updateStmt = $pdo->prepare("
+                            UPDATE server_configuration_components
+                            SET slot_position = ?
+                            WHERE config_uuid = ? AND component_uuid = ? AND component_type = ?
+                        ");
+                        $updateStmt->execute([$correctedPosition, $configUuid, $componentUuid, $componentType]);
+
+                        // Update $slotPosition for response
+                        $slotPosition = $correctedPosition;
+                    }
+                }
+            } catch (Exception $correctionError) {
+                error_log("Error during slot_position correction: " . $correctionError->getMessage());
+                // Continue - don't block on this validation
+            }
+        }
+
         if ($result['success']) {
             // Simple success response - avoid complex operations that could fail
             error_log("Component added successfully: $componentType/$componentUuid to config $configUuid");
@@ -596,18 +795,37 @@ function handleAddComponent($serverBuilder, $user) {
                 $responseData['validation_info'] = $validationInfo;
             }
 
-            // Add PCIe slot assignment info if applicable
+            // Add expansion slot assignment info if applicable
             if ($assignedSlot && ($componentType === 'pciecard' || $componentType === 'nic')) {
-                $responseData['pcie_slot_assignment'] = [
-                    'slot_assigned' => $assignedSlot,
-                    'slot_type' => extractSlotTypeFromSlotId($assignedSlot)
-                ];
+                // Determine if riser slot or PCIe slot
+                if (strpos($assignedSlot, 'riser_') === 0) {
+                    // Riser slot assignment
+                    $responseData['riser_slot_assignment'] = [
+                        'slot_assigned' => $assignedSlot,
+                        'slot_type' => 'riser_slot'
+                    ];
 
-                // Get updated slot availability
-                if (isset($slotTracker)) {
-                    $updatedAvailability = $slotTracker->getSlotAvailability($configUuid);
-                    if ($updatedAvailability['success']) {
-                        $responseData['pcie_slot_assignment']['remaining_slots'] = $updatedAvailability['available_slots'];
+                    // Get updated riser slot availability
+                    if (isset($slotTracker)) {
+                        $updatedAvailability = $slotTracker->getRiserSlotAvailability($configUuid);
+                        if ($updatedAvailability['success']) {
+                            $responseData['riser_slot_assignment']['remaining_riser_slots'] = $updatedAvailability['available_slots'];
+                            $responseData['riser_slot_assignment']['total_riser_slots'] = count($updatedAvailability['total_slots']);
+                        }
+                    }
+                } else {
+                    // PCIe slot assignment
+                    $responseData['pcie_slot_assignment'] = [
+                        'slot_assigned' => $assignedSlot,
+                        'slot_type' => extractSlotTypeFromSlotId($assignedSlot)
+                    ];
+
+                    // Get updated PCIe slot availability
+                    if (isset($slotTracker)) {
+                        $updatedAvailability = $slotTracker->getSlotAvailability($configUuid);
+                        if ($updatedAvailability['success']) {
+                            $responseData['pcie_slot_assignment']['remaining_slots'] = $updatedAvailability['available_slots'];
+                        }
                     }
                 }
             }
@@ -844,8 +1062,9 @@ function handleGetConfiguration($serverBuilder, $user) {
         $configuration['compatibility_score'] = $compatibilityScore;
         
         
-        // Calculate PCIe lane usage and get warnings
+        // Calculate PCIe lane usage, riser slot usage, and get warnings
         $pcieTracking = calculatePCIeLaneUsage($details['components'] ?? []);
+        $riserTracking = calculateRiserSlotUsage($details['components'] ?? [], $configUuid);
         $configWarnings = getConfigurationWarnings($details['components'] ?? []);
 
         send_json_response(1, 1, 200, "Configuration retrieved successfully", [
@@ -871,6 +1090,7 @@ function handleGetConfiguration($serverBuilder, $user) {
                 'last_validation' => $configuration['updated_at'] ?? $configuration['created_at']
             ],
             'pcie_lanes' => $pcieTracking,
+            'riser_slots' => $riserTracking,
             'warnings' => $configWarnings
         ]);
         
@@ -920,9 +1140,19 @@ function handleListConfigurations($serverBuilder, $user) {
         $stmt->execute($params);
         $configurations = $stmt->fetchAll(PDO::FETCH_ASSOC);
         
-        // Add configuration status text for each configuration
+        // Add configuration status text and component count for each configuration
         foreach ($configurations as &$config) {
             $config['configuration_status_text'] = getConfigurationStatusText($config['configuration_status']);
+
+            // Count distinct component types in this configuration
+            $componentCountStmt = $pdo->prepare("
+                SELECT COUNT(DISTINCT component_type) as total_component_types
+                FROM server_configuration_components
+                WHERE config_uuid = ?
+            ");
+            $componentCountStmt->execute([$config['config_uuid']]);
+            $componentCount = $componentCountStmt->fetch(PDO::FETCH_ASSOC);
+            $config['total_component_types'] = (int)$componentCount['total_component_types'];
         }
         
         // Get total count
@@ -1172,7 +1402,7 @@ function handleGetCompatible($serverBuilder, $user) {
     }
     
     // Validate component type
-    $validComponentTypes = ['chassis', 'cpu', 'motherboard', 'ram', 'storage', 'nic', 'caddy', 'pciecard'];
+    $validComponentTypes = ['chassis', 'cpu', 'motherboard', 'ram', 'storage', 'nic', 'caddy', 'pciecard', 'hbacard'];
     if (!in_array($componentType, $validComponentTypes)) {
         send_json_response(0, 1, 400, "Invalid component type. Must be one of: " . implode(', ', $validComponentTypes));
     }
@@ -1214,7 +1444,8 @@ function handleGetCompatible($serverBuilder, $user) {
                 'motherboard' => 'motherboardinventory',
                 'nic' => 'nicinventory',
                 'caddy' => 'caddyinventory',
-                'pciecard' => 'pciecardinventory'
+                'pciecard' => 'pciecardinventory',
+                'hbacard' => 'hbacardinventory'
             ];
 
             $table = $tableMap[$existing['component_type']];
@@ -1240,7 +1471,8 @@ function handleGetCompatible($serverBuilder, $user) {
             'motherboard' => 'motherboardinventory',
             'nic' => 'nicinventory',
             'caddy' => 'caddyinventory',
-            'pciecard' => 'pciecardinventory'
+            'pciecard' => 'pciecardinventory',
+            'hbacard' => 'hbacardinventory'
         ];
         
         $table = $tableMap[$componentType];
@@ -1279,12 +1511,14 @@ function handleGetCompatible($serverBuilder, $user) {
 
             foreach ($allComponents as $component) {
                 $isCompatible = true;
-                $compatibilityScore = 1.0;
+                $compatibilityScore = 100; // Integer score from 0-100
                 $compatibilityReasons = [];
+                $fullChassisResult = null; // Initialize for chassis components
 
                 // If no existing components, all components are compatible
                 if (empty($existingComponentsData)) {
                     $isCompatible = true;
+                    $compatibilityScore = 100;
                     $compatibilityReasons[] = "No existing components - all components available";
                 } else {
                     // Use specialized RAM compatibility checking for better accuracy
@@ -1336,6 +1570,9 @@ function handleGetCompatible($serverBuilder, $user) {
                         // Use concise compatibility summary instead of verbose details
                         $compatibilityReasons = [$chassisCompatResult['compatibility_summary'] ?? 'Compatibility check completed'];
 
+                        // Store the full compatibility result for chassis to include score_breakdown
+                        $fullChassisResult = $chassisCompatResult;
+
                         // DEBUG: Include details array if present
                         if (isset($chassisCompatResult['details'])) {
                             $compatibilityReasons[] = 'DEBUG_DETAILS: ' . json_encode($chassisCompatResult['details']);
@@ -1359,6 +1596,16 @@ function handleGetCompatible($serverBuilder, $user) {
                         $compatibilityScore = $nicCompatResult['compatibility_score'];
                         // Use concise compatibility summary instead of verbose details
                         $compatibilityReasons = [$nicCompatResult['compatibility_summary'] ?? 'Compatibility check completed'];
+                    } elseif ($componentType === 'hbacard') {
+                        // Use specialized HBA card compatibility checking
+                        // Checks storage device interface matching and PCIe slot availability
+                        $hbaCompatResult = $compatibility->checkHBADecentralizedCompatibility(
+                            ['uuid' => $component['UUID']], $existingComponentsData
+                        );
+                        $isCompatible = $hbaCompatResult['compatible'];
+                        $compatibilityScore = $hbaCompatResult['compatibility_score'];
+                        // Use concise compatibility summary instead of verbose details
+                        $compatibilityReasons = [$hbaCompatResult['compatibility_summary'] ?? 'Compatibility check completed'];
                     } else {
                         // Check compatibility with each existing component for other types
                         foreach ($existingComponentsData as $existingComp) {
@@ -1392,6 +1639,16 @@ function handleGetCompatible($serverBuilder, $user) {
                     'is_compatible' => $isCompatible
                 ];
 
+                // Add score_breakdown for chassis components (for detailed debugging)
+                if ($componentType === 'chassis' && isset($fullChassisResult['score_breakdown'])) {
+                    $compatibleComponent['score_breakdown'] = $fullChassisResult['score_breakdown'];
+                }
+
+                // Add warnings if present (useful for all component types)
+                if ($componentType === 'chassis' && isset($fullChassisResult['warnings']) && !empty($fullChassisResult['warnings'])) {
+                    $compatibleComponent['warnings'] = $fullChassisResult['warnings'];
+                }
+
                 // Always add components to show compatibility details
                 $compatibleComponents[] = $compatibleComponent;
             }
@@ -1403,14 +1660,16 @@ function handleGetCompatible($serverBuilder, $user) {
 
             foreach ($allComponents as $component) {
                 $isCompatible = true;
-                $compatibilityScore = 1.0;
+                $compatibilityScore = 100; // Integer score from 0-100
                 $compatibilityReason = "Basic compatibility check passed";
 
                 // If no existing components, all components are compatible
                 if (empty($existingComponentsData)) {
+                    $compatibilityScore = 100;
                     $compatibilityReason = "No existing components - all components available";
                 } else {
                     // Basic compatibility logic without motherboard dependency
+                    $compatibilityScore = 100;
                     $compatibilityReason = "Compatible based on basic component validation";
 
                     // For RAM compatibility with existing components
@@ -1419,7 +1678,8 @@ function handleGetCompatible($serverBuilder, $user) {
                             $component, $existingComponentsData, $pdo
                         );
                         $isCompatible = $ramCompatibilityResult['compatible'];
-                        $compatibilityScore = $ramCompatibilityResult['score'];
+                        // Convert float score to integer (0-100)
+                        $compatibilityScore = (int)($ramCompatibilityResult['score'] * 100);
                         $compatibilityReason = $ramCompatibilityResult['reason'];
                     }
                 }
@@ -1472,14 +1732,12 @@ function handleGetCompatible($serverBuilder, $user) {
         if (count($compatibleOnly) > 0) {
             $message = "Compatible components found";
         } else if (count($incompatibleOnly) > 0) {
-            $message = "No compatible components found - see incompatibility reasons";
-            // Don't show incompatible components list, just the summary
-            $responseData['incompatible_components'] = [];
+            $message = "No compatible components found - all components incompatible";
+            // Keep incompatible components in the response for debugging
             $responseData['incompatibility_summary'] = [
                 'total_checked' => count($incompatibleOnly),
-                'main_reasons' => array_slice(array_unique(array_column($incompatibleOnly, 'compatibility_reason')), 0, 3),
-                'common_issues' => analyzeCommonCompatibilityIssues($incompatibleOnly),
-                'suggestions' => generateCompatibilitySuggestions($componentType, $existingComponentsData)
+                'main_reasons' => array_slice(array_unique(array_column($incompatibleOnly, 'compatibility_reason')), 0, 5),
+                'recommendation' => 'Check incompatible_components array for detailed breakdown'
             ];
         } else {
             $message = "No components found matching criteria";
@@ -1885,6 +2143,21 @@ function calculatePCIeLaneUsage($components) {
                 if ($cardUuid) {
                     $cardSpecs = $dataUtils->getPCIeCardByUUID($cardUuid);
                     if ($cardSpecs) {
+                        // Check if this is a riser card (riser cards use riser slots, not PCIe slots)
+                        $isRiserCard = isset($cardSpecs['component_subtype']) &&
+                                       $cardSpecs['component_subtype'] === 'Riser Card';
+
+                        if ($isRiserCard) {
+                            // DATA INTEGRITY CHECK: Warn if riser card has incorrect slot_position
+                            $slotPos = strtolower($card['slot_position'] ?? '');
+                            if (!empty($slotPos) && strpos($slotPos, 'riser_') !== 0) {
+                                error_log("WARNING: Riser card $cardUuid has incorrect slot_position: '{$card['slot_position']}'. Should start with 'riser_'");
+                            }
+
+                            // Skip riser cards - they're tracked separately in riser_slots section
+                            continue;
+                        }
+
                         $interface = $cardSpecs['interface'] ?? '';
                         preg_match('/x(\d+)/', $interface, $matches);
                         $lanes = (int)($matches[1] ?? 4);
@@ -1933,6 +2206,58 @@ function calculatePCIeLaneUsage($components) {
 
     } catch (Exception $e) {
         error_log("Error calculating PCIe lane usage: " . $e->getMessage());
+    }
+
+    return $result;
+}
+
+/**
+ * Calculate riser slot usage and tracking
+ */
+function calculateRiserSlotUsage($components, $configUuid) {
+    global $pdo;
+    require_once __DIR__ . '/../../includes/models/ExpansionSlotTracker.php';
+    require_once __DIR__ . '/../../includes/models/DataExtractionUtilities.php';
+
+    $result = [
+        'total_riser_slots' => 0,
+        'used_riser_slots' => 0,
+        'available_riser_slots' => 0,
+        'riser_assignments' => []
+    ];
+
+    try {
+        $slotTracker = new ExpansionSlotTracker($pdo);
+        $dataUtils = new DataExtractionUtilities($pdo);
+
+        // Get motherboard riser slot information
+        if (isset($components['motherboard']) && !empty($components['motherboard'])) {
+            $mbUuid = $components['motherboard'][0]['uuid'] ?? null;
+            if ($mbUuid) {
+                // Get riser slot availability
+                $riserAvailability = $slotTracker->getRiserSlotAvailability($configUuid);
+
+                if ($riserAvailability['success']) {
+                    $result['total_riser_slots'] = count($riserAvailability['total_slots']);
+                    $result['used_riser_slots'] = count($riserAvailability['used_slots']);
+                    $result['available_riser_slots'] = count($riserAvailability['available_slots']);
+
+                    // Get detailed riser assignments
+                    foreach ($riserAvailability['used_slots'] as $slotId => $riserUuid) {
+                        $riserSpecs = $dataUtils->getPCIeCardByUUID($riserUuid);
+                        $result['riser_assignments'][] = [
+                            'slot_id' => $slotId,
+                            'riser_uuid' => $riserUuid,
+                            'riser_model' => $riserSpecs['model'] ?? 'Unknown Riser',
+                            'interface' => $riserSpecs['interface'] ?? 'Unknown'
+                        ];
+                    }
+                }
+            }
+        }
+
+    } catch (Exception $e) {
+        error_log("Error calculating riser slot usage: " . $e->getMessage());
     }
 
     return $result;

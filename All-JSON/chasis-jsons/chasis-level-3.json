@@ -14,6 +14,9 @@
                 "model": "SC846BE1C-R90JBOD",
                 "brand": "Supermicro",
                 "series": "SuperChassis 4U",
+                "type": "Rack",
+                "u_size": 4,
+                "height": 17.78,
                 "form_factor": "4U",
                 "chassis_type": "Storage Server",
                 "drive_bays": {
@@ -38,11 +41,6 @@
                   "supports_nvme": false,
                   "expander_chip": "LSI SAS3008"
                 },
-                "motherboard_compatibility": {
-                  "form_factors": ["E-ATX", "ATX"],
-                  "mounting_points": "standard_atx",
-                  "max_motherboard_size": "12x13_inches"
-                },
                 "power_supply": {
                   "redundant": true,
                   "wattage": 900,
@@ -64,7 +62,7 @@
                 },
                 "dimensions": {
                   "height": "7.0_inches",
-                  "width": "17.2_inches", 
+                  "width": "17.2_inches",
                   "depth": "26.0_inches"
                 }
               },
@@ -73,6 +71,9 @@
                 "model": "SC216BE1C-R920LPB",
                 "brand": "Supermicro",
                 "series": "SuperChassis 4U",
+                "type": "Rack",
+                "u_size": 2,
+                "height": 8.89,
                 "form_factor": "2U",
                 "chassis_type": "Dual Node Server",
                 "drive_bays": {
@@ -97,11 +98,6 @@
                   "supports_nvme": true,
                   "nvme_lanes_per_bay": 4
                 },
-                "motherboard_compatibility": {
-                  "form_factors": ["Mini-ITX", "microATX"],
-                  "dual_node": true,
-                  "max_motherboard_size": "6.7x6.7_inches"
-                },
                 "power_supply": {
                   "redundant": true,
                   "wattage": 920,
@@ -123,6 +119,9 @@
                 "model": "SC113TQ-R700CB",
                 "brand": "Supermicro",
                 "series": "SuperChassis 1U",
+                "type": "Rack",
+                "u_size": 1,
+                "height": 4.45,
                 "form_factor": "1U",
                 "chassis_type": "Rack Server",
                 "drive_bays": {
@@ -146,10 +145,6 @@
                   "supports_sas": true,
                   "supports_nvme": false
                 },
-                "motherboard_compatibility": {
-                  "form_factors": ["Mini-ITX"],
-                  "max_motherboard_size": "6.7x6.7_inches"
-                },
                 "power_supply": {
                   "redundant": false,
                   "wattage": 700,
@@ -171,6 +166,9 @@
                 "model": "PowerEdge R740",
                 "brand": "Dell",
                 "series": "PowerEdge R-Series",
+                "type": "Rack",
+                "u_size": 2,
+                "height": 8.89,
                 "form_factor": "2U",
                 "chassis_type": "Rack Server",
                 "drive_bays": {
@@ -195,10 +193,6 @@
                   "supports_nvme": true,
                   "nvme_lanes_per_bay": 4
                 },
-                "motherboard_compatibility": {
-                  "form_factors": ["Dell_Proprietary"],
-                  "motherboard_models": ["Dell R740 System Board"]
-                },
                 "power_supply": {
                   "redundant": true,
                   "wattage": 750,
@@ -215,6 +209,9 @@
                 "model": "PowerEdge R750xs",
                 "brand": "Dell",
                 "series": "PowerEdge R-Series",
+                "type": "Rack",
+                "u_size": 2,
+                "height": 8.89,
                 "form_factor": "2U",
                 "chassis_type": "Storage Optimized",
                 "drive_bays": {
@@ -239,10 +236,6 @@
                   "supports_nvme": true,
                   "nvme_lanes_per_bay": 4,
                   "hybrid_configuration": true
-                },
-                "motherboard_compatibility": {
-                  "form_factors": ["Dell_Proprietary"],
-                  "motherboard_models": ["Dell R750xs System Board"]
                 }
               },
               {
@@ -250,6 +243,9 @@
                 "model": "PowerEdge R740xd",
                 "brand": "Dell",
                 "series": "PowerEdge R-Series",
+                "type": "Rack",
+                "u_size": 2,
+                "height": 8.89,
                 "form_factor": "2U",
                 "chassis_type": "Storage Dense",
                 "drive_bays": {
@@ -280,10 +276,6 @@
                   "supports_sas": true,
                   "supports_nvme": true,
                   "nvme_lanes_per_bay": 4
-                },
-                "motherboard_compatibility": {
-                  "form_factors": ["Dell_Proprietary"],
-                  "motherboard_models": ["Dell R740xd System Board"]
                 }
               }
             ]
@@ -301,6 +293,9 @@
                 "model": "ProLiant DL380 Gen10",
                 "brand": "HPE",
                 "series": "ProLiant DL-Series",
+                "type": "Rack",
+                "u_size": 2,
+                "height": 8.89,
                 "form_factor": "2U",
                 "chassis_type": "Rack Server",
                 "drive_bays": {
@@ -324,10 +319,6 @@
                   "supports_sas": true,
                   "supports_nvme": false
                 },
-                "motherboard_compatibility": {
-                  "form_factors": ["HPE_Proprietary"],
-                  "motherboard_models": ["HPE DL380 Gen10 System Board"]
-                },
                 "power_supply": {
                   "redundant": true,
                   "wattage": 800,
@@ -340,6 +331,9 @@
                 "model": "ProLiant DL560 Gen10",
                 "brand": "HPE",
                 "series": "ProLiant DL-Series",
+                "type": "Rack",
+                "u_size": 2,
+                "height": 8.89,
                 "form_factor": "2U",
                 "chassis_type": "4-Socket Server",
                 "drive_bays": {
@@ -363,10 +357,6 @@
                   "supports_sas": true,
                   "supports_nvme": true,
                   "nvme_lanes_per_bay": 4
-                },
-                "motherboard_compatibility": {
-                  "form_factors": ["HPE_Proprietary"],
-                  "motherboard_models": ["HPE DL560 Gen10 System Board"]
                 }
               }
             ]
@@ -384,7 +374,10 @@
                 "model": "ThinkSystem SR650",
                 "brand": "Lenovo",
                 "series": "ThinkSystem SR-Series",
-                "form_factor": "2U", 
+                "type": "Rack",
+                "u_size": 2,
+                "height": 8.89,
+                "form_factor": "2U",
                 "chassis_type": "Rack Server",
                 "drive_bays": {
                   "total_bays": 16,
@@ -407,10 +400,6 @@
                   "supports_sas": true,
                   "supports_nvme": true,
                   "nvme_bays": 8
-                },
-                "motherboard_compatibility": {
-                  "form_factors": ["Lenovo_Proprietary"],
-                  "motherboard_models": ["Lenovo SR650 System Board"]
                 }
               },
               {
@@ -418,6 +407,9 @@
                 "model": "ThinkSystem SR850",
                 "brand": "Lenovo",
                 "series": "ThinkSystem SR-Series",
+                "type": "Rack",
+                "u_size": 2,
+                "height": 8.89,
                 "form_factor": "2U",
                 "chassis_type": "4-Socket Server",
                 "drive_bays": {
@@ -441,10 +433,6 @@
                   "supports_sas": true,
                   "supports_nvme": true,
                   "nvme_lanes_per_bay": 4
-                },
-                "motherboard_compatibility": {
-                  "form_factors": ["Lenovo_Proprietary"],
-                  "motherboard_models": ["Lenovo SR850 System Board"]
                 }
               }
             ]
@@ -462,6 +450,9 @@
                 "model": "Generic 4U Server Case",
                 "brand": "Generic/Custom",
                 "series": "Standard ATX Cases",
+                "type": "Rack",
+                "u_size": 4,
+                "height": 17.78,
                 "form_factor": "4U",
                 "chassis_type": "Server Case",
                 "drive_bays": {
@@ -485,10 +476,6 @@
                   "supports_sas": false,
                   "supports_nvme": false
                 },
-                "motherboard_compatibility": {
-                  "form_factors": ["ATX", "E-ATX", "microATX"],
-                  "mounting_points": "standard_atx"
-                },
                 "power_supply": {
                   "redundant": false,
                   "wattage": 650,
@@ -501,6 +488,9 @@
                 "model": "High-Density NVMe Case",
                 "brand": "Generic/Custom",
                 "series": "Standard ATX Cases",
+                "type": "Rack",
+                "u_size": 2,
+                "height": 8.89,
                 "form_factor": "2U",
                 "chassis_type": "NVMe Storage",
                 "drive_bays": {
@@ -525,10 +515,6 @@
                   "supports_nvme": true,
                   "nvme_lanes_per_bay": 4,
                   "pcie_switch": true
-                },
-                "motherboard_compatibility": {
-                  "form_factors": ["ATX", "microATX"],
-                  "required_connectors": ["PCIe_x16", "MCIO"]
                 }
               },
               {
@@ -536,6 +522,9 @@
                 "model": "Generic 2U Mixed Drive Case",
                 "brand": "Generic/Custom",
                 "series": "Standard ATX Cases",
+                "type": "Rack",
+                "u_size": 2,
+                "height": 8.89,
                 "form_factor": "2U",
                 "chassis_type": "Mixed Storage",
                 "drive_bays": {
@@ -565,10 +554,6 @@
                   "supports_sata": true,
                   "supports_sas": true,
                   "supports_nvme": false
-                },
-                "motherboard_compatibility": {
-                  "form_factors": ["ATX", "microATX"],
-                  "mounting_points": "standard_atx"
                 }
               }
             ]
@@ -586,6 +571,9 @@
                 "model": "R2312WFTZS",
                 "brand": "Intel",
                 "series": "Server System",
+                "type": "Rack",
+                "u_size": 2,
+                "height": 8.89,
                 "form_factor": "2U",
                 "chassis_type": "Rack Server",
                 "drive_bays": {
@@ -608,10 +596,6 @@
                   "supports_sata": true,
                   "supports_sas": true,
                   "supports_nvme": false
-                },
-                "motherboard_compatibility": {
-                  "form_factors": ["Intel_Proprietary"],
-                  "motherboard_models": ["Intel S2600WFT"]
                 }
               }
             ]
@@ -641,7 +625,7 @@
             }
           },
           {
-            "rule_name": "Connector Availability", 
+            "rule_name": "Connector Availability",
             "description": "Required connectors must be available on motherboard",
             "validation": {
               "chassis_connectors": ["SFF-8643"],

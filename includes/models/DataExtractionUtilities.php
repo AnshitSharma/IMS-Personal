@@ -180,10 +180,21 @@ class DataExtractionUtilities {
      */
     private function findPCIeCardInData($data, $uuid) {
         // PCIe JSON structure: array of categories with models
+        // component_subtype is at category level, must merge it into model data
         foreach ($data as $category) {
             if (isset($category['models'])) {
                 foreach ($category['models'] as $model) {
                     if (isset($model['UUID']) && $model['UUID'] === $uuid) {
+                        // Merge category-level data (like component_subtype) into model
+                        if (isset($category['component_subtype'])) {
+                            $model['component_subtype'] = $category['component_subtype'];
+                        }
+                        if (isset($category['brand'])) {
+                            $model['brand'] = $category['brand'];
+                        }
+                        if (isset($category['series'])) {
+                            $model['series'] = $category['series'];
+                        }
                         return $model;
                     }
                 }
