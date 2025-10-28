@@ -459,9 +459,9 @@ function handleTokenVerification() {
  */
 function handleRegistration() {
     global $pdo;
-    
-    // Check if registration is enabled
-    $registrationEnabled = getSystemSetting($pdo, 'registration_enabled', false);
+
+    // Check if registration is enabled (default to true if system_settings doesn't exist)
+    $registrationEnabled = getSystemSetting($pdo, 'registration_enabled', true);
     if (!$registrationEnabled) {
         send_json_response(0, 0, 403, "Registration is disabled");
     }
@@ -666,93 +666,22 @@ function handleACLOperations($operation, $user) {
  * Handle roles operations
  */
 function handleRolesOperations($operation, $user) {
-    global $pdo;
-    
-    if (!hasPermission($pdo, 'role.manage', $user['id'])) {
-        send_json_response(0, 1, 403, "Insufficient permissions for role operations");
-    }
-    
-    switch ($operation) {
-        case 'list':
-            $roles = getAllRoles($pdo);
-            send_json_response(1, 1, 200, "Roles retrieved successfully", ['roles' => $roles]);
-            break;
-            
-        case 'create':
-            $name = trim($_POST['name'] ?? '');
-            $description = trim($_POST['description'] ?? '');
-            
-            if (empty($name)) {
-                send_json_response(0, 1, 400, "Role name is required");
-            }
-            
-            $roleId = createRole($pdo, $name, $description);
-            
-            if ($roleId) {
-                send_json_response(1, 1, 201, "Role created successfully", ['role_id' => $roleId]);
-            } else {
-                send_json_response(0, 1, 400, "Failed to create role");
-            }
-            break;
-            
-        case 'update':
-            $roleId = $_POST['role_id'] ?? '';
-            $name = trim($_POST['name'] ?? '');
-            $description = trim($_POST['description'] ?? '');
-            
-            if (empty($roleId) || empty($name)) {
-                send_json_response(0, 1, 400, "Role ID and name are required");
-            }
-            
-            $success = updateRole($pdo, $roleId, $name, $description);
-            
-            if ($success) {
-                send_json_response(1, 1, 200, "Role updated successfully");
-            } else {
-                send_json_response(0, 1, 400, "Failed to update role");
-            }
-            break;
-            
-        case 'delete':
-            $roleId = $_POST['role_id'] ?? '';
-            
-            if (empty($roleId)) {
-                send_json_response(0, 1, 400, "Role ID is required");
-            }
-            
-            $success = deleteRole($pdo, $roleId);
-            
-            if ($success) {
-                send_json_response(1, 1, 200, "Role deleted successfully");
-            } else {
-                send_json_response(0, 1, 400, "Failed to delete role");
-            }
-            break;
-            
-        default:
-            send_json_response(0, 1, 400, "Invalid role operation: $operation");
-    }
+    global $pdo, $acl;
+
+    // Include the dedicated roles API handler
+    require_once(__DIR__ . '/acl/roles_api.php');
+    exit();
 }
 
 /**
  * Handle permissions operations
  */
 function handlePermissionsOperations($operation, $user) {
-    global $pdo;
-    
-    if (!hasPermission($pdo, 'permission.manage', $user['id'])) {
-        send_json_response(0, 1, 403, "Insufficient permissions for permission operations");
-    }
-    
-    switch ($operation) {
-        case 'list':
-            $permissions = getAllPermissions($pdo);
-            send_json_response(1, 1, 200, "Permissions retrieved successfully", ['permissions' => $permissions]);
-            break;
-            
-        default:
-            send_json_response(0, 1, 400, "Invalid permission operation: $operation");
-    }
+    global $pdo, $acl;
+
+    // Include the dedicated permissions API handler
+    require_once(__DIR__ . '/acl/permissions_api.php');
+    exit();
 }
 
 /**

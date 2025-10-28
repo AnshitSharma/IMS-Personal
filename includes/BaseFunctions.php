@@ -161,31 +161,45 @@ if (!function_exists('initializeACLSystem')) {
 if (!function_exists('hasPermission')) {
     function hasPermission($pdo, $permission, $userId) {
         try {
+            // Check if user has super_admin or admin role (bypass all permission checks)
+            $stmt = $pdo->prepare("
+                SELECT COUNT(*) as count
+                FROM user_roles ur
+                JOIN roles r ON ur.role_id = r.id
+                WHERE ur.user_id = ? AND r.name IN ('super_admin', 'admin')
+            ");
+            $stmt->execute([$userId]);
+            $result = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if ($result['count'] > 0) {
+                return true; // Super admin/admin has all permissions
+            }
+
             // Check direct user permissions
             $stmt = $pdo->prepare("
-                SELECT COUNT(*) as count 
-                FROM user_permissions up 
-                JOIN permissions ap ON up.permission_id = ap.id 
+                SELECT COUNT(*) as count
+                FROM user_permissions up
+                JOIN permissions ap ON up.permission_id = ap.id
                 WHERE up.user_id = ? AND ap.name = ?
             ");
             $stmt->execute([$userId, $permission]);
             $result = $stmt->fetch(PDO::FETCH_ASSOC);
-            
+
             if ($result['count'] > 0) {
                 return true;
             }
-            
+
             // Check role-based permissions
             $stmt = $pdo->prepare("
-                SELECT COUNT(*) as count 
-                FROM user_roles ur 
-                JOIN role_permissions rp ON ur.role_id = rp.role_id 
-                JOIN permissions ap ON rp.permission_id = ap.id 
-                WHERE ur.user_id = ? AND ap.name = ?
+                SELECT COUNT(*) as count
+                FROM user_roles ur
+                JOIN role_permissions rp ON ur.role_id = rp.role_id
+                JOIN permissions ap ON rp.permission_id = ap.id
+                WHERE ur.user_id = ? AND ap.name = ? AND rp.granted = 1
             ");
             $stmt->execute([$userId, $permission]);
             $result = $stmt->fetch(PDO::FETCH_ASSOC);
-            
+
             return $result['count'] > 0;
         } catch (Exception $e) {
             error_log("Permission check error: " . $e->getMessage());
