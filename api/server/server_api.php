@@ -674,43 +674,87 @@ function handleAddComponent($serverBuilder, $user) {
                         // Check component subtype to determine if riser or regular PCIe card
                         $componentSubtype = $cardSpecs['component_subtype'] ?? null;
 
+                        // ENHANCED RISER CARD DETECTION: Also check UUID pattern as fallback
+                        $isRiserCard = false;
                         if ($componentSubtype === 'Riser Card') {
-                            // Assign to riser slot with size awareness
-                            $riserSlotSize = extractPCIeSlotSizeFromSpecs($cardSpecs); // Get riser slot requirements
+                            $isRiserCard = true;
+                            error_log("🔍 Riser card detected via component_subtype field for UUID=$componentUuid");
+                        } elseif (stripos($componentUuid, 'riser-') === 0) {
+                            // Fallback: UUID starts with "riser-"
+                            $isRiserCard = true;
+                            error_log("🔍 Riser card detected via UUID pattern for UUID=$componentUuid (component_subtype was: " . ($componentSubtype ?? 'NULL') . ")");
+                        }
+
+                        error_log("🔎 Component detection: UUID=$componentUuid, component_subtype=" . ($componentSubtype ?? 'NULL') . ", isRiserCard=" . ($isRiserCard ? 'YES' : 'NO'));
+
+                        if ($isRiserCard) {
+                            // ===== RISER CARD - MUST GO TO RISER SLOTS ONLY =====
+                            $riserSlotSize = extractPCIeSlotSizeFromSpecs($cardSpecs);
+
+                            error_log("🎯 RISER CARD DETECTED: UUID=$componentUuid, extracted slot size=" . ($riserSlotSize ?? 'NULL') . ", specs=" . json_encode(['interface' => $cardSpecs['interface'] ?? 'missing', 'slot_type' => $cardSpecs['slot_type'] ?? 'missing', 'component_subtype' => $componentSubtype ?? 'missing']));
 
                             if ($riserSlotSize) {
-                                // Use size-aware assignment
-                                $assignedSlotInfo = $slotTracker->assignRiserSlotBySize($configUuid, $riserSlotSize);
-                                if ($assignedSlotInfo) {
-                                    $assignedSlot = $assignedSlotInfo['slot_id'];
+                                // Use size-aware assignment (returns string slot ID)
+                                $assignedSlot = $slotTracker->assignRiserSlotBySize($configUuid, $riserSlotSize);
+                                if ($assignedSlot) {
                                     $slotPosition = $assignedSlot;
-                                    $assignedSlotType = $assignedSlotInfo['slot_type'] ?? 'unknown';
-                                    error_log("Assigned riser slot: $assignedSlot (type: $assignedSlotType) for riser card $componentUuid (requires: $riserSlotSize)");
+
+                                    // Extract slot type from slot ID (e.g., "riser_x16_slot_1" -> "x16")
+                                    $assignedSlotType = 'unknown';
+                                    if (preg_match('/riser_(x\d+)_slot_/', $assignedSlot, $matches)) {
+                                        $assignedSlotType = $matches[1];
+                                    }
+
+                                    error_log("✅ Assigned riser slot: $assignedSlot (type: $assignedSlotType) for riser card $componentUuid (requires: $riserSlotSize)");
                                 } else {
-                                    error_log("WARNING: No compatible riser slots for riser card $componentUuid (requires: $riserSlotSize)");
+                                    // CRITICAL: No compatible riser slots available - BLOCK the addition
+                                    error_log("❌ BLOCKING: No compatible riser slots available for riser card $componentUuid (requires: $riserSlotSize)");
+                                    send_json_response(0, 1, 400,
+                                        "Cannot add riser card: No compatible riser slots available on motherboard",
+                                        [
+                                            'component_uuid' => $componentUuid,
+                                            'component_type' => 'Riser Card',
+                                            'required_slot_type' => $riserSlotSize,
+                                            'error' => 'no_riser_slots_available',
+                                            'message' => "This riser card requires a $riserSlotSize riser slot, but no compatible slots are available on the motherboard."
+                                        ]
+                                    );
                                 }
                             } else {
                                 // Fallback to legacy assignment if size cannot be determined
+                                error_log("⚠️ Riser slot size could not be determined for $componentUuid - using legacy assignment");
                                 $assignedSlot = $slotTracker->assignRiserSlot($configUuid);
                                 if ($assignedSlot) {
                                     $slotPosition = $assignedSlot;
-                                    error_log("Assigned riser slot (legacy): $assignedSlot for riser card $componentUuid");
+                                    error_log("✅ Assigned riser slot (legacy): $assignedSlot for riser card $componentUuid");
                                 } else {
-                                    error_log("WARNING: No available riser slots for riser card $componentUuid");
+                                    // CRITICAL: No riser slots available - BLOCK the addition
+                                    error_log("❌ BLOCKING: No riser slots available for riser card $componentUuid");
+                                    send_json_response(0, 1, 400,
+                                        "Cannot add riser card: No riser slots available on motherboard",
+                                        [
+                                            'component_uuid' => $componentUuid,
+                                            'component_type' => 'Riser Card',
+                                            'error' => 'no_riser_slots_available',
+                                            'message' => "No riser slots are available on the motherboard for this riser card."
+                                        ]
+                                    );
                                 }
                             }
                         } else {
-                            // Regular PCIe card/NIC - assign to PCIe slot
+                            // ===== REGULAR PCIe CARD/NIC - ASSIGN TO PCIe SLOTS =====
                             $cardSlotSize = extractPCIeSlotSizeFromSpecs($cardSpecs);
+
+                            error_log("🔌 Regular PCIe card detected: UUID=$componentUuid, slot size=" . ($cardSlotSize ?? 'NULL'));
 
                             if ($cardSlotSize) {
                                 // Assign optimal PCIe slot
                                 $assignedSlot = $slotTracker->assignSlot($configUuid, $cardSlotSize);
                                 if ($assignedSlot) {
                                     $slotPosition = $assignedSlot;
-                                    error_log("Assigned PCIe slot: $assignedSlot for card $componentUuid");
+                                    error_log("✅ Assigned PCIe slot: $assignedSlot for card $componentUuid");
                                 } else {
-                                    error_log("WARNING: No available PCIe slots for card $componentUuid (requires $cardSlotSize)");
+                                    error_log("⚠️ WARNING: No available PCIe slots for card $componentUuid (requires $cardSlotSize)");
                                 }
                             }
                         }
@@ -732,6 +776,7 @@ function handleAddComponent($serverBuilder, $user) {
 
         // VALIDATION: If this is a riser card and slot_position was manually provided (not auto-assigned),
         // ensure it follows the 'riser_' prefix convention
+        // IMPORTANT: Skip this if slot was auto-assigned by the system (starts with "riser_x")
         if ($result['success'] && $componentType === 'pciecard' && !empty($_POST['slot_position'])) {
             try {
                 require_once __DIR__ . '/../../includes/models/DataExtractionUtilities.php';
@@ -744,35 +789,67 @@ function handleAddComponent($serverBuilder, $user) {
                 if ($isRiserCard) {
                     $providedSlotPosition = $_POST['slot_position'];
 
-                    // Check if provided slot_position follows riser_ prefix convention
-                    if (strpos($providedSlotPosition, 'riser_') !== 0) {
-                        // Auto-correct: convert "slot 1" to "riser_slot_1"
-                        $correctedPosition = 'riser_' . str_replace(' ', '_', strtolower(trim($providedSlotPosition)));
-
-                        error_log("Auto-correcting riser card slot_position: '$providedSlotPosition' -> '$correctedPosition'");
-
-                        // Update the slot_position in database
-                        $updateStmt = $pdo->prepare("
-                            UPDATE server_configuration_components
-                            SET slot_position = ?
-                            WHERE config_uuid = ? AND component_uuid = ? AND component_type = ?
-                        ");
-                        $updateStmt->execute([$correctedPosition, $configUuid, $componentUuid, $componentType]);
-
-                        // Update $slotPosition for response
-                        $slotPosition = $correctedPosition;
+                    // Check if this was auto-assigned by our new system (format: riser_x16_slot_1)
+                    if (preg_match('/^riser_x\d+_slot_\d+$/', $slotPosition)) {
+                        // This is a valid auto-assigned slot - don't touch it!
+                        error_log("✅ Riser slot auto-assigned correctly: $slotPosition - skipping validation");
+                    }
+                    // Check if provided slot_position follows riser_ prefix convention but is old format
+                    else if (strpos($providedSlotPosition, 'riser_') !== 0) {
+                        // DEPRECATED: This old auto-correction should not run anymore
+                        // The new system assigns proper slot IDs directly
+                        error_log("⚠️ WARNING: User provided invalid riser slot format: '$providedSlotPosition' - this should be auto-assigned!");
                     }
                 }
             } catch (Exception $correctionError) {
-                error_log("Error during slot_position correction: " . $correctionError->getMessage());
+                error_log("Error during slot_position validation: " . $correctionError->getMessage());
                 // Continue - don't block on this validation
+            }
+        }
+
+        // POST-INSERT VALIDATION: Verify riser cards are in riser slots
+        if ($result['success'] && $componentType === 'pciecard' && $slotPosition) {
+            try {
+                // Check if this component is a riser card
+                require_once __DIR__ . '/../../includes/models/ComponentDataService.php';
+                $componentDataService = ComponentDataService::getInstance();
+                $cardSpecs = $componentDataService->getComponentSpecifications($componentType, $componentUuid, $componentDetails);
+
+                $componentSubtype = $cardSpecs['component_subtype'] ?? null;
+                $isRiserCard = ($componentSubtype === 'Riser Card') || (stripos($componentUuid, 'riser-') === 0);
+
+                if ($isRiserCard) {
+                    // Riser card MUST be in a riser slot (starts with "riser_")
+                    if (strpos($slotPosition, 'riser_') !== 0) {
+                        // CRITICAL ERROR: Riser card was assigned to non-riser slot!
+                        error_log("❌ CRITICAL: Riser card $componentUuid was incorrectly assigned to slot $slotPosition (should be riser_*)");
+
+                        // Rollback the insert
+                        $serverBuilder->removeComponent($configUuid, $componentType, $componentUuid);
+
+                        send_json_response(0, 1, 500,
+                            "System error: Riser card was incorrectly assigned to a PCIe slot. Please contact support.",
+                            [
+                                'component_uuid' => $componentUuid,
+                                'incorrect_slot' => $slotPosition,
+                                'error' => 'riser_card_in_pcie_slot',
+                                'message' => "Riser cards must be assigned to riser slots only. This is a system error."
+                            ]
+                        );
+                    } else {
+                        error_log("✅ POST-INSERT VALIDATION PASSED: Riser card $componentUuid correctly in slot $slotPosition");
+                    }
+                }
+            } catch (Exception $validationError) {
+                error_log("Error during post-insert validation: " . $validationError->getMessage());
+                // Continue - don't block on validation errors
             }
         }
 
         if ($result['success']) {
             // Simple success response - avoid complex operations that could fail
             error_log("Component added successfully: $componentType/$componentUuid to config $configUuid");
-            
+
             // Build response data
             $responseData = [
                 'component_added' => [
@@ -781,7 +858,8 @@ function handleAddComponent($serverBuilder, $user) {
                     'quantity' => $quantity,
                     'status_override_used' => $override,
                     'original_status' => $statusMessage ?? 'Unknown',
-                    'server_uuid_updated' => $configUuid
+                    'server_uuid_updated' => $configUuid,
+                    'slot_position' => $slotPosition ?? 'Not assigned'
                 ],
                 'timestamp' => date('Y-m-d H:i:s')
             ];
@@ -810,7 +888,13 @@ function handleAddComponent($serverBuilder, $user) {
                         $updatedAvailability = $slotTracker->getRiserSlotAvailability($configUuid);
                         if ($updatedAvailability['success']) {
                             $responseData['riser_slot_assignment']['remaining_riser_slots'] = $updatedAvailability['available_slots'];
-                            $responseData['riser_slot_assignment']['total_riser_slots'] = count($updatedAvailability['total_slots']);
+
+                            // Count total slots across all types (grouped format)
+                            $totalRiserSlots = 0;
+                            foreach ($updatedAvailability['total_slots'] as $slotType => $slotIds) {
+                                $totalRiserSlots += count($slotIds);
+                            }
+                            $responseData['riser_slot_assignment']['total_riser_slots'] = $totalRiserSlots;
                         }
                     }
                 } else {
@@ -2212,7 +2296,7 @@ function calculatePCIeLaneUsage($components) {
 }
 
 /**
- * Calculate riser slot usage and tracking
+ * Calculate riser slot usage and tracking with grouped slot type information
  */
 function calculateRiserSlotUsage($components, $configUuid) {
     global $pdo;
@@ -2223,6 +2307,9 @@ function calculateRiserSlotUsage($components, $configUuid) {
         'total_riser_slots' => 0,
         'used_riser_slots' => 0,
         'available_riser_slots' => 0,
+        'total_slots_by_type' => [],
+        'used_slots_by_type' => [],
+        'available_slots_by_type' => [],
         'riser_assignments' => []
     ];
 
@@ -2234,21 +2321,65 @@ function calculateRiserSlotUsage($components, $configUuid) {
         if (isset($components['motherboard']) && !empty($components['motherboard'])) {
             $mbUuid = $components['motherboard'][0]['uuid'] ?? null;
             if ($mbUuid) {
-                // Get riser slot availability
+                // Get riser slot availability (now returns grouped format)
                 $riserAvailability = $slotTracker->getRiserSlotAvailability($configUuid);
 
                 if ($riserAvailability['success']) {
-                    $result['total_riser_slots'] = count($riserAvailability['total_slots']);
+                    // Count total slots across all types (grouped format: ['x16' => [...], 'x8' => [...]])
+                    $totalSlotsByType = [];
+                    $totalCount = 0;
+                    foreach ($riserAvailability['total_slots'] as $slotType => $slotIds) {
+                        $count = count($slotIds);
+                        $totalSlotsByType[$slotType] = $count;
+                        $totalCount += $count;
+                    }
+                    $result['total_riser_slots'] = $totalCount;
+                    $result['total_slots_by_type'] = $totalSlotsByType;
+
+                    // Count used slots (flat mapping: ['riser_x16_slot_1' => 'uuid'])
                     $result['used_riser_slots'] = count($riserAvailability['used_slots']);
-                    $result['available_riser_slots'] = count($riserAvailability['available_slots']);
+
+                    // Count used slots by type
+                    $usedSlotsByType = [];
+                    foreach ($riserAvailability['used_slots'] as $slotId => $riserUuid) {
+                        // Extract slot type from slot ID (e.g., "riser_x16_slot_1" -> "x16")
+                        if (preg_match('/riser_(x\d+)_slot_/', $slotId, $matches)) {
+                            $slotType = $matches[1];
+                            if (!isset($usedSlotsByType[$slotType])) {
+                                $usedSlotsByType[$slotType] = 0;
+                            }
+                            $usedSlotsByType[$slotType]++;
+                        }
+                    }
+                    $result['used_slots_by_type'] = $usedSlotsByType;
+
+                    // Count available slots by type (grouped format)
+                    $availableSlotsByType = [];
+                    $availableCount = 0;
+                    foreach ($riserAvailability['available_slots'] as $slotType => $slotIds) {
+                        $count = count($slotIds);
+                        $availableSlotsByType[$slotType] = $count;
+                        $availableCount += $count;
+                    }
+                    $result['available_riser_slots'] = $availableCount;
+                    $result['available_slots_by_type'] = $availableSlotsByType;
 
                     // Get detailed riser assignments
                     foreach ($riserAvailability['used_slots'] as $slotId => $riserUuid) {
                         $riserSpecs = $dataUtils->getPCIeCardByUUID($riserUuid);
+
+                        // Extract slot type from slot ID
+                        $slotType = 'unknown';
+                        if (preg_match('/riser_(x\d+)_slot_/', $slotId, $matches)) {
+                            $slotType = $matches[1];
+                        }
+
                         $result['riser_assignments'][] = [
                             'slot_id' => $slotId,
+                            'slot_type' => $slotType,
                             'riser_uuid' => $riserUuid,
                             'riser_model' => $riserSpecs['model'] ?? 'Unknown Riser',
+                            'riser_slot_type' => $riserSpecs['slot_type'] ?? 'Unknown',
                             'interface' => $riserSpecs['interface'] ?? 'Unknown'
                         ];
                     }

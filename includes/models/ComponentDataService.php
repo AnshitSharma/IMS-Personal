@@ -73,7 +73,8 @@ class ComponentDataService {
                             'uuid' => $modelUuid,
                             'brand' => $brand['brand'] ?? null,
                             'series' => $brand['series'] ?? null,
-                            'family' => $brand['family'] ?? null
+                            'family' => $brand['family'] ?? null,
+                            'component_subtype' => $brand['component_subtype'] ?? null  // Include component_subtype from brand level
                         ]);
                     }
                 }

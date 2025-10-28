@@ -227,6 +227,7 @@ class ExpansionSlotTracker {
 
     /**
      * Assign riser slot to a new riser card (legacy method - uses first available)
+     * Now works with grouped slot format
      *
      * @param string $configUuid Server configuration UUID
      * @return string|null Assigned riser slot ID or null if no slots available
@@ -238,9 +239,12 @@ class ExpansionSlotTracker {
             return null;
         }
 
-        // Return first available riser slot ID
-        if (!empty($availability['available_slots'])) {
-            return $availability['available_slots'][0]['slot_id'];
+        // available_slots is now grouped by type: ['x16' => [...], 'x8' => [...]]
+        // Return first available slot from any type
+        foreach ($availability['available_slots'] as $slotType => $slotIds) {
+            if (!empty($slotIds)) {
+                return $slotIds[0]; // Return first available slot ID
+            }
         }
 
         return null; // No riser slots available
@@ -248,11 +252,12 @@ class ExpansionSlotTracker {
 
     /**
      * Assign riser slot to a new riser card based on required slot size
-     * Uses best-fit algorithm: exact match preferred, then larger slots
+     * Uses slot compatibility matrix: x8 riser can fit in x8/x16, x16 riser needs x16
+     * Prefers exact match, then smallest compatible larger slot
      *
      * @param string $configUuid Server configuration UUID
-     * @param string $requiredSlotSize Required slot size (x8, x16)
-     * @return array|null Assigned slot info or null if no compatible slots available
+     * @param string $requiredSlotSize Required slot size (x8, x16, x4)
+     * @return string|null Assigned slot ID or null if no compatible slots available
      */
     public function assignRiserSlotBySize($configUuid, $requiredSlotSize) {
         $availability = $this->getRiserSlotAvailability($configUuid);
@@ -261,54 +266,35 @@ class ExpansionSlotTracker {
             return null;
         }
 
-        if (empty($availability['available_slots'])) {
-            return null; // No riser slots available
-        }
-
-        // Extract required lane count (e.g., "x16" -> 16)
-        $requiredLanes = 16; // Default
-        if (preg_match('/x?(\d+)/i', $requiredSlotSize, $matches)) {
-            $requiredLanes = (int)$matches[1];
-        }
-
-        // Best-fit algorithm:
-        // 1. First try exact match (x8 riser -> x8 slot)
-        // 2. Then try larger slots in ascending order (x8 riser -> x16 slot)
-
-        $exactMatch = null;
-        $largerSlots = [];
-
-        foreach ($availability['available_slots'] as $slotInfo) {
-            $slotLanes = $slotInfo['lanes'] ?? 16;
-
-            if ($slotLanes === $requiredLanes) {
-                // Exact match - prefer this
-                if ($exactMatch === null) {
-                    $exactMatch = $slotInfo;
-                }
-            } elseif ($slotLanes > $requiredLanes) {
-                // Larger slot - can be used but not optimal
-                $largerSlots[] = $slotInfo;
+        // Normalize slot size (ensure format is "x16", "x8", etc.)
+        $requiredSlotSize = strtolower($requiredSlotSize);
+        if (!preg_match('/^x\d+$/', $requiredSlotSize)) {
+            if (preg_match('/x?(\d+)/i', $requiredSlotSize, $matches)) {
+                $requiredSlotSize = 'x' . $matches[1];
+            } else {
+                return null; // Invalid format
             }
-            // Skip slots that are smaller than required
         }
 
-        // Return exact match if found
-        if ($exactMatch !== null) {
-            return $exactMatch;
+        // Get compatible slot sizes using backward compatibility matrix
+        $compatibleSlots = $this->slotCompatibility[$requiredSlotSize] ?? [];
+
+        if (empty($compatibleSlots)) {
+            // No compatibility defined - try exact match only
+            $compatibleSlots = [$requiredSlotSize];
         }
 
-        // Otherwise return smallest available larger slot
-        if (!empty($largerSlots)) {
-            // Sort by lanes ascending
-            usort($largerSlots, function($a, $b) {
-                return ($a['lanes'] ?? 16) - ($b['lanes'] ?? 16);
-            });
-            return $largerSlots[0];
+        // Try each compatible slot size (smallest first for optimal utilization)
+        foreach ($compatibleSlots as $slotSize) {
+            $availableSlots = $availability['available_slots'][$slotSize] ?? [];
+
+            if (!empty($availableSlots)) {
+                // Return first available slot of this size
+                return $availableSlots[0];
+            }
         }
 
-        // No compatible slots available
-        return null;
+        return null; // No compatible slots available
     }
 
     /**
@@ -695,9 +681,10 @@ class ExpansionSlotTracker {
 
     /**
      * Load riser slots from motherboard JSON specifications
+     * Returns slots grouped by type (x16, x8, x4) similar to PCIe slots
      *
      * @param string $motherboardUuid Motherboard UUID
-     * @return array Total riser slots configuration with size information
+     * @return array Total riser slots configuration grouped by slot type
      */
     private function loadMotherboardRiserSlots($motherboardUuid) {
         try {
@@ -721,13 +708,9 @@ class ExpansionSlotTracker {
 
                 if ($maxRisers > 0) {
                     // Generate riser slots from max_risers count (assume x16 for legacy)
-                    $slots = [];
+                    $slots = ['x16' => []];
                     for ($i = 1; $i <= $maxRisers; $i++) {
-                        $slots[] = [
-                            'slot_id' => "riser_slot_$i",
-                            'slot_type' => 'x16', // Default to x16 for legacy configs
-                            'lanes' => 16
-                        ];
+                        $slots['x16'][] = "riser_x16_slot_$i";
                     }
 
                     return [
@@ -744,8 +727,8 @@ class ExpansionSlotTracker {
             }
 
             // Process riser_slots array with size information
+            // Group by slot type similar to PCIe slots
             $slots = [];
-            $slotIndex = 1;
 
             foreach ($riserSlots as $slotConfig) {
                 $count = $slotConfig['count'] ?? 1;
@@ -753,20 +736,19 @@ class ExpansionSlotTracker {
 
                 // Extract slot size from type (e.g., "PCIe 5.0 x16 Riser" → "x16")
                 $slotSize = 'x16'; // Default
-                $lanes = 16;
                 if (preg_match('/x(\d+)/i', $slotType, $matches)) {
                     $slotSize = 'x' . $matches[1];
-                    $lanes = (int)$matches[1];
                 }
 
+                // Initialize array for this slot size if not exists
+                if (!isset($slots[$slotSize])) {
+                    $slots[$slotSize] = [];
+                }
+
+                // Generate slot IDs for this type
+                $startIndex = count($slots[$slotSize]) + 1;
                 for ($i = 0; $i < $count; $i++) {
-                    $slots[] = [
-                        'slot_id' => "riser_slot_$slotIndex",
-                        'slot_type' => $slotSize,
-                        'lanes' => $lanes,
-                        'generation' => $slotConfig['pcie_generation'] ?? null
-                    ];
-                    $slotIndex++;
+                    $slots[$slotSize][] = "riser_{$slotSize}_slot_" . ($startIndex + $i);
                 }
             }
 
@@ -878,21 +860,19 @@ class ExpansionSlotTracker {
 
     /**
      * Calculate available riser slots by removing used slots from total
+     * Handles grouped slot format (by slot type: x16, x8, x4)
      *
-     * @param array $totalRiserSlots Total riser slot objects with size info
+     * @param array $totalRiserSlots Total riser slots grouped by size
      * @param array $usedRiserSlots Used riser slot IDs mapping
-     * @return array Available riser slot objects
+     * @return array Available riser slots grouped by size
      */
     private function calculateAvailableRiserSlots($totalRiserSlots, $usedRiserSlots) {
         $availableSlots = [];
 
-        foreach ($totalRiserSlots as $slotInfo) {
-            $slotId = $slotInfo['slot_id'];
-
-            // Check if slot is not in use
-            if (!isset($usedRiserSlots[$slotId])) {
-                $availableSlots[] = $slotInfo;
-            }
+        foreach ($totalRiserSlots as $slotSize => $slotIds) {
+            $availableSlots[$slotSize] = array_values(
+                array_diff($slotIds, array_keys($usedRiserSlots))
+            );
         }
 
         return $availableSlots;

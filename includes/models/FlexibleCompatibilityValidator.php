@@ -832,7 +832,11 @@ class FlexibleCompatibilityValidator {
                         'resolution' => "Remove all $existingRiserCount riser card(s) OR choose motherboard with riser support"
                     ];
                 } else {
-                    $motherboardRiserSlots = count($riserSlots['slots']);
+                    // Count total riser slots across all types (grouped format)
+                    $motherboardRiserSlots = 0;
+                    foreach ($riserSlots['slots'] as $slotType => $slots) {
+                        $motherboardRiserSlots += count($slots);
+                    }
 
                     if ($existingRiserCount > $motherboardRiserSlots) {
                         $errors[] = [
@@ -1783,9 +1787,19 @@ class FlexibleCompatibilityValidator {
                         'resolution' => "Choose motherboard with riser card support"
                     ];
                 } else {
-                    $totalRiserSlots = count($riserAvailability['total_slots']);
+                    // Count total slots across all types (grouped format)
+                    $totalRiserSlots = 0;
+                    foreach ($riserAvailability['total_slots'] as $slotType => $slots) {
+                        $totalRiserSlots += count($slots);
+                    }
+
                     $usedRiserSlots = count($riserAvailability['used_slots']);
-                    $availableRiserSlots = count($riserAvailability['available_slots']);
+
+                    // Count available slots across all types
+                    $availableRiserSlots = 0;
+                    foreach ($riserAvailability['available_slots'] as $slotType => $slots) {
+                        $availableRiserSlots += count($slots);
+                    }
 
                     if ($availableRiserSlots === 0) {
                         $errors[] = [
@@ -1796,10 +1810,17 @@ class FlexibleCompatibilityValidator {
                         ];
                     } else {
                         // Check slot size compatibility
-                        $compatibleSlot = $slotTracker->assignRiserSlotBySize($configUuid, $riserSlotType);
+                        $compatibleSlotId = $slotTracker->assignRiserSlotBySize($configUuid, $riserSlotType);
 
-                        if ($compatibleSlot === null) {
-                            // No compatible slot available
+                        if ($compatibleSlotId === null) {
+                            // No compatible slot available - build detailed error
+                            $availableSlotTypes = [];
+                            foreach ($riserAvailability['available_slots'] as $slotType => $slots) {
+                                if (!empty($slots)) {
+                                    $availableSlotTypes[] = "$slotType (" . count($slots) . " available)";
+                                }
+                            }
+
                             $errors[] = [
                                 'type' => 'riser_slot_size_incompatible',
                                 'severity' => 'critical',
@@ -1807,15 +1828,19 @@ class FlexibleCompatibilityValidator {
                                 'details' => [
                                     'riser_model' => $riserModel,
                                     'required_slot_type' => $riserSlotType,
-                                    'available_slots' => array_map(function($slot) {
-                                        return $slot['slot_type'] ?? 'unknown';
-                                    }, $riserAvailability['available_slots'])
+                                    'available_slot_types' => $availableSlotTypes
                                 ],
-                                'resolution' => "Remove existing riser card to free up $riserSlotType slot OR choose smaller riser card"
+                                'resolution' => empty($availableSlotTypes)
+                                    ? "All riser slots occupied"
+                                    : "Available: " . implode(', ', $availableSlotTypes) . ". Need $riserSlotType or larger."
                             ];
                         } else {
-                            // Compatible slot found
-                            $assignedSlotType = $compatibleSlot['slot_type'] ?? 'unknown';
+                            // Compatible slot found - extract slot type from slot ID
+                            // Format: "riser_x16_slot_1" -> "x16"
+                            $assignedSlotType = 'unknown';
+                            if (preg_match('/riser_(x\d+)_slot_/', $compatibleSlotId, $matches)) {
+                                $assignedSlotType = $matches[1];
+                            }
 
                             if ($assignedSlotType !== $riserSlotType) {
                                 // Using oversized slot - warn but allow
@@ -1833,7 +1858,7 @@ class FlexibleCompatibilityValidator {
                             $info[] = [
                                 'type' => 'riser_slot_available',
                                 'message' => "Compatible riser slot available: $availableRiserSlots of $totalRiserSlots slots free",
-                                'assigned_slot' => $compatibleSlot['slot_id'],
+                                'assigned_slot' => $compatibleSlotId,
                                 'slot_type' => $assignedSlotType
                             ];
                         }
