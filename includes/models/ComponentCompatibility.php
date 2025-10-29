@@ -152,8 +152,12 @@ class ComponentCompatibility {
             // Socket compatibility check
             $cpuSocket = $this->extractSocketType($cpuData, 'cpu');
             $motherboardSocket = $this->extractSocketType($motherboardData, 'motherboard');
-            
-            if ($cpuSocket && $motherboardSocket && $cpuSocket !== $motherboardSocket) {
+
+            // Normalize socket types for comparison (case-insensitive, trim whitespace)
+            $cpuSocketNormalized = strtolower(trim($cpuSocket ?? ''));
+            $motherboardSocketNormalized = strtolower(trim($motherboardSocket ?? ''));
+
+            if ($cpuSocket && $motherboardSocket && $cpuSocketNormalized !== $motherboardSocketNormalized) {
                 $result['compatible'] = false;
                 $result['compatibility_score'] = 0.0;
                 $result['issues'][] = "Socket mismatch: CPU socket ($cpuSocket) does not match motherboard socket ($motherboardSocket)";
@@ -528,7 +532,7 @@ class ComponentCompatibility {
             'cpu' => __DIR__ . '/../../All-JSON/cpu-jsons/Cpu-details-level-3.json',
             'motherboard' => __DIR__ . '/../../All-JSON/motherboad-jsons/motherboard-level-3.json',
             'ram' => __DIR__ . '/../../All-JSON/Ram-jsons/ram_detail.json',
-            'storage' => __DIR__ . '/../../All-JSON/storage-jsons/storagedetail.json',
+            'storage' => __DIR__ . '/../../All-JSON/storage-jsons/storage-level-3.json',
             'nic' => __DIR__ . '/../../All-JSON/nic-jsons/nic-level-3.json',
             'caddy' => __DIR__ . '/../../All-JSON/caddy-jsons/caddy_details.json',
             'pciecard' => __DIR__ . '/../../All-JSON/pci-jsons/pci-level-3.json',
@@ -1779,7 +1783,12 @@ class ComponentCompatibility {
             $existingCpuResult = $this->validateCPUExists($existingCpu['component_uuid']);
             if ($existingCpuResult['exists']) {
                 $existingSocket = $existingCpuResult['data']['socket'] ?? null;
-                if ($existingSocket && $existingSocket !== $newCpuSocket) {
+
+                // Normalize socket types for comparison
+                $existingSocketNormalized = strtolower(trim($existingSocket ?? ''));
+                $newCpuSocketNormalized = strtolower(trim($newCpuSocket ?? ''));
+
+                if ($existingSocket && $existingSocketNormalized !== $newCpuSocketNormalized) {
                     return [
                         'compatible' => false,
                         'error' => "Mixed CPU socket types not allowed. Existing CPU socket: $existingSocket, New CPU socket: $newCpuSocket",
@@ -4154,6 +4163,22 @@ class ComponentCompatibility {
                         $result['issues'] = array_merge($result['issues'], $caddyCompatResult['issues']);
                     }
                     $result['details'] = array_merge($result['details'], $caddyCompatResult['details']);
+
+                } elseif ($compType === 'hbacard') {
+                    $hbaCompatResult = $this->analyzeExistingHBAForStorage($existingComp, $storageRequirements);
+                    if (!$hbaCompatResult['compatible']) {
+                        $result['compatible'] = false;
+                        $result['issues'] = array_merge($result['issues'], $hbaCompatResult['issues']);
+                    }
+                    $result['details'] = array_merge($result['details'], $hbaCompatResult['details']);
+
+                } elseif ($compType === 'chassis') {
+                    $chassisCompatResult = $this->analyzeExistingChassisForStorage($existingComp, $storageRequirements);
+                    if (!$chassisCompatResult['compatible']) {
+                        $result['compatible'] = false;
+                        $result['issues'] = array_merge($result['issues'], $chassisCompatResult['issues']);
+                    }
+                    $result['details'] = array_merge($result['details'], $chassisCompatResult['details']);
                 }
             }
 
@@ -4946,7 +4971,11 @@ class ComponentCompatibility {
 
         $existingSocket = $this->extractSocketType($existingCpuData, 'cpu');
 
-        if ($existingSocket && $newCpuSocket && $existingSocket !== $newCpuSocket) {
+        // Normalize socket types for comparison
+        $existingSocketNormalized = strtolower(trim($existingSocket ?? ''));
+        $newCpuSocketNormalized = strtolower(trim($newCpuSocket ?? ''));
+
+        if ($existingSocket && $newCpuSocket && $existingSocketNormalized !== $newCpuSocketNormalized) {
             $result['compatible'] = false;
             $result['issues'][] = "CPU socket mismatch: new CPU ({$newCpuSocket}) vs existing CPU ({$existingSocket})";
         } else if ($existingSocket) {
@@ -4976,7 +5005,11 @@ class ComponentCompatibility {
         if ($compatibilityRequirements['required_socket']) {
             $requiredSocket = $compatibilityRequirements['required_socket'];
 
-            if ($cpuSocket !== $requiredSocket) {
+            // Normalize socket types for comparison (case-insensitive, trim whitespace)
+            $cpuSocketNormalized = strtolower(trim($cpuSocket ?? ''));
+            $requiredSocketNormalized = strtolower(trim($requiredSocket ?? ''));
+
+            if ($cpuSocketNormalized !== $requiredSocketNormalized) {
                 $result['compatible'] = false;
                 $result['issues'][] = "CPU socket ({$cpuSocket}) does not match required socket ({$requiredSocket})";
             } else {
@@ -5020,6 +5053,10 @@ class ComponentCompatibility {
         $cpuSocket = $this->extractSocketType($cpuData, 'cpu');
         $requiredSocket = $compatibilityRequirements['required_socket'] ?? null;
 
+        // Normalize socket types for comparison
+        $cpuSocketNormalized = strtolower(trim($cpuSocket ?? ''));
+        $requiredSocketNormalized = strtolower(trim($requiredSocket ?? ''));
+
         // If compatible
         if ($compatibilityResult['compatible']) {
             if ($requiredSocket) {
@@ -5030,7 +5067,7 @@ class ComponentCompatibility {
         }
         // If incompatible
         else {
-            if ($requiredSocket && $cpuSocket && $cpuSocket !== $requiredSocket) {
+            if ($requiredSocket && $cpuSocket && $cpuSocketNormalized !== $requiredSocketNormalized) {
                 return "CPU socket ({$cpuSocket}) incompatible with motherboard socket ({$requiredSocket})";
             } elseif ($requiredSocket && !$cpuSocket) {
                 return "CPU socket unknown - motherboard requires {$requiredSocket}";
@@ -5137,7 +5174,11 @@ class ComponentCompatibility {
         if ($compatibilityRequirements['required_cpu_socket']) {
             $requiredSocket = $compatibilityRequirements['required_cpu_socket'];
 
-            if ($motherboardSocket !== $requiredSocket) {
+            // Normalize socket types for comparison
+            $motherboardSocketNormalized = strtolower(trim($motherboardSocket ?? ''));
+            $requiredSocketNormalized = strtolower(trim($requiredSocket ?? ''));
+
+            if ($motherboardSocketNormalized !== $requiredSocketNormalized) {
                 $result['compatible'] = false;
                 $result['issues'][] = "Motherboard socket ({$motherboardSocket}) does not match CPU socket ({$requiredSocket})";
             } else {
@@ -5191,6 +5232,10 @@ class ComponentCompatibility {
         $requiredCpuSocket = $compatibilityRequirements['required_cpu_socket'] ?? null;
         $requiredMemoryTypes = $compatibilityRequirements['required_memory_types'] ?? [];
 
+        // Normalize socket types for comparison
+        $motherboardSocketNormalized = strtolower(trim($motherboardSocket ?? ''));
+        $requiredCpuSocketNormalized = strtolower(trim($requiredCpuSocket ?? ''));
+
         // If compatible
         if ($compatibilityResult['compatible']) {
             $constraints = [];
@@ -5211,7 +5256,7 @@ class ComponentCompatibility {
         }
         // If incompatible
         else {
-            if ($requiredCpuSocket && $motherboardSocket && $motherboardSocket !== $requiredCpuSocket) {
+            if ($requiredCpuSocket && $motherboardSocket && $motherboardSocketNormalized !== $requiredCpuSocketNormalized) {
                 return "Motherboard socket ({$motherboardSocket}) incompatible with CPU socket ({$requiredCpuSocket})";
             } elseif (!empty($requiredMemoryTypes)) {
                 $motherboardMemoryTypes = $this->extractSupportedMemoryTypes($motherboardData, 'motherboard');
@@ -5260,6 +5305,40 @@ class ComponentCompatibility {
             if (isset($storageSupport['slots'])) {
                 $storageRequirements['available_slots'] = $storageSupport['slots'];
                 $result['details'][] = 'Available storage slots: ' . count($storageSupport['slots']);
+            }
+
+            // Extract M.2 slot information from drive_bays (not storage)
+            $driveBays = $mbSpecs['drive_bays'] ?? [];
+            if (isset($driveBays['m2_slots']) && !empty($driveBays['m2_slots'])) {
+                $m2Slots = $driveBays['m2_slots'];
+
+                if (!empty($m2Slots) && is_array($m2Slots)) {
+                    $firstSlotConfig = $m2Slots[0];
+
+                    // Store M.2 form factor support
+                    $m2FormFactors = $firstSlotConfig['form_factors'] ?? [];
+                    $storageRequirements['m2_form_factors'] = $m2FormFactors;
+
+                    // Store M.2 slot count
+                    $m2SlotCount = $firstSlotConfig['count'] ?? 0;
+                    $storageRequirements['m2_slots'] = [
+                        'total' => $m2SlotCount,
+                        'used' => 0, // Will be calculated later
+                        'available' => $m2SlotCount,
+                        'pcie_generation' => $firstSlotConfig['pcie_generation'] ?? 4,
+                        'pcie_lanes' => $firstSlotConfig['pcie_lanes'] ?? 4
+                    ];
+
+                    $result['details'][] = "Motherboard M.2 slots: {$m2SlotCount} available, supports " . implode(', ', $m2FormFactors) . " (PCIe Gen " . ($firstSlotConfig['pcie_generation'] ?? 4) . ")";
+
+                    // Add NVMe interface support (for M.2 path)
+                    $nvmeInterfaces = ['NVMe', 'PCIe NVMe', 'NVMe PCIe 3.0', 'NVMe PCIe 4.0', 'NVMe PCIe 5.0'];
+                    foreach ($nvmeInterfaces as $nvmeInterface) {
+                        if (!in_array($nvmeInterface, $storageRequirements['supported_interfaces'])) {
+                            $storageRequirements['supported_interfaces'][] = $nvmeInterface;
+                        }
+                    }
+                }
             }
         } else {
             // Fallback to database parsing
@@ -5329,7 +5408,199 @@ class ComponentCompatibility {
     }
 
     /**
-     * Apply storage compatibility rules
+     * Analyze existing HBA card for storage compatibility
+     * Extracts HBA protocol support and port capacity
+     */
+    private function analyzeExistingHBAForStorage($hbaComponent, &$storageRequirements) {
+        $result = ['compatible' => true, 'issues' => [], 'details' => []];
+
+        // Load HBA specifications from JSON
+        $hbaData = $this->getComponentData('hbacard', $hbaComponent['uuid']);
+        if (!$hbaData) {
+            $result['details'][] = 'HBA card specifications not found in JSON';
+            return $result;
+        }
+
+        // Extract HBA protocol (e.g., "SAS/SATA/NVMe Tri-Mode", "SAS", "SATA")
+        $hbaProtocol = $hbaData['protocol'] ?? '';
+        $internalPorts = $hbaData['internal_ports'] ?? 0;
+        $maxDevices = $hbaData['max_devices'] ?? 0;
+
+        // Parse protocol and add supported interfaces
+        $supportedInterfaces = [];
+        if (stripos($hbaProtocol, 'sas') !== false) {
+            $supportedInterfaces[] = 'SAS';
+            $result['details'][] = 'HBA supports SAS protocol';
+        }
+        if (stripos($hbaProtocol, 'sata') !== false) {
+            $supportedInterfaces[] = 'SATA';
+            $supportedInterfaces[] = 'SATA III';
+            $result['details'][] = 'HBA supports SATA protocol';
+        }
+        if (stripos($hbaProtocol, 'nvme') !== false) {
+            $supportedInterfaces[] = 'NVMe';
+            $supportedInterfaces[] = 'PCIe NVMe';
+            $supportedInterfaces[] = 'PCIe NVMe 3.0';
+            $supportedInterfaces[] = 'PCIe NVMe 4.0';
+            $result['details'][] = 'HBA supports NVMe protocol';
+        }
+
+        // Add supported interfaces to storage requirements
+        foreach ($supportedInterfaces as $interface) {
+            if (!in_array($interface, $storageRequirements['supported_interfaces'])) {
+                $storageRequirements['supported_interfaces'][] = $interface;
+            }
+        }
+
+        // Calculate HBA port usage - count existing storage devices
+        // Note: M.2 NVMe drives on motherboard don't use HBA ports
+        $usedPorts = 0;
+        if (isset($storageRequirements['existing_storage_count'])) {
+            $usedPorts = $storageRequirements['existing_storage_count'];
+        }
+
+        $availablePorts = max(0, $internalPorts - $usedPorts);
+
+        // Check if HBA ports are exhausted
+        if ($availablePorts <= 0 && $internalPorts > 0) {
+            $result['compatible'] = false;
+            $result['issues'][] = "HBA card ports exhausted ({$internalPorts} ports, all used)";
+            $result['details'][] = "HBA: {$hbaData['model']} - {$internalPorts} internal ports, {$usedPorts} used, {$availablePorts} available";
+        } else {
+            $result['details'][] = "HBA: {$hbaData['model']} - {$internalPorts} internal ports, {$usedPorts} used, {$availablePorts} available";
+        }
+
+        // Store HBA capacity info for later use
+        $storageRequirements['hba_ports'] = [
+            'total' => $internalPorts,
+            'used' => $usedPorts,
+            'available' => $availablePorts,
+            'max_devices' => $maxDevices
+        ];
+
+        return $result;
+    }
+
+    /**
+     * Analyze existing chassis for storage compatibility
+     * Extracts backplane interface support and bay capacity
+     */
+    private function analyzeExistingChassisForStorage($chassisComponent, &$storageRequirements) {
+        $result = ['compatible' => true, 'issues' => [], 'details' => []];
+
+        // Load chassis specifications from JSON
+        $chassisData = $this->loadChassisSpecs($chassisComponent['uuid']);
+        if (!$chassisData) {
+            $result['details'][] = 'Chassis specifications not found in JSON';
+            return $result;
+        }
+
+        // Extract backplane capabilities
+        $backplane = $chassisData['backplane'] ?? [];
+        $supportsSata = $backplane['supports_sata'] ?? false;
+        $supportsSas = $backplane['supports_sas'] ?? false;
+        $supportsNvme = $backplane['supports_nvme'] ?? false;
+        $backplaneInterface = $backplane['interface'] ?? 'Unknown';
+
+        // Add supported interfaces based on backplane capabilities
+        if ($supportsSata) {
+            if (!in_array('SATA', $storageRequirements['supported_interfaces'])) {
+                $storageRequirements['supported_interfaces'][] = 'SATA';
+            }
+            if (!in_array('SATA III', $storageRequirements['supported_interfaces'])) {
+                $storageRequirements['supported_interfaces'][] = 'SATA III';
+            }
+            $result['details'][] = "Chassis backplane supports SATA";
+        }
+        if ($supportsSas) {
+            if (!in_array('SAS', $storageRequirements['supported_interfaces'])) {
+                $storageRequirements['supported_interfaces'][] = 'SAS';
+            }
+            $result['details'][] = "Chassis backplane supports SAS";
+        }
+        if ($supportsNvme) {
+            if (!in_array('NVMe', $storageRequirements['supported_interfaces'])) {
+                $storageRequirements['supported_interfaces'][] = 'NVMe';
+            }
+            if (!in_array('PCIe NVMe', $storageRequirements['supported_interfaces'])) {
+                $storageRequirements['supported_interfaces'][] = 'PCIe NVMe';
+            }
+            $result['details'][] = "Chassis backplane supports NVMe";
+        }
+
+        // Extract drive bay information
+        $driveBays = $chassisData['drive_bays'] ?? [];
+        $totalBays = $driveBays['total_bays'] ?? 0;
+        $bayConfiguration = $driveBays['bay_configuration'] ?? [];
+
+        // Count used bays (existing storage in configuration)
+        $usedBays = 0;
+        if (isset($storageRequirements['existing_storage_count'])) {
+            $usedBays = $storageRequirements['existing_storage_count'];
+        }
+
+        // Calculate effective storage limit: min(chassis bays, HBA ports)
+        $hbaPorts = $storageRequirements['hba_ports']['total'] ?? $totalBays;
+        $effectiveLimit = min($totalBays, $hbaPorts);
+        $availableBays = max(0, $effectiveLimit - $usedBays);
+
+        // Check if bays/ports are exhausted
+        if ($availableBays <= 0 && $totalBays > 0) {
+            $result['compatible'] = false;
+            if ($hbaPorts < $totalBays) {
+                $result['issues'][] = "Storage capacity limited by HBA ports: {$hbaPorts} ports available, chassis has {$totalBays} bays (effective limit: {$effectiveLimit})";
+            } else {
+                $result['issues'][] = "Chassis drive bays exhausted: {$totalBays} bays, all used";
+            }
+            $result['details'][] = "Chassis: {$chassisData['model']} - {$totalBays} bays, effective limit {$effectiveLimit} (HBA-limited), {$usedBays} used, {$availableBays} available";
+        } else {
+            if ($hbaPorts < $totalBays) {
+                $result['details'][] = "Chassis: {$chassisData['model']} - {$totalBays} physical bays, effective limit {$effectiveLimit} (limited by {$hbaPorts} HBA ports), {$usedBays} used, {$availableBays} available";
+            } else {
+                $result['details'][] = "Chassis: {$chassisData['model']} - {$totalBays} bays, {$usedBays} used, {$availableBays} available";
+            }
+        }
+
+        // Extract form factor compatibility - store bay types separately for strict matching
+        $chassisBayTypes = [];
+        foreach ($bayConfiguration as $bayConfig) {
+            $bayType = $bayConfig['bay_type'] ?? '';
+            $count = $bayConfig['count'] ?? 0;
+            $hotSwap = $bayConfig['hot_swap'] ?? false;
+
+            if ($bayType) {
+                // Normalize bay type: "3.5_inch" → "3.5-inch"
+                $normalizedBayType = str_replace('_', '-', $bayType);
+
+                // Store in separate chassis_bay_types array for strict matching
+                if (!in_array($normalizedBayType, $chassisBayTypes)) {
+                    $chassisBayTypes[] = $normalizedBayType;
+                }
+
+                $hotSwapText = $hotSwap ? 'hot-swap' : 'non-hot-swap';
+                $result['details'][] = "Bay type: {$normalizedBayType} ({$count} {$hotSwapText} bays)";
+            }
+        }
+
+        // Store bay types in separate array (not required_form_factors)
+        $storageRequirements['chassis_bay_types'] = $chassisBayTypes;
+
+        // Store chassis capacity info
+        $storageRequirements['chassis_bays'] = [
+            'total' => $totalBays,
+            'effective_limit' => $effectiveLimit,
+            'used' => $usedBays,
+            'available' => $availableBays,
+            'backplane_interface' => $backplaneInterface,
+            'bay_types' => $chassisBayTypes
+        ];
+
+        return $result;
+    }
+
+    /**
+     * Apply storage compatibility rules with connection path logic
+     * Determines chassis bay vs motherboard M.2 vs U.2 paths
      */
     private function applyStorageCompatibilityRules($storageData, $storageRequirements) {
         $result = [
@@ -5337,60 +5608,191 @@ class ComponentCompatibility {
             'compatibility_score' => 1.0,
             'issues' => [],
             'warnings' => [],
-            'recommendations' => []
+            'recommendations' => [],
+            'connection_path' => 'unknown'
         ];
 
         $storageInterface = $this->extractStorageInterface($storageData);
         $storageFormFactor = $this->extractStorageFormFactor($storageData);
 
-        // Check interface compatibility
-        if (!empty($storageRequirements['supported_interfaces']) && $storageInterface) {
-            $compatibleInterfaces = $storageRequirements['supported_interfaces'];
+        // Determine which connection path this storage uses
+        $connectionPath = $this->determineStorageConnectionPath($storageFormFactor, $storageInterface);
+        $result['connection_path'] = $connectionPath;
 
-            // Check for direct match
-            if (in_array($storageInterface, $compatibleInterfaces)) {
-                $result['compatibility_score'] = min($result['compatibility_score'], 1.0);
-                $result['recommendations'][] = "Perfect interface match: {$storageInterface}";
-            } else {
-                // Check compatibility matrix
-                $compatibilityMatrix = [
-                    'SATA III' => ['SATA', 'SATA II'],
-                    'SATA' => ['SATA III', 'SATA II'],
-                    'PCIe NVMe 4.0' => ['PCIe NVMe', 'NVMe', 'PCIe NVMe 3.0'],
-                    'PCIe NVMe' => ['NVMe', 'PCIe NVMe 4.0', 'PCIe NVMe 3.0'],
-                    'NVMe' => ['PCIe NVMe', 'PCIe NVMe 4.0', 'PCIe NVMe 3.0'],
-                    'SAS' => [], // SAS requires dedicated controller
-                ];
-
-                $isCompatible = false;
-                if (isset($compatibilityMatrix[$storageInterface])) {
-                    foreach ($compatibilityMatrix[$storageInterface] as $altInterface) {
-                        if (in_array($altInterface, $compatibleInterfaces)) {
-                            $isCompatible = true;
-                            $result['compatibility_score'] = min($result['compatibility_score'], 0.85);
-                            $result['recommendations'][] = "Compatible interface: {$storageInterface} works with {$altInterface}";
-                            break;
-                        }
-                    }
-                }
-
-                if (!$isCompatible) {
-                    $result['compatible'] = false;
-                    $result['compatibility_score'] = 0.25;
-                    $result['issues'][] = "Storage interface {$storageInterface} not supported by motherboard";
-                }
-            }
+        // Route to appropriate validation logic based on connection path
+        if ($connectionPath === 'chassis_bay') {
+            return $this->validateChassisBayStorage($storageInterface, $storageFormFactor, $storageRequirements, $result);
+        } elseif ($connectionPath === 'motherboard_m2') {
+            return $this->validateMotherboardM2Storage($storageInterface, $storageFormFactor, $storageRequirements, $result);
+        } elseif ($connectionPath === 'motherboard_u2') {
+            return $this->validateMotherboardU2Storage($storageInterface, $storageFormFactor, $storageRequirements, $result);
         }
 
-        // Check form factor compatibility if caddies are involved
-        if (!empty($storageRequirements['required_form_factors']) && $storageFormFactor) {
-            if (!in_array($storageFormFactor, $storageRequirements['required_form_factors'])) {
-                $result['compatible'] = false;
-                $result['compatibility_score'] = min($result['compatibility_score'], 0.3);
-                $result['issues'][] = "Storage form factor {$storageFormFactor} not supported by caddy";
-            } else {
-                $result['recommendations'][] = "Form factor {$storageFormFactor} compatible with caddy";
+        // Unknown path - use generic validation
+        return $this->validateGenericStorage($storageInterface, $storageFormFactor, $storageRequirements, $result);
+    }
+
+    /**
+     * Validate storage that connects via chassis bays (SATA/SAS 2.5"/3.5")
+     * STRICT RULE: Bay size MUST match storage size (no adapters)
+     */
+    private function validateChassisBayStorage($storageInterface, $storageFormFactor, $storageRequirements, $result) {
+        // Extract storage size (2.5-inch or 3.5-inch)
+        $storageSize = $this->extractFormFactorSize($storageFormFactor);
+
+        // Get chassis bay types
+        $chassisBayTypes = $storageRequirements['chassis_bay_types'] ?? [];
+
+        // STRICT MATCHING: Bay size MUST equal storage size
+        $hasMatchingBay = in_array($storageSize, $chassisBayTypes);
+
+        if (!$hasMatchingBay) {
+            $result['compatible'] = false;
+            $result['compatibility_score'] = 0.0;
+            $result['issues'][] = "Storage form factor {$storageSize} doesn't match chassis bay types: " . implode(', ', $chassisBayTypes);
+
+            if (!empty($chassisBayTypes)) {
+                $result['recommendations'][] = "Choose {$chassisBayTypes[0]} storage to match chassis bays OR select different chassis";
             }
+
+            return $result;
+        }
+
+        // Size matches - now check interface compatibility
+        $supportedInterfaces = $storageRequirements['supported_interfaces'] ?? [];
+
+        if (!in_array($storageInterface, $supportedInterfaces)) {
+            $result['compatible'] = false;
+            $result['compatibility_score'] = 0.0;
+            $result['issues'][] = "Storage interface {$storageInterface} not supported by chassis backplane/HBA";
+            $result['recommendations'][] = "HBA/backplane supports: " . implode(', ', $supportedInterfaces);
+
+            return $result;
+        }
+
+        // Check HBA port capacity
+        $hbaPorts = $storageRequirements['hba_ports'] ?? [];
+        if (isset($hbaPorts['available']) && $hbaPorts['available'] <= 0) {
+            $result['compatible'] = false;
+            $result['compatibility_score'] = 0.0;
+            $result['issues'][] = "HBA card ports exhausted ({$hbaPorts['total']} ports, all used)";
+            $result['recommendations'][] = "Add another HBA card OR remove existing storage";
+
+            return $result;
+        }
+
+        // All checks passed - compatible!
+        $result['compatible'] = true;
+        $result['compatibility_score'] = 1.0;
+        $result['recommendations'][] = "Storage connects via chassis bay (size: {$storageSize}, interface: {$storageInterface})";
+
+        if (isset($hbaPorts['available'])) {
+            $result['recommendations'][] = "HBA ports: {$hbaPorts['available']} of {$hbaPorts['total']} available after adding this drive";
+        }
+
+        return $result;
+    }
+
+    /**
+     * Validate storage that connects via motherboard M.2 slots
+     */
+    private function validateMotherboardM2Storage($storageInterface, $storageFormFactor, $storageRequirements, $result) {
+        $m2Slots = $storageRequirements['m2_slots'] ?? [];
+        $m2FormFactors = $storageRequirements['m2_form_factors'] ?? [];
+
+        // Check if M.2 slots exist on motherboard
+        if (empty($m2Slots)) {
+            $result['compatible'] = false;
+            $result['compatibility_score'] = 0.0;
+            $result['issues'][] = "Motherboard does not have M.2 slots for this storage";
+            $result['recommendations'][] = "Choose SATA/SAS storage for chassis bays OR different motherboard";
+
+            return $result;
+        }
+
+        // Check if M.2 form factor is supported
+        if (!in_array($storageFormFactor, $m2FormFactors)) {
+            $result['compatible'] = false;
+            $result['compatibility_score'] = 0.0;
+            $result['issues'][] = "M.2 form factor {$storageFormFactor} not supported by motherboard";
+            $result['recommendations'][] = "Motherboard supports: " . implode(', ', $m2FormFactors);
+
+            return $result;
+        }
+
+        // Check if M.2 slots are available
+        $m2SlotsAvailable = $m2Slots['available'] ?? 0;
+        if ($m2SlotsAvailable <= 0) {
+            $result['compatible'] = false;
+            $result['compatibility_score'] = 0.0;
+            $result['issues'][] = "No available M.2 slots on motherboard ({$m2Slots['total']} total, all used)";
+            $result['recommendations'][] = "Remove existing M.2 storage OR use chassis bay storage";
+
+            return $result;
+        }
+
+        // Check PCIe generation compatibility
+        $storagePCIeGen = $this->extractStoragePCIeGeneration($storageInterface);
+        $slotPCIeGen = $m2Slots['pcie_generation'] ?? 4;
+
+        if ($storagePCIeGen <= $slotPCIeGen) {
+            // Backward compatible or exact match
+            $result['compatible'] = true;
+            $result['compatibility_score'] = 1.0;
+            $result['recommendations'][] = "M.2 storage connects directly to motherboard M.2 slot";
+
+            if ($storagePCIeGen < $slotPCIeGen) {
+                // Running at storage's native speed (no performance loss)
+                $result['recommendations'][] = "PCIe {$storagePCIeGen} drive on PCIe {$slotPCIeGen} slot - runs at PCIe {$storagePCIeGen} speeds (backward compatible, no performance loss)";
+            } else {
+                $result['recommendations'][] = "PCIe {$storagePCIeGen} drive on PCIe {$slotPCIeGen} slot - perfect match";
+            }
+        } else {
+            // Storage requires higher gen than slot provides - still compatible but with warning
+            $result['compatible'] = true;
+            $result['compatibility_score'] = 0.85;
+            $result['warnings'][] = "PCIe {$storagePCIeGen} drive on PCIe {$slotPCIeGen} slot - will run at reduced PCIe {$slotPCIeGen} speeds";
+
+            // Calculate bandwidth reduction
+            $bandwidthReduction = (1 - ($slotPCIeGen / $storagePCIeGen)) * 100;
+            $result['warnings'][] = sprintf("Performance: ~%.0f%% bandwidth reduction compared to native speed", $bandwidthReduction);
+        }
+
+        $result['recommendations'][] = "M.2 slots: {$m2SlotsAvailable} of {$m2Slots['total']} available after adding this drive";
+
+        return $result;
+    }
+
+    /**
+     * Validate storage that connects via motherboard U.2 slots
+     */
+    private function validateMotherboardU2Storage($storageInterface, $storageFormFactor, $storageRequirements, $result) {
+        // TODO: Implement U.2 validation similar to M.2
+        // For now, mark as incompatible
+        $result['compatible'] = false;
+        $result['compatibility_score'] = 0.0;
+        $result['issues'][] = "U.2 storage validation not yet implemented";
+        $result['recommendations'][] = "Choose M.2 or chassis bay storage";
+
+        return $result;
+    }
+
+    /**
+     * Generic storage validation fallback
+     */
+    private function validateGenericStorage($storageInterface, $storageFormFactor, $storageRequirements, $result) {
+        // Fallback to interface matching only
+        $supportedInterfaces = $storageRequirements['supported_interfaces'] ?? [];
+
+        if (!empty($supportedInterfaces) && !in_array($storageInterface, $supportedInterfaces)) {
+            $result['compatible'] = false;
+            $result['compatibility_score'] = 0.0;
+            $result['issues'][] = "Storage interface {$storageInterface} not supported";
+            $result['recommendations'][] = "Supported interfaces: " . implode(', ', $supportedInterfaces);
+        } else {
+            $result['compatible'] = true;
+            $result['compatibility_score'] = 0.7;
+            $result['warnings'][] = "Generic compatibility check - verify physical installation manually";
         }
 
         return $result;
@@ -5937,6 +6339,67 @@ class ComponentCompatibility {
         }
 
         return [];
+    }
+
+    /**
+     * Determine storage connection path based on form factor and interface
+     * Returns: 'chassis_bay', 'motherboard_m2', 'motherboard_u2', 'pcie_adapter'
+     */
+    private function determineStorageConnectionPath($formFactor, $interface) {
+        $formFactorLower = strtolower($formFactor);
+        $interfaceLower = strtolower($interface);
+
+        // M.2 form factors → motherboard M.2 slots
+        if (strpos($formFactorLower, 'm.2') !== false || strpos($formFactorLower, 'm2') !== false) {
+            return 'motherboard_m2';
+        }
+
+        // U.2 form factors → motherboard U.2 slots or PCIe adapter
+        if (strpos($formFactorLower, 'u.2') !== false || strpos($formFactorLower, 'u.3') !== false) {
+            return 'motherboard_u2';
+        }
+
+        // 2.5-inch or 3.5-inch SATA/SAS → chassis bays
+        if (strpos($formFactorLower, '2.5') !== false || strpos($formFactorLower, '3.5') !== false) {
+            if (strpos($interfaceLower, 'sata') !== false || strpos($interfaceLower, 'sas') !== false) {
+                return 'chassis_bay';
+            }
+        }
+
+        // Default to chassis bay for traditional drives
+        return 'chassis_bay';
+    }
+
+    /**
+     * Extract form factor size (2.5-inch or 3.5-inch)
+     * Used for strict chassis bay matching
+     */
+    private function extractFormFactorSize($formFactor) {
+        $formFactorLower = strtolower($formFactor);
+
+        if (strpos($formFactorLower, '2.5') !== false) {
+            return '2.5-inch';
+        }
+        if (strpos($formFactorLower, '3.5') !== false) {
+            return '3.5-inch';
+        }
+
+        // Return as-is if not standard size
+        return $formFactor;
+    }
+
+    /**
+     * Extract PCIe generation from storage interface string
+     * Examples: "NVMe PCIe 4.0" → 4.0, "PCIe 5.0" → 5.0
+     */
+    private function extractStoragePCIeGeneration($interface) {
+        // Match "PCIe 4.0", "NVMe PCIe 4.0", etc.
+        if (preg_match('/pcie\s*(\d+(?:\.\d+)?)/i', $interface, $matches)) {
+            return (float)$matches[1];
+        }
+
+        // Default to 3.0 if not specified
+        return 3.0;
     }
 }
 ?>

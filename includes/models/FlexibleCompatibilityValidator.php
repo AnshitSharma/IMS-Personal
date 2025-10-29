@@ -90,6 +90,9 @@ class FlexibleCompatibilityValidator {
                 case 'caddy':
                     return $this->validateCaddyAddition($configUuid, $newComponentUuid, $existingComponents);
 
+                case 'hbacard':
+                    return $this->validateHBACardAddition($configUuid, $newComponentUuid, $existingComponents);
+
                 default:
                     return [
                         'validation_status' => 'blocked',
@@ -137,7 +140,8 @@ class FlexibleCompatibilityValidator {
             'chassis' => null,
             'nic' => [],
             'pciecard' => [],
-            'caddy' => []
+            'caddy' => [],
+            'hbacard' => []
         ];
 
         foreach ($components as $component) {
@@ -175,6 +179,9 @@ class FlexibleCompatibilityValidator {
                 case 'nic':
                 case 'pciecard':
                     return $this->getPCIeCardSpecs($componentType, $componentUuid);
+
+                case 'hbacard':
+                    return $this->componentDataService->findComponentByUuid('hbacard', $componentUuid);
 
                 default:
                     return null;
@@ -533,11 +540,13 @@ class FlexibleCompatibilityValidator {
                    $componentSpecs['slot_size'] ??
                    $componentSpecs['pcie_lanes'] ??
                    $componentSpecs['lanes'] ??
+                   $componentSpecs['interface'] ?? // For HBA cards: "PCIe 4.0 x8"
                    16; // Default to x16 if not specified
 
-        // Extract numeric value if it's a string like "x16"
+        // Extract numeric value if it's a string like "x16" or "PCIe 4.0 x8"
         if (is_string($slotSize)) {
-            preg_match('/(\d+)/', $slotSize, $matches);
+            // Match patterns like "x8", "x16", "PCIe 3.0 x8", "PCIe 4.0 x16"
+            preg_match('/x(\d+)/i', $slotSize, $matches);
             $slotSize = $matches[1] ?? 16;
         }
 
@@ -1735,6 +1744,234 @@ class FlexibleCompatibilityValidator {
      */
     private function validatePCIeCardAddition($configUuid, $cardUuid, $existing) {
         return $this->validatePCIeDeviceAddition($configUuid, 'pciecard', $cardUuid, $existing);
+    }
+
+    /**
+     * Count chassis-connected storage devices in configuration
+     * Only counts storage devices that connect via chassis (not direct motherboard or M.2)
+     */
+    private function countChassisConnectedStorage($existingComponents) {
+        if (empty($existingComponents['storage']) || !is_array($existingComponents['storage'])) {
+            return 0;
+        }
+
+        $count = 0;
+        foreach ($existingComponents['storage'] as $storage) {
+            $storageUuid = $storage['component_uuid'];
+            $storageSpecs = $this->getStorageSpecs($storageUuid);
+
+            if (!$storageSpecs) {
+                continue;
+            }
+
+            // Check if storage connects via chassis (3.5" or 2.5" form factors with SATA/SAS)
+            $formFactor = $storageSpecs['form_factor'] ?? '';
+            $interface = $storageSpecs['interface'] ?? '';
+
+            // M.2 and U.2 typically don't connect via chassis backplane
+            if (stripos($formFactor, 'm.2') !== false || stripos($formFactor, 'u.2') !== false) {
+                continue;
+            }
+
+            // Count SATA and SAS drives that use chassis bays
+            if (stripos($interface, 'sata') !== false || stripos($interface, 'sas') !== false) {
+                $count += ($storage['quantity'] ?? 1);
+            }
+        }
+
+        return $count;
+    }
+
+    /**
+     * Extract supported protocols from HBA specification
+     * Handles formats like "SAS", "SATA", "SAS/SATA/NVMe Tri-Mode"
+     * @return array ['sas', 'sata', 'nvme']
+     */
+    private function extractHBAProtocols($hbaSpecs) {
+        $protocol = $hbaSpecs['protocol'] ?? '';
+        $protocols = [];
+
+        // Normalize to lowercase for comparison
+        $protocolLower = strtolower($protocol);
+
+        if (stripos($protocolLower, 'sas') !== false) {
+            $protocols[] = 'sas';
+        }
+        if (stripos($protocolLower, 'sata') !== false) {
+            $protocols[] = 'sata';
+        }
+        if (stripos($protocolLower, 'nvme') !== false) {
+            $protocols[] = 'nvme';
+        }
+
+        return $protocols;
+    }
+
+    /**
+     * Validate HBA Card addition
+     * HBA cards are specialized storage controllers with specific validation rules
+     */
+    private function validateHBACardAddition($configUuid, $cardUuid, $existing) {
+        $errors = [];
+        $warnings = [];
+        $info = [];
+
+        // STEP 1: Load HBA specifications from hbacard-level-3.json
+        $hbaSpecs = $this->getComponentSpecs('hbacard', $cardUuid);
+        if (!$hbaSpecs) {
+            return [
+                'validation_status' => 'blocked',
+                'critical_errors' => [[
+                    'type' => 'hba_not_found',
+                    'message' => "HBA card $cardUuid not found in JSON specifications"
+                ]],
+                'warnings' => [],
+                'info_messages' => []
+            ];
+        }
+
+        $hbaModel = $hbaSpecs['model'] ?? 'Unknown HBA';
+        $hbaInternalPorts = $hbaSpecs['internal_ports'] ?? 0;
+        $hbaProtocols = $this->extractHBAProtocols($hbaSpecs);
+        $hbaInterface = $hbaSpecs['interface'] ?? '';
+
+        // STEP 2: Enforce "Only 1 HBA per configuration" rule
+        if (!empty($existing['hbacard']) && is_array($existing['hbacard']) && count($existing['hbacard']) > 0) {
+            $existingHBA = $existing['hbacard'][0];
+            $existingHBASpecs = $this->getComponentSpecs('hbacard', $existingHBA['component_uuid']);
+            $existingModel = $existingHBASpecs['model'] ?? 'Unknown';
+
+            $errors[] = [
+                'type' => 'hba_limit_exceeded',
+                'severity' => 'critical',
+                'message' => "Configuration already has HBA card ($existingModel). Only 1 HBA card allowed per server.",
+                'resolution' => "Remove existing HBA card before adding another"
+            ];
+        }
+
+        // STEP 3: Check compatibility with existing storage devices
+        $chassisStorageCount = $this->countChassisConnectedStorage($existing);
+
+        if ($chassisStorageCount > 0 && !empty($existing['storage'])) {
+            // Collect all storage interface types
+            $storageInterfaces = [];
+            foreach ($existing['storage'] as $storage) {
+                $storageSpecs = $this->getStorageSpecs($storage['component_uuid']);
+                if ($storageSpecs) {
+                    $interface = strtolower($storageSpecs['interface'] ?? '');
+                    $storageInterfaces[] = $interface;
+                }
+            }
+
+            // Check protocol compatibility
+            $incompatibleStorage = [];
+            foreach ($storageInterfaces as $storageInterface) {
+                $compatible = false;
+
+                // Check if HBA supports this storage interface
+                if (stripos($storageInterface, 'sata') !== false && in_array('sata', $hbaProtocols)) {
+                    $compatible = true;
+                }
+                if (stripos($storageInterface, 'sas') !== false && in_array('sas', $hbaProtocols)) {
+                    $compatible = true;
+                }
+                if (stripos($storageInterface, 'nvme') !== false && in_array('nvme', $hbaProtocols)) {
+                    $compatible = true;
+                }
+
+                if (!$compatible) {
+                    $incompatibleStorage[] = $storageInterface;
+                }
+            }
+
+            if (!empty($incompatibleStorage)) {
+                $errors[] = [
+                    'type' => 'hba_protocol_mismatch',
+                    'severity' => 'critical',
+                    'message' => "HBA card supports " . implode('/', strtoupper($hbaProtocols)) . " but configuration has storage devices with incompatible interfaces: " . implode(', ', array_unique($incompatibleStorage)),
+                    'resolution' => "Choose tri-mode HBA that supports all storage interfaces OR remove incompatible storage devices"
+                ];
+            }
+
+            // Check internal port capacity
+            if ($hbaInternalPorts < $chassisStorageCount) {
+                $errors[] = [
+                    'type' => 'hba_insufficient_ports',
+                    'severity' => 'critical',
+                    'message' => "HBA card has $hbaInternalPorts internal ports but configuration has $chassisStorageCount chassis-connected storage devices",
+                    'resolution' => "Choose HBA with at least $chassisStorageCount internal ports (e.g., LSI 9400-16i has 16 ports)"
+                ];
+            } elseif ($hbaInternalPorts == $chassisStorageCount) {
+                $warnings[] = [
+                    'type' => 'hba_ports_at_capacity',
+                    'message' => "HBA internal ports at maximum capacity ($chassisStorageCount/$hbaInternalPorts used). Cannot add more chassis-connected storage."
+                ];
+            } else {
+                $info[] = "HBA has $hbaInternalPorts internal ports, $chassisStorageCount currently used. " . ($hbaInternalPorts - $chassisStorageCount) . " ports available.";
+            }
+        } else {
+            $info[] = "No chassis-connected storage devices in configuration. HBA has $hbaInternalPorts internal ports available.";
+        }
+
+        // STEP 4: Check PCIe slot availability if motherboard exists
+        if ($existing['motherboard']) {
+            require_once __DIR__ . '/PCIeSlotTracker.php';
+            $slotTracker = new PCIeSlotTracker($this->pdo);
+
+            // Extract PCIe slot requirements from HBA interface (e.g., "PCIe 3.0 x8")
+            // extractPCIeSlotSize returns integer (8, 16, etc.)
+            $requiredSlotSizeInt = $this->extractPCIeSlotSize($hbaSpecs);
+            $requiredSlotSizeStr = 'x' . $requiredSlotSizeInt;
+
+            $slotAvailability = $slotTracker->getSlotAvailability($configUuid);
+
+            if (!$slotAvailability['success']) {
+                $warnings[] = [
+                    'type' => 'pcie_slot_check_failed',
+                    'message' => "Could not verify PCIe slot availability: " . ($slotAvailability['error'] ?? 'Unknown error')
+                ];
+            } else {
+                $availableSlots = $slotAvailability['available_slots'];
+                $hasCompatibleSlot = false;
+
+                // Check if any compatible slot size is available
+                // available_slots structure: ['x8' => [...], 'x16' => [...]]
+                // x8 cards can fit in x8 or x16 slots
+                // x16 cards need x16 slots
+                if ($requiredSlotSizeInt == 8) {
+                    $hasCompatibleSlot = (!empty($availableSlots['x8']) || !empty($availableSlots['x16']));
+                } elseif ($requiredSlotSizeInt == 16) {
+                    $hasCompatibleSlot = !empty($availableSlots['x16']);
+                } elseif ($requiredSlotSizeInt == 4) {
+                    $hasCompatibleSlot = (!empty($availableSlots['x4']) || !empty($availableSlots['x8']) || !empty($availableSlots['x16']));
+                } elseif ($requiredSlotSizeInt == 1) {
+                    $hasCompatibleSlot = (!empty($availableSlots['x1']) || !empty($availableSlots['x4']) || !empty($availableSlots['x8']) || !empty($availableSlots['x16']));
+                }
+
+                if (!$hasCompatibleSlot) {
+                    $errors[] = [
+                        'type' => 'no_pcie_slot_available',
+                        'severity' => 'critical',
+                        'message' => "No available PCIe $requiredSlotSizeStr or larger slots for HBA card",
+                        'resolution' => "Remove existing PCIe cards OR choose motherboard with more PCIe slots"
+                    ];
+                } else {
+                    $info[] = "Compatible PCIe slot available for HBA card";
+                }
+            }
+        } else {
+            $info[] = "No motherboard in configuration. PCIe slot validation will be performed when motherboard is added.";
+        }
+
+        // STEP 5: Determine validation status
+        $status = empty($errors) ? 'compatible' : 'blocked';
+
+        return [
+            'validation_status' => $status,
+            'critical_errors' => $errors,
+            'warnings' => $warnings,
+            'info_messages' => $info
+        ];
     }
 
     /**

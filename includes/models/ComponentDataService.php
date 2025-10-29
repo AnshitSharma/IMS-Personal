@@ -100,6 +100,13 @@ class ComponentDataService {
     public function validateComponentUuid($componentType, $uuid) {
         try {
             error_log("ComponentDataService::validateComponentUuid called with type=$componentType, uuid=$uuid");
+
+            // Skip JSON validation for synthetic onboard NIC UUIDs
+            if ($componentType === 'nic' && str_starts_with($uuid, 'onboard-nic-')) {
+                error_log("Skipping JSON validation for onboard NIC: $uuid");
+                return true; // Onboard NICs don't exist in JSON, they are dynamically created
+            }
+
             $jsonData = $this->loadJsonData($componentType);
             error_log("JSON data loaded successfully for $componentType");
 

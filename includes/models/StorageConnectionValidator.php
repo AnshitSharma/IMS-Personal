@@ -331,31 +331,49 @@ class StorageConnectionValidator {
 
     /**
      * CHECK 3: HBA Card Requirement Check
-     * Reads: HBA cards from pciecardinventory with component_subtype='HBA Card'
+     * Reads: HBA cards from hbacardinventory (now separate component type)
      */
     private function checkHBACardRequirement($storageInterface, $existing) {
         $protocol = $this->extractProtocol($storageInterface);
 
         // SAS storage REQUIRES HBA card
         if ($protocol === 'sas') {
-            // Search for SAS HBA in existing PCIe cards
-            if (!empty($existing['pciecard']) && is_array($existing['pciecard'])) {
-                foreach ($existing['pciecard'] as $card) {
-                    $cardSpecs = $this->getPCIeCardSpecs($card['component_uuid']);
-                    if ($cardSpecs && isset($cardSpecs['component_subtype']) && $cardSpecs['component_subtype'] === 'HBA Card') {
+            // Search for SAS HBA in existing HBA cards
+            if (!empty($existing['hbacard']) && is_array($existing['hbacard'])) {
+                foreach ($existing['hbacard'] as $hba) {
+                    $hbaSpecs = $this->componentDataService->findComponentByUuid('hbacard', $hba['component_uuid']);
+                    if ($hbaSpecs) {
                         // Check if HBA supports SAS protocol
-                        $hbaInterface = $cardSpecs['interface'] ?? '';
-                        if (strpos(strtolower($hbaInterface), 'sas') !== false || strpos(strtolower($cardSpecs['data_rate'] ?? ''), 'sas') !== false) {
+                        $hbaProtocol = strtolower($hbaSpecs['protocol'] ?? '');
+                        if (strpos($hbaProtocol, 'sas') !== false) {
+                            // Check HBA port capacity
+                            $internalPorts = $hbaSpecs['internal_ports'] ?? 0;
+                            $currentStorageCount = $this->countChassisConnectedStorage($existing);
+
+                            if ($internalPorts <= $currentStorageCount) {
+                                return [
+                                    'available' => false,
+                                    'mandatory' => true,
+                                    'error' => [
+                                        'type' => 'hba_ports_exhausted',
+                                        'message' => "HBA card ({$hbaSpecs['model']}) has $internalPorts internal ports, all occupied by existing storage",
+                                        'resolution' => "Remove storage devices OR replace with HBA having more ports"
+                                    ]
+                                ];
+                            }
+
                             return [
                                 'available' => true,
                                 'type' => 'hba_card',
                                 'priority' => 3,
-                                'description' => "Storage connects via HBA card ({$cardSpecs['model']})",
+                                'description' => "Storage connects via HBA card ({$hbaSpecs['model']})",
                                 'details' => [
-                                    'hba_uuid' => $card['component_uuid'],
-                                    'hba_model' => $cardSpecs['model'] ?? 'Unknown',
-                                    'internal_ports' => $cardSpecs['internal_ports'] ?? 0,
-                                    'max_devices' => $cardSpecs['max_devices'] ?? 0
+                                    'hba_uuid' => $hba['component_uuid'],
+                                    'hba_model' => $hbaSpecs['model'] ?? 'Unknown',
+                                    'internal_ports' => $internalPorts,
+                                    'ports_used' => $currentStorageCount,
+                                    'ports_available' => $internalPorts - $currentStorageCount,
+                                    'max_devices' => $hbaSpecs['max_devices'] ?? 0
                                 ]
                             ];
                         }
@@ -376,18 +394,40 @@ class StorageConnectionValidator {
         }
 
         // Non-SAS storage - HBA not required but can be used if available
-        if (!empty($existing['pciecard']) && is_array($existing['pciecard'])) {
-            foreach ($existing['pciecard'] as $card) {
-                $cardSpecs = $this->getPCIeCardSpecs($card['component_uuid']);
-                if ($cardSpecs && isset($cardSpecs['component_subtype']) && $cardSpecs['component_subtype'] === 'HBA Card') {
+        if (!empty($existing['hbacard']) && is_array($existing['hbacard'])) {
+            foreach ($existing['hbacard'] as $hba) {
+                $hbaSpecs = $this->componentDataService->findComponentByUuid('hbacard', $hba['component_uuid']);
+                if ($hbaSpecs) {
                     // Check if HBA supports this storage protocol
-                    if ($protocol === 'sata') {
+                    $hbaProtocol = strtolower($hbaSpecs['protocol'] ?? '');
+                    if ($protocol === 'sata' && (strpos($hbaProtocol, 'sata') !== false || strpos($hbaProtocol, 'sas') !== false)) {
+                        // Check HBA port capacity
+                        $internalPorts = $hbaSpecs['internal_ports'] ?? 0;
+                        $currentStorageCount = $this->countChassisConnectedStorage($existing);
+
+                        if ($internalPorts <= $currentStorageCount) {
+                            return [
+                                'available' => false,
+                                'mandatory' => false,
+                                'error' => [
+                                    'type' => 'hba_ports_exhausted',
+                                    'message' => "HBA card has all ports occupied"
+                                ]
+                            ];
+                        }
+
                         return [
                             'available' => true,
                             'type' => 'hba_card',
                             'priority' => 3,
                             'description' => "Storage can connect via HBA card (optional)",
-                            'details' => ['hba_uuid' => $card['component_uuid']]
+                            'details' => [
+                                'hba_uuid' => $hba['component_uuid'],
+                                'hba_model' => $hbaSpecs['model'] ?? 'Unknown',
+                                'internal_ports' => $internalPorts,
+                                'ports_used' => $currentStorageCount,
+                                'ports_available' => $internalPorts - $currentStorageCount
+                            ]
                         ];
                     }
                 }
@@ -395,6 +435,38 @@ class StorageConnectionValidator {
         }
 
         return ['available' => false, 'mandatory' => false];
+    }
+
+    /**
+     * Count chassis-connected storage devices in existing configuration
+     */
+    private function countChassisConnectedStorage($existing) {
+        if (empty($existing['storage']) || !is_array($existing['storage'])) {
+            return 0;
+        }
+
+        $count = 0;
+        foreach ($existing['storage'] as $storage) {
+            $storageSpecs = $this->getStorageSpecs($storage['component_uuid']);
+            if (!$storageSpecs) {
+                continue;
+            }
+
+            $formFactor = $storageSpecs['form_factor'] ?? '';
+            $interface = $storageSpecs['interface'] ?? '';
+
+            // M.2 and U.2 don't connect via chassis backplane
+            if (stripos($formFactor, 'm.2') !== false || stripos($formFactor, 'u.2') !== false) {
+                continue;
+            }
+
+            // Count SATA and SAS drives that use chassis bays
+            if (stripos($interface, 'sata') !== false || stripos($interface, 'sas') !== false) {
+                $count += ($storage['quantity'] ?? 1);
+            }
+        }
+
+        return $count;
     }
 
     /**
