@@ -108,6 +108,18 @@ switch ($action) {
         handleReplaceOnboardNIC($user);
         break;
 
+    // Fix/Sync onboard NICs for existing configurations
+    case 'fix-onboard-nics':
+    case 'server-fix-onboard-nics':
+        handleFixOnboardNICs($user);
+        break;
+
+    // Debug endpoint to check motherboard specs
+    case 'debug-motherboard-nics':
+    case 'server-debug-motherboard-nics':
+        handleDebugMotherboardNICs($user);
+        break;
+
     default:
         send_json_response(0, 1, 400, "Invalid action specified");
 }
@@ -1181,37 +1193,140 @@ function handleGetConfiguration($serverBuilder, $user) {
         // Get NIC configuration with onboard/component tracking
         $nicConfiguration = null;
         $nicSummary = ['total_nics' => 0, 'onboard_nics' => 0, 'component_nics' => 0];
+        $nicDebug = [];
 
         try {
-            // Try to get nic_config from server_build_templates
-            $stmt = $pdo->prepare("SELECT nic_config FROM server_build_templates WHERE config_uuid = ?");
+            // Check if motherboard has onboard NICs that should be extracted
+            $motherboardDebug = [];
+            $motherboardStmt = $pdo->prepare("
+                SELECT component_uuid FROM server_configuration_components
+                WHERE config_uuid = ? AND component_type = 'motherboard'
+                LIMIT 1
+            ");
+            $motherboardStmt->execute([$configUuid]);
+            $motherboardUuid = $motherboardStmt->fetchColumn();
+
+            if ($motherboardUuid) {
+                $motherboardDebug['motherboard_uuid'] = $motherboardUuid;
+
+                // Try to load motherboard specs
+                try {
+                    require_once __DIR__ . '/../../includes/models/ComponentDataService.php';
+                    $dataService = ComponentDataService::getInstance();
+                    $mbSpecs = $dataService->findComponentByUuid('motherboard', $motherboardUuid);
+
+                    $motherboardDebug['motherboard_found_in_json'] = !is_null($mbSpecs);
+                    $motherboardDebug['has_networking'] = isset($mbSpecs['networking']);
+                    $motherboardDebug['has_onboard_nics'] = isset($mbSpecs['networking']['onboard_nics']);
+
+                    if (isset($mbSpecs['networking']['onboard_nics'])) {
+                        $motherboardDebug['expected_onboard_nics_count'] = count($mbSpecs['networking']['onboard_nics']);
+                        $motherboardDebug['onboard_nics_details'] = $mbSpecs['networking']['onboard_nics'];
+
+                        // Check if these NICs exist in database
+                        $checkOnboardStmt = $pdo->prepare("
+                            SELECT COUNT(*) FROM nicinventory
+                            WHERE ParentComponentUUID = ? AND SourceType = 'onboard' AND ServerUUID = ?
+                        ");
+                        $checkOnboardStmt->execute([$motherboardUuid, $configUuid]);
+                        $actualOnboardCount = $checkOnboardStmt->fetchColumn();
+
+                        $motherboardDebug['actual_onboard_nics_in_db'] = (int)$actualOnboardCount;
+                        $motherboardDebug['onboard_nics_missing'] = $motherboardDebug['expected_onboard_nics_count'] - (int)$actualOnboardCount;
+
+                        // If onboard NICs are missing, try to add them now
+                        if ($motherboardDebug['onboard_nics_missing'] > 0) {
+                            $motherboardDebug['attempting_auto_fix'] = true;
+                            require_once __DIR__ . '/../../includes/models/OnboardNICHandler.php';
+                            $nicHandler = new OnboardNICHandler($pdo);
+                            $autoAddResult = $nicHandler->autoAddOnboardNICs($configUuid, $motherboardUuid);
+                            $motherboardDebug['auto_add_result'] = $autoAddResult;
+                        }
+                    }
+                } catch (Exception $mbError) {
+                    $motherboardDebug['error_loading_specs'] = $mbError->getMessage();
+                }
+            } else {
+                $motherboardDebug['motherboard_uuid'] = null;
+                $motherboardDebug['message'] = 'No motherboard in configuration';
+            }
+
+            $nicDebug['motherboard_check'] = $motherboardDebug;
+
+            // Try to get nic_config from server_configurations
+            $stmt = $pdo->prepare("SELECT nic_config FROM server_configurations WHERE config_uuid = ?");
             $stmt->execute([$configUuid]);
             $nicConfigJson = $stmt->fetchColumn();
 
+            $nicDebug['nic_config_exists'] = !empty($nicConfigJson);
+            $nicDebug['nic_config_length'] = strlen($nicConfigJson ?? '');
+
             if ($nicConfigJson) {
                 $nicConfiguration = json_decode($nicConfigJson, true);
+                $nicDebug['nic_config_parsed'] = !is_null($nicConfiguration);
                 if ($nicConfiguration && isset($nicConfiguration['summary'])) {
                     $nicSummary = $nicConfiguration['summary'];
+                    $nicDebug['summary_found'] = true;
                 }
             }
 
-            // If no nic_config JSON, build it from components
-            if (!$nicConfiguration && isset($details['components']['nic'])) {
-                require_once __DIR__ . '/../../includes/models/OnboardNICHandler.php';
-                $nicHandler = new OnboardNICHandler($pdo);
-                $nicHandler->updateNICConfigJSON($configUuid);
+            // If no nic_config JSON, check if there are any NICs in server_configuration_components
+            if (!$nicConfiguration) {
+                $checkNicsStmt = $pdo->prepare("
+                    SELECT COUNT(*) FROM server_configuration_components
+                    WHERE config_uuid = ? AND component_type = 'nic'
+                ");
+                $checkNicsStmt->execute([$configUuid]);
+                $nicCount = $checkNicsStmt->fetchColumn();
 
-                // Fetch again after update
-                $stmt->execute([$configUuid]);
-                $nicConfigJson = $stmt->fetchColumn();
-                if ($nicConfigJson) {
-                    $nicConfiguration = json_decode($nicConfigJson, true);
-                    if ($nicConfiguration && isset($nicConfiguration['summary'])) {
-                        $nicSummary = $nicConfiguration['summary'];
+                $nicDebug['nics_in_components_table'] = (int)$nicCount;
+
+                // Check nicinventory directly
+                $checkNicInventoryStmt = $pdo->prepare("
+                    SELECT UUID, SourceType, ParentComponentUUID, OnboardNICIndex, SerialNumber
+                    FROM nicinventory
+                    WHERE ServerUUID = ?
+                ");
+                $checkNicInventoryStmt->execute([$configUuid]);
+                $nicsInInventory = $checkNicInventoryStmt->fetchAll(PDO::FETCH_ASSOC);
+                $nicDebug['nics_in_inventory'] = count($nicsInInventory);
+                $nicDebug['inventory_details'] = $nicsInInventory;
+
+                // Build nic_config JSON if there are NICs (onboard or component)
+                if ($nicCount > 0) {
+                    $nicDebug['attempting_update'] = true;
+                    require_once __DIR__ . '/../../includes/models/OnboardNICHandler.php';
+                    $nicHandler = new OnboardNICHandler($pdo);
+                    $updateResult = $nicHandler->updateNICConfigJSON($configUuid);
+                    $nicDebug['update_result'] = $updateResult;
+
+                    // Fetch again after update
+                    $stmt->execute([$configUuid]);
+                    $nicConfigJson = $stmt->fetchColumn();
+                    $nicDebug['nic_config_after_update_length'] = strlen($nicConfigJson ?? '');
+
+                    if ($nicConfigJson) {
+                        $nicConfiguration = json_decode($nicConfigJson, true);
+                        $nicDebug['config_after_update'] = $nicConfiguration;
+                        $nicDebug['json_decode_success'] = !is_null($nicConfiguration);
+                        if ($nicConfiguration && isset($nicConfiguration['summary'])) {
+                            $nicSummary = $nicConfiguration['summary'];
+                            $nicDebug['summary_updated'] = true;
+                        } else {
+                            $nicDebug['summary_updated'] = false;
+                            $nicDebug['summary_missing_reason'] = is_null($nicConfiguration) ? 'JSON decode failed' : 'Summary key not found';
+                        }
+                    } else {
+                        $nicDebug['nic_config_still_null'] = true;
                     }
+                } else {
+                    $nicDebug['attempting_update'] = false;
+                    $nicDebug['reason'] = 'No NICs found in server_configuration_components';
                 }
             }
         } catch (Exception $nicError) {
+            $nicDebug['error'] = $nicError->getMessage();
+            $nicDebug['trace'] = $nicError->getTraceAsString();
             error_log("Error getting NIC configuration: " . $nicError->getMessage());
             // Continue without NIC config data
         }
@@ -1632,13 +1747,21 @@ function handleGetCompatible($serverBuilder, $user) {
         // Get components with optimized query (limit to 100 for performance)
         $stmt = $pdo->prepare("
             SELECT UUID, SerialNumber, Status, Location, Notes, ServerUUID
-            FROM $table 
-            $whereClause 
-            ORDER BY Status ASC, SerialNumber ASC 
+            FROM $table
+            $whereClause
+            ORDER BY Status ASC, SerialNumber ASC
             LIMIT 100
         ");
         $stmt->execute();
         $allComponents = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // Debug info
+        $debugInfo = [
+            'query_table' => $table,
+            'where_clause' => $whereClause,
+            'total_found_in_db' => count($allComponents),
+            'available_only' => $availableOnly
+        ];
         
         // Step 4: Run compatibility checks using JSON integration and proper socket checking
         $compatibleComponents = [];
@@ -1660,14 +1783,26 @@ function handleGetCompatible($serverBuilder, $user) {
             // This prevents "requirements not determined" errors for components lacking specifications
             $componentsWithJSON = [];
             $componentsWithoutJSON = [];
+            $jsonValidationDetails = []; // Track detailed validation per component
 
             foreach ($allComponents as $component) {
                 $hasJSON = $compatibility->validateComponentExistsInJSON($componentType, $component['UUID']);
+                $validationDetail = [
+                    'uuid' => $component['UUID'],
+                    'serial_number' => $component['SerialNumber'],
+                    'has_json' => $hasJSON,
+                    'status' => $component['Status']
+                ];
+
                 if ($hasJSON) {
                     $componentsWithJSON[] = $component;
+                    $validationDetail['result'] = 'included';
                 } else {
                     $componentsWithoutJSON[] = $component['UUID'];
+                    $validationDetail['result'] = 'excluded - no JSON spec found';
                 }
+
+                $jsonValidationDetails[] = $validationDetail;
             }
 
             // Log components without JSON for debugging
@@ -1681,9 +1816,24 @@ function handleGetCompatible($serverBuilder, $user) {
 
             error_log("Filtered components: " . count($allComponents) . " with JSON out of " . $totalBeforeFiltering . " total");
 
+            // Add to debug info
+            $debugInfo['total_before_json_filter'] = $totalBeforeFiltering;
+            $debugInfo['total_with_json'] = count($allComponents);
+            $debugInfo['components_without_json'] = $componentsWithoutJSON;
+            $debugInfo['json_validation_details'] = $jsonValidationDetails;
+
             // Enhanced compatibility checking with flexible component support
             error_log("DEBUG: Starting flexible compatibility checking for $componentType components");
             error_log("DEBUG: Checking against " . count($existingComponentsData) . " existing components");
+
+            // Add detailed component listing to debug
+            $debugInfo['components_to_check'] = array_map(function($c) {
+                return [
+                    'uuid' => $c['UUID'],
+                    'serial' => $c['SerialNumber'],
+                    'status' => $c['Status']
+                ];
+            }, $allComponents);
 
             foreach ($allComponents as $component) {
                 $isCompatible = true;
@@ -1901,7 +2051,8 @@ function handleGetCompatible($serverBuilder, $user) {
                 'has_incompatible' => count($incompatibleOnly) > 0,
                 'main_issues' => count($incompatibleOnly) > 0 ?
                     array_slice(array_unique(array_column($incompatibleOnly, 'compatibility_reason')), 0, 3) : []
-            ]
+            ],
+            'debug_info' => $debugInfo
         ];
         
         // Determine appropriate message and response
@@ -3181,6 +3332,190 @@ function handleUpdateLocationAndPropagate($serverBuilder, $user) {
  * Replace onboard NIC with a component NIC from inventory
  * Allows swapping out motherboard-integrated NICs with separate NIC cards
  */
+/**
+ * Debug endpoint to check motherboard specifications and onboard NIC details
+ */
+function handleDebugMotherboardNICs($user) {
+    global $pdo;
+
+    $configUuid = $_POST['config_uuid'] ?? $_GET['config_uuid'] ?? '';
+
+    if (empty($configUuid)) {
+        send_json_response(0, 1, 400, "Configuration UUID is required");
+    }
+
+    try {
+        // Get motherboard from configuration
+        $stmt = $pdo->prepare("
+            SELECT component_uuid
+            FROM server_configuration_components
+            WHERE config_uuid = ? AND component_type = 'motherboard'
+            LIMIT 1
+        ");
+        $stmt->execute([$configUuid]);
+        $motherboardUuid = $stmt->fetchColumn();
+
+        if (!$motherboardUuid) {
+            send_json_response(0, 1, 404, "No motherboard found in this configuration");
+        }
+
+        // Load motherboard specs from JSON
+        require_once __DIR__ . '/../../includes/models/ComponentDataService.php';
+        $dataService = ComponentDataService::getInstance();
+        $mbSpecs = $dataService->findComponentByUuid('motherboard', $motherboardUuid);
+
+        $debugData = [
+            'config_uuid' => $configUuid,
+            'motherboard_uuid' => $motherboardUuid,
+            'motherboard_found_in_json' => !is_null($mbSpecs),
+            'has_networking_section' => isset($mbSpecs['networking']),
+            'has_onboard_nics' => isset($mbSpecs['networking']['onboard_nics']),
+            'onboard_nics_count' => isset($mbSpecs['networking']['onboard_nics']) ? count($mbSpecs['networking']['onboard_nics']) : 0,
+            'onboard_nics_details' => $mbSpecs['networking']['onboard_nics'] ?? [],
+            'full_networking_section' => $mbSpecs['networking'] ?? null
+        ];
+
+        // Check current database state
+        $stmt = $pdo->prepare("
+            SELECT COUNT(*) FROM nicinventory
+            WHERE ParentComponentUUID = ? AND SourceType = 'onboard'
+        ");
+        $stmt->execute([$motherboardUuid]);
+        $debugData['nics_already_in_inventory'] = (int)$stmt->fetchColumn();
+
+        $stmt = $pdo->prepare("
+            SELECT COUNT(*) FROM server_configuration_components
+            WHERE config_uuid = ? AND component_type = 'nic'
+        ");
+        $stmt->execute([$configUuid]);
+        $debugData['nics_in_config_components'] = (int)$stmt->fetchColumn();
+
+        send_json_response(1, 1, 200, "Motherboard debug information retrieved", $debugData);
+
+    } catch (Exception $e) {
+        error_log("Error in debug endpoint: " . $e->getMessage());
+        send_json_response(0, 1, 500, "Failed to retrieve debug information: " . $e->getMessage());
+    }
+}
+
+/**
+ * Fix/Sync onboard NICs for existing configurations
+ * Retroactively adds onboard NICs from motherboards that were added before this feature existed
+ */
+function handleFixOnboardNICs($user) {
+    global $pdo;
+
+    $configUuid = $_POST['config_uuid'] ?? '';
+
+    if (empty($configUuid)) {
+        send_json_response(0, 1, 400, "Configuration UUID is required");
+    }
+
+    try {
+        // Load the configuration to verify it exists and check permissions
+        $config = ServerConfiguration::loadByUuid($pdo, $configUuid);
+        if (!$config) {
+            send_json_response(0, 1, 404, "Server configuration not found");
+        }
+
+        // Check if user owns this configuration or has edit permissions
+        if ($config->get('created_by') != $user['id'] && !hasPermission($pdo, 'server.edit_all', $user['id'])) {
+            send_json_response(0, 1, 403, "Insufficient permissions to modify this configuration");
+        }
+
+        // Get motherboard from configuration
+        $stmt = $pdo->prepare("
+            SELECT component_uuid
+            FROM server_configuration_components
+            WHERE config_uuid = ? AND component_type = 'motherboard'
+            LIMIT 1
+        ");
+        $stmt->execute([$configUuid]);
+        $motherboardUuid = $stmt->fetchColumn();
+
+        if (!$motherboardUuid) {
+            send_json_response(0, 1, 404, "No motherboard found in this configuration", [
+                'config_uuid' => $configUuid,
+                'message' => 'Cannot extract onboard NICs without a motherboard'
+            ]);
+        }
+
+        // Check if onboard NICs already exist
+        $stmt = $pdo->prepare("
+            SELECT COUNT(*) FROM nicinventory
+            WHERE ParentComponentUUID = ? AND SourceType = 'onboard' AND ServerUUID = ?
+        ");
+        $stmt->execute([$motherboardUuid, $configUuid]);
+        $existingOnboardNICs = $stmt->fetchColumn();
+
+        if ($existingOnboardNICs > 0) {
+            // Already have onboard NICs, just update the JSON
+            require_once __DIR__ . '/../../includes/models/OnboardNICHandler.php';
+            $nicHandler = new OnboardNICHandler($pdo);
+            $nicHandler->updateNICConfigJSON($configUuid);
+
+            send_json_response(1, 1, 200, "Onboard NICs already exist, updated configuration", [
+                'config_uuid' => $configUuid,
+                'existing_onboard_nics' => (int)$existingOnboardNICs,
+                'action' => 'updated_json_only'
+            ]);
+        }
+
+        // Extract and add onboard NICs from motherboard
+        require_once __DIR__ . '/../../includes/models/OnboardNICHandler.php';
+        $nicHandler = new OnboardNICHandler($pdo);
+
+        $result = $nicHandler->autoAddOnboardNICs($configUuid, $motherboardUuid);
+
+        // Add debug information to result
+        $debugInfo = [
+            'config_uuid' => $configUuid,
+            'motherboard_uuid' => $motherboardUuid,
+            'result' => $result
+        ];
+
+        if ($result['count'] > 0) {
+            // Verify NICs were actually inserted
+            $verifyStmt = $pdo->prepare("
+                SELECT COUNT(*) FROM server_configuration_components
+                WHERE config_uuid = ? AND component_type = 'nic'
+            ");
+            $verifyStmt->execute([$configUuid]);
+            $nicCountInComponents = $verifyStmt->fetchColumn();
+
+            $verifyInventoryStmt = $pdo->prepare("
+                SELECT COUNT(*) FROM nicinventory
+                WHERE ServerUUID = ? AND SourceType = 'onboard'
+            ");
+            $verifyInventoryStmt->execute([$configUuid]);
+            $nicCountInInventory = $verifyInventoryStmt->fetchColumn();
+
+            send_json_response(1, 1, 200, "Successfully added onboard NICs from motherboard", [
+                'config_uuid' => $configUuid,
+                'motherboard_uuid' => $motherboardUuid,
+                'onboard_nics_added' => $result['count'],
+                'nics' => $result['nics'],
+                'message' => $result['message'],
+                'verification' => [
+                    'nics_in_components_table' => (int)$nicCountInComponents,
+                    'nics_in_inventory' => (int)$nicCountInInventory
+                ]
+            ]);
+        } else {
+            send_json_response(0, 1, 404, "No onboard NICs found in motherboard specifications", [
+                'config_uuid' => $configUuid,
+                'motherboard_uuid' => $motherboardUuid,
+                'message' => $result['message'] ?? 'Motherboard does not have onboard NICs in JSON specifications',
+                'debug' => $debugInfo
+            ]);
+        }
+
+    } catch (Exception $e) {
+        error_log("Error fixing onboard NICs: " . $e->getMessage());
+        send_json_response(0, 1, 500, "Failed to fix onboard NICs: " . $e->getMessage());
+    }
+}
+
 function handleReplaceOnboardNIC($user) {
     global $pdo;
 

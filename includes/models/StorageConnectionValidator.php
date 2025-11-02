@@ -66,6 +66,18 @@ class StorageConnectionValidator {
         $storageFormFactor = $storageSpecs['form_factor'] ?? 'Unknown';
         $storageSubtype = $storageSpecs['subtype'] ?? '';
 
+        // PHASE 1: Form Factor Consistency Validation (2.5" and 3.5" only)
+        // Skip for M.2/U.2 drives (Phase 2 handles those)
+        $normalizedFormFactor = $this->normalizeFormFactor($storageFormFactor);
+        if ($normalizedFormFactor === '2.5-inch' || $normalizedFormFactor === '3.5-inch') {
+            $formFactorCheck = $this->validateFormFactorConsistency($storageFormFactor, $existingComponents);
+            if (!$formFactorCheck['valid']) {
+                $errors[] = $formFactorCheck['error'];
+            } else if (!empty($formFactorCheck['info'])) {
+                $info[] = $formFactorCheck['info'];
+            }
+        }
+
         // CHECK 1: Chassis Backplane Capability
         $chassisPath = $this->checkChassisBackplaneCapability($storageInterface, $storageFormFactor, $existingComponents, $storageSpecs);
         if ($chassisPath['available']) {
@@ -260,9 +272,26 @@ class StorageConnectionValidator {
     /**
      * CHECK 2: Motherboard Direct Connection Check
      * Reads: motherboard.storage.sata.ports, motherboard.storage.nvme.m2_slots[], motherboard.storage.nvme.u2_slots
+     * PHASE 2 ENHANCED: Now tracks M.2/U.2 slot usage
      */
     private function checkMotherboardDirectConnection($storageInterface, $storageFormFactor, $storageSubtype, $existing, $storageSpecs) {
         if (!$existing['motherboard'] || !isset($existing['motherboard']['component_uuid'])) {
+            // PHASE 2: For M.2/U.2 storage, check if NVMe adapters exist
+            $isM2 = (strpos(strtolower($storageFormFactor), 'm.2') !== false || strpos(strtolower($storageSubtype), 'm.2') !== false);
+            $isU2 = (strpos(strtolower($storageFormFactor), 'u.2') !== false || strpos(strtolower($storageFormFactor), 'u.3') !== false ||
+                    strpos(strtolower($storageSubtype), 'u.2') !== false || strpos(strtolower($storageSubtype), 'u.3') !== false);
+
+            if ($isM2 || $isU2) {
+                // Check for NVMe adapters that can provide slots
+                $nvmeAdapters = $this->componentDataService->filterNvmeAdapters($existing['pciecard'] ?? []);
+                if (!empty($nvmeAdapters)) {
+                    // NVMe adapters exist - connection possible via adapter
+                    return ['available' => false, 'reason' => 'no_motherboard_but_adapter_exists'];
+                }
+                // No adapters - allow storage but warn
+                return ['available' => false, 'reason' => 'no_motherboard_m2_u2_warning'];
+            }
+
             return ['available' => false, 'reason' => 'no_motherboard'];
         }
 
@@ -289,10 +318,14 @@ class StorageConnectionValidator {
             ];
         }
 
-        // M.2 Slot Check
+        // PHASE 2: M.2 Slot Check with usage tracking
         if (strpos(strtolower($storageFormFactor), 'm.2') !== false || strpos(strtolower($storageSubtype), 'm.2') !== false) {
             $m2Slots = $storage['nvme']['m2_slots'] ?? [];
-            if (!empty($m2Slots) && isset($m2Slots[0]['count']) && $m2Slots[0]['count'] > 0) {
+            $totalM2Slots = (!empty($m2Slots) && isset($m2Slots[0]['count'])) ? $m2Slots[0]['count'] : 0;
+            $usedM2Slots = $this->countUsedM2Slots($existing);
+
+            if ($totalM2Slots > 0 && $usedM2Slots < $totalM2Slots) {
+                // Motherboard has available M.2 slots
                 return [
                     'available' => true,
                     'type' => 'motherboard_m2',
@@ -300,18 +333,31 @@ class StorageConnectionValidator {
                     'description' => "Storage connects via motherboard M.2 slot",
                     'details' => [
                         'motherboard_uuid' => $existing['motherboard']['component_uuid'],
-                        'total_m2_slots' => $m2Slots[0]['count'],
+                        'total_m2_slots' => $totalM2Slots,
+                        'used_m2_slots' => $usedM2Slots,
+                        'available_m2_slots' => $totalM2Slots - $usedM2Slots,
                         'supported_form_factors' => $m2Slots[0]['form_factors'] ?? [],
                         'pcie_generation' => $m2Slots[0]['pcie_generation'] ?? 4
                     ]
                 ];
+            } else if ($totalM2Slots > 0) {
+                // Motherboard has M.2 slots but all are used
+                return ['available' => false, 'reason' => 'm2_slots_exhausted', 'total_slots' => $totalM2Slots, 'used_slots' => $usedM2Slots];
+            } else {
+                // Motherboard has no M.2 slots
+                return ['available' => false, 'reason' => 'no_m2_slots'];
             }
         }
 
-        // U.2 Slot Check
-        if (strpos(strtolower($storageFormFactor), 'u.2') !== false || strpos(strtolower($storageFormFactor), 'u.3') !== false) {
+        // PHASE 2: U.2 Slot Check with usage tracking
+        if (strpos(strtolower($storageFormFactor), 'u.2') !== false || strpos(strtolower($storageFormFactor), 'u.3') !== false ||
+            strpos(strtolower($storageSubtype), 'u.2') !== false || strpos(strtolower($storageSubtype), 'u.3') !== false) {
             $u2Slots = $storage['nvme']['u2_slots'] ?? [];
-            if (isset($u2Slots['count']) && $u2Slots['count'] > 0) {
+            $totalU2Slots = isset($u2Slots['count']) ? $u2Slots['count'] : 0;
+            $usedU2Slots = $this->countUsedU2Slots($existing);
+
+            if ($totalU2Slots > 0 && $usedU2Slots < $totalU2Slots) {
+                // Motherboard has available U.2 slots
                 return [
                     'available' => true,
                     'type' => 'motherboard_u2',
@@ -319,10 +365,18 @@ class StorageConnectionValidator {
                     'description' => "Storage connects via motherboard U.2 slot",
                     'details' => [
                         'motherboard_uuid' => $existing['motherboard']['component_uuid'],
-                        'total_u2_slots' => $u2Slots['count'],
+                        'total_u2_slots' => $totalU2Slots,
+                        'used_u2_slots' => $usedU2Slots,
+                        'available_u2_slots' => $totalU2Slots - $usedU2Slots,
                         'connection' => $u2Slots['connection'] ?? 'Unknown'
                     ]
                 ];
+            } else if ($totalU2Slots > 0) {
+                // Motherboard has U.2 slots but all are used
+                return ['available' => false, 'reason' => 'u2_slots_exhausted', 'total_slots' => $totalU2Slots, 'used_slots' => $usedU2Slots];
+            } else {
+                // Motherboard has no U.2 slots
+                return ['available' => false, 'reason' => 'no_u2_slots'];
             }
         }
 
@@ -472,36 +526,94 @@ class StorageConnectionValidator {
     /**
      * CHECK 4: PCIe Adapter Card Check
      * Reads: PCIe cards with component_subtype='NVMe Adaptor'
+     * PHASE 2 ENHANCED: Now tracks M.2/U.2 slot usage on adapters
      */
     private function checkPCIeAdapterCard($storageFormFactor, $storageSubtype, $existing) {
-        if (!empty($existing['pciecard']) && is_array($existing['pciecard'])) {
-            foreach ($existing['pciecard'] as $card) {
-                $cardSpecs = $this->getPCIeCardSpecs($card['component_uuid']);
-                if (!$cardSpecs) continue;
+        $nvmeAdapters = $this->componentDataService->filterNvmeAdapters($existing['pciecard'] ?? []);
 
-                if (isset($cardSpecs['component_subtype']) && $cardSpecs['component_subtype'] === 'NVMe Adaptor') {
-                    // Check if adapter supports this storage form factor
-                    if (strpos(strtolower($storageFormFactor), 'm.2') !== false || strpos(strtolower($storageSubtype), 'm.2') !== false) {
-                        $supportedFormFactors = $cardSpecs['m2_form_factors'] ?? [];
-                        return [
-                            'available' => true,
-                            'type' => 'pcie_adapter',
-                            'priority' => 4,
-                            'description' => "Storage connects via PCIe M.2 adapter card ({$cardSpecs['model']})",
-                            'details' => [
-                                'adapter_uuid' => $card['component_uuid'],
-                                'adapter_model' => $cardSpecs['model'] ?? 'Unknown',
-                                'm2_slots' => $cardSpecs['m2_slots'] ?? 0,
-                                'supported_form_factors' => $supportedFormFactors,
-                                'requires_bifurcation' => ($cardSpecs['m2_slots'] ?? 0) > 1
-                            ]
-                        ];
+        if (empty($nvmeAdapters)) {
+            return ['available' => false, 'reason' => 'no_nvme_adapters'];
+        }
+
+        $isM2 = (strpos(strtolower($storageFormFactor), 'm.2') !== false || strpos(strtolower($storageSubtype), 'm.2') !== false);
+        $isU2 = (strpos(strtolower($storageFormFactor), 'u.2') !== false || strpos(strtolower($storageFormFactor), 'u.3') !== false ||
+                strpos(strtolower($storageSubtype), 'u.2') !== false || strpos(strtolower($storageSubtype), 'u.3') !== false);
+
+        foreach ($nvmeAdapters as $adapter) {
+            $cardSpecs = $adapter['specs'];
+            $cardUuid = $adapter['uuid'];
+            $quantity = $adapter['quantity'];
+
+            // Check M.2 support
+            if ($isM2 && isset($cardSpecs['m2_slots']) && $cardSpecs['m2_slots'] > 0) {
+                // Count how many M.2 storage devices are using adapters
+                $totalAdapterM2Slots = $this->countTotalM2Slots($existing);
+                $motherboardM2Slots = 0;
+                if (!empty($existing['motherboard'])) {
+                    $mbSpecs = $this->getMotherboardSpecs($existing['motherboard']['component_uuid']);
+                    if ($mbSpecs) {
+                        $m2Slots = $mbSpecs['storage']['nvme']['m2_slots'] ?? [];
+                        $motherboardM2Slots = (!empty($m2Slots) && isset($m2Slots[0]['count'])) ? $m2Slots[0]['count'] : 0;
                     }
+                }
+                $adapterProvidedSlots = $totalAdapterM2Slots - $motherboardM2Slots;
+                $usedM2Slots = $this->countUsedM2Slots($existing);
+                $availableAdapterSlots = max(0, $adapterProvidedSlots - max(0, $usedM2Slots - $motherboardM2Slots));
+
+                if ($availableAdapterSlots > 0) {
+                    $supportedFormFactors = $cardSpecs['m2_form_factors'] ?? [];
+                    return [
+                        'available' => true,
+                        'type' => 'pcie_adapter',
+                        'priority' => 4,
+                        'description' => "Storage connects via PCIe M.2 adapter card ({$cardSpecs['model']})",
+                        'details' => [
+                            'adapter_uuid' => $cardUuid,
+                            'adapter_model' => $cardSpecs['model'] ?? 'Unknown',
+                            'm2_slots' => $cardSpecs['m2_slots'],
+                            'available_slots' => $availableAdapterSlots,
+                            'supported_form_factors' => $supportedFormFactors,
+                            'requires_bifurcation' => ($cardSpecs['m2_slots'] ?? 0) > 1
+                        ]
+                    ];
+                }
+            }
+
+            // Check U.2 support
+            if ($isU2 && isset($cardSpecs['u2_slots']) && $cardSpecs['u2_slots'] > 0) {
+                // Similar logic for U.2
+                $totalAdapterU2Slots = $this->countTotalU2Slots($existing);
+                $motherboardU2Slots = 0;
+                if (!empty($existing['motherboard'])) {
+                    $mbSpecs = $this->getMotherboardSpecs($existing['motherboard']['component_uuid']);
+                    if ($mbSpecs) {
+                        $u2Slots = $mbSpecs['storage']['nvme']['u2_slots'] ?? [];
+                        $motherboardU2Slots = isset($u2Slots['count']) ? $u2Slots['count'] : 0;
+                    }
+                }
+                $adapterProvidedSlots = $totalAdapterU2Slots - $motherboardU2Slots;
+                $usedU2Slots = $this->countUsedU2Slots($existing);
+                $availableAdapterSlots = max(0, $adapterProvidedSlots - max(0, $usedU2Slots - $motherboardU2Slots));
+
+                if ($availableAdapterSlots > 0) {
+                    return [
+                        'available' => true,
+                        'type' => 'pcie_adapter',
+                        'priority' => 4,
+                        'description' => "Storage connects via PCIe U.2 adapter card ({$cardSpecs['model']})",
+                        'details' => [
+                            'adapter_uuid' => $cardUuid,
+                            'adapter_model' => $cardSpecs['model'] ?? 'Unknown',
+                            'u2_slots' => $cardSpecs['u2_slots'],
+                            'available_slots' => $availableAdapterSlots
+                        ]
+                    ];
                 }
             }
         }
 
-        return ['available' => false];
+        // Adapters exist but all slots are full
+        return ['available' => false, 'reason' => 'adapter_slots_exhausted'];
     }
 
     /**
@@ -1009,5 +1121,487 @@ class StorageConnectionValidator {
         $stmt = $this->pdo->prepare("SELECT * FROM caddyinventory WHERE UUID = ?");
         $stmt->execute([$caddyUuid]);
         return $stmt->fetch(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * PHASE 1: Get form factor lock from existing configuration
+     * Returns the "locked" form factor (2.5" or 3.5") or null if no lock
+     *
+     * Priority:
+     * 1. Chassis bay configuration (highest priority)
+     * 2. Existing caddy sizes
+     * 3. Existing storage sizes
+     *
+     * @param array $existingComponents
+     * @return array ['locked' => bool, 'size' => '2.5-inch'|'3.5-inch'|null, 'reason' => string]
+     */
+    private function getFormFactorLock($existingComponents) {
+        // Priority 1: Chassis bay size (if chassis exists)
+        if (!empty($existingComponents['chassis']) && isset($existingComponents['chassis']['component_uuid'])) {
+            $chassisSpecs = $this->getChassisSpecs($existingComponents['chassis']['component_uuid']);
+            if ($chassisSpecs) {
+                $bayConfig = $chassisSpecs['drive_bays']['bay_configuration'] ?? [];
+                foreach ($bayConfig as $bay) {
+                    $bayType = $bay['bay_type'] ?? '';
+                    $normalized = $this->normalizeFormFactor($bayType);
+                    if ($normalized === '2.5-inch' || $normalized === '3.5-inch') {
+                        return [
+                            'locked' => true,
+                            'size' => $normalized,
+                            'reason' => "chassis_bay_configuration"
+                        ];
+                    }
+                }
+            }
+        }
+
+        // Priority 2: Existing caddy sizes
+        if (!empty($existingComponents['caddy']) && is_array($existingComponents['caddy'])) {
+            foreach ($existingComponents['caddy'] as $caddy) {
+                $caddySpecs = $this->componentDataService->getCaddyByUuid($caddy['component_uuid']);
+                if ($caddySpecs) {
+                    $caddySize = $caddySpecs['compatibility']['size'] ?? $caddySpecs['type'] ?? '';
+                    $normalized = $this->normalizeFormFactor($caddySize);
+                    if ($normalized === '2.5-inch' || $normalized === '3.5-inch') {
+                        return [
+                            'locked' => true,
+                            'size' => $normalized,
+                            'reason' => "existing_caddy"
+                        ];
+                    }
+                }
+            }
+        }
+
+        // Priority 3: Existing storage sizes
+        if (!empty($existingComponents['storage']) && is_array($existingComponents['storage'])) {
+            foreach ($existingComponents['storage'] as $storage) {
+                $storageSpecs = $this->getStorageSpecs($storage['component_uuid']);
+                if ($storageSpecs) {
+                    $storageFF = $storageSpecs['form_factor'] ?? '';
+                    $normalized = $this->normalizeFormFactor($storageFF);
+                    if ($normalized === '2.5-inch' || $normalized === '3.5-inch') {
+                        return [
+                            'locked' => true,
+                            'size' => $normalized,
+                            'reason' => "existing_storage"
+                        ];
+                    }
+                }
+            }
+        }
+
+        // No lock exists
+        return [
+            'locked' => false,
+            'size' => null,
+            'reason' => "no_lock"
+        ];
+    }
+
+    /**
+     * PHASE 1: Validate form factor consistency for 2.5" and 3.5" storage
+     *
+     * @param string $incomingFormFactor Form factor of storage being added
+     * @param array $existingComponents Existing configuration
+     * @return array ['valid' => bool, 'error' => array|null, 'info' => array|null]
+     */
+    private function validateFormFactorConsistency($incomingFormFactor, $existingComponents) {
+        $normalized = $this->normalizeFormFactor($incomingFormFactor);
+
+        // Only validate 2.5" and 3.5" drives
+        if ($normalized !== '2.5-inch' && $normalized !== '3.5-inch') {
+            return ['valid' => true, 'error' => null, 'info' => null];
+        }
+
+        $lock = $this->getFormFactorLock($existingComponents);
+
+        if (!$lock['locked']) {
+            // No lock - this storage sets the lock
+            return [
+                'valid' => true,
+                'error' => null,
+                'info' => [
+                    'type' => 'form_factor_lock_set',
+                    'message' => "Form factor locked to $normalized - future storage must match"
+                ]
+            ];
+        }
+
+        // Lock exists - check if incoming storage matches
+        if ($lock['size'] === $normalized) {
+            return ['valid' => true, 'error' => null, 'info' => null];
+        }
+
+        // Mismatch - block with specific error
+        $reasonText = $this->getFormFactorLockReasonText($lock['reason']);
+        return [
+            'valid' => false,
+            'error' => [
+                'type' => 'form_factor_mismatch',
+                'message' => "Form factor locked to {$lock['size']} by $reasonText - cannot add $normalized storage",
+                'locked_size' => $lock['size'],
+                'incoming_size' => $normalized,
+                'locked_by' => $lock['reason'],
+                'resolution' => $this->getFormFactorResolution($lock['reason'], $lock['size'], $normalized)
+            ],
+            'info' => null
+        ];
+    }
+
+    /**
+     * Get human-readable text for form factor lock reason
+     */
+    private function getFormFactorLockReasonText($reason) {
+        switch ($reason) {
+            case 'chassis_bay_configuration':
+                return 'chassis bay configuration';
+            case 'existing_caddy':
+                return 'existing caddy';
+            case 'existing_storage':
+                return 'existing storage';
+            default:
+                return 'configuration';
+        }
+    }
+
+    /**
+     * Get resolution suggestion for form factor mismatch
+     */
+    private function getFormFactorResolution($reason, $lockedSize, $incomingSize) {
+        switch ($reason) {
+            case 'chassis_bay_configuration':
+                return "Replace chassis with $incomingSize bay configuration OR select $lockedSize storage";
+            case 'existing_caddy':
+                return "Remove $lockedSize caddy OR select $lockedSize storage";
+            case 'existing_storage':
+                return "Remove existing $lockedSize storage OR select $lockedSize storage";
+            default:
+                return "Select storage matching locked size: $lockedSize";
+        }
+    }
+
+    /**
+     * PHASE 1: Validate chassis against existing storage/caddy configuration
+     * Called when chassis is added AFTER storage/caddies
+     *
+     * @param string $chassisUuid Chassis being added
+     * @param array $existingComponents Existing configuration
+     * @return array ['valid' => bool, 'errors' => array]
+     */
+    public function validateChassisAgainstExistingConfig($chassisUuid, $existingComponents) {
+        $errors = [];
+
+        $chassisSpecs = $this->getChassisSpecs($chassisUuid);
+        if (!$chassisSpecs) {
+            return ['valid' => true, 'errors' => []]; // Can't validate without specs
+        }
+
+        // Get chassis bay size
+        $bayConfig = $chassisSpecs['drive_bays']['bay_configuration'] ?? [];
+        $chassisBaySize = null;
+        foreach ($bayConfig as $bay) {
+            $bayType = $bay['bay_type'] ?? '';
+            $normalized = $this->normalizeFormFactor($bayType);
+            if ($normalized === '2.5-inch' || $normalized === '3.5-inch') {
+                $chassisBaySize = $normalized;
+                break;
+            }
+        }
+
+        if (!$chassisBaySize) {
+            return ['valid' => true, 'errors' => []]; // Chassis doesn't have standard bays
+        }
+
+        // Check existing storage
+        if (!empty($existingComponents['storage']) && is_array($existingComponents['storage'])) {
+            foreach ($existingComponents['storage'] as $storage) {
+                $storageSpecs = $this->getStorageSpecs($storage['component_uuid']);
+                if ($storageSpecs) {
+                    $storageFF = $storageSpecs['form_factor'] ?? '';
+                    $normalized = $this->normalizeFormFactor($storageFF);
+                    if (($normalized === '2.5-inch' || $normalized === '3.5-inch') && $normalized !== $chassisBaySize) {
+                        $errors[] = [
+                            'type' => 'chassis_storage_mismatch',
+                            'message' => "Cannot add chassis with $chassisBaySize bays - configuration has $normalized storage",
+                            'chassis_bay_size' => $chassisBaySize,
+                            'existing_storage_size' => $normalized,
+                            'resolution' => "Remove $normalized storage OR select chassis with $normalized bays"
+                        ];
+                    }
+                }
+            }
+        }
+
+        // Check existing caddies
+        if (!empty($existingComponents['caddy']) && is_array($existingComponents['caddy'])) {
+            foreach ($existingComponents['caddy'] as $caddy) {
+                $caddySpecs = $this->componentDataService->getCaddyByUuid($caddy['component_uuid']);
+                if ($caddySpecs) {
+                    $caddySize = $caddySpecs['compatibility']['size'] ?? $caddySpecs['type'] ?? '';
+                    $normalized = $this->normalizeFormFactor($caddySize);
+                    if (($normalized === '2.5-inch' || $normalized === '3.5-inch') && $normalized !== $chassisBaySize) {
+                        $errors[] = [
+                            'type' => 'chassis_caddy_mismatch',
+                            'message' => "Cannot add chassis with $chassisBaySize bays - configuration has $normalized caddy",
+                            'chassis_bay_size' => $chassisBaySize,
+                            'existing_caddy_size' => $normalized,
+                            'resolution' => "Remove $normalized caddy OR select chassis with $normalized bays"
+                        ];
+                    }
+                }
+            }
+        }
+
+        return [
+            'valid' => empty($errors),
+            'errors' => $errors
+        ];
+    }
+
+    /**
+     * PHASE 2: Count total M.2 slots available in configuration
+     * Includes: motherboard direct M.2 slots + NVMe adapter M.2 slots
+     *
+     * @param array $existingComponents
+     * @return int Total M.2 slots available
+     */
+    private function countTotalM2Slots($existingComponents) {
+        $totalSlots = 0;
+
+        // Count motherboard M.2 slots
+        if (!empty($existingComponents['motherboard']) && isset($existingComponents['motherboard']['component_uuid'])) {
+            $mbSpecs = $this->getMotherboardSpecs($existingComponents['motherboard']['component_uuid']);
+            if ($mbSpecs) {
+                $m2Slots = $mbSpecs['storage']['nvme']['m2_slots'] ?? [];
+                if (!empty($m2Slots) && isset($m2Slots[0]['count'])) {
+                    $totalSlots += $m2Slots[0]['count'];
+                }
+            }
+        }
+
+        // Count NVMe adapter M.2 slots
+        $nvmeAdapters = $this->componentDataService->filterNvmeAdapters($existingComponents['pciecard'] ?? []);
+        foreach ($nvmeAdapters as $adapter) {
+            $m2Slots = $adapter['specs']['m2_slots'] ?? 0;
+            $quantity = $adapter['quantity'] ?? 1;
+            $totalSlots += ($m2Slots * $quantity);
+        }
+
+        return $totalSlots;
+    }
+
+    /**
+     * PHASE 2: Count M.2 slots currently used by existing storage
+     *
+     * @param array $existingComponents
+     * @return int Number of M.2 slots in use
+     */
+    private function countUsedM2Slots($existingComponents) {
+        $usedSlots = 0;
+
+        if (empty($existingComponents['storage']) || !is_array($existingComponents['storage'])) {
+            return 0;
+        }
+
+        foreach ($existingComponents['storage'] as $storage) {
+            $storageSpecs = $this->getStorageSpecs($storage['component_uuid']);
+            if (!$storageSpecs) {
+                continue;
+            }
+
+            $formFactor = strtolower($storageSpecs['form_factor'] ?? '');
+            $subtype = strtolower($storageSpecs['subtype'] ?? '');
+
+            // Check if this is M.2 storage
+            if (strpos($formFactor, 'm.2') !== false || strpos($subtype, 'm.2') !== false) {
+                $quantity = $storage['quantity'] ?? 1;
+                $usedSlots += $quantity;
+            }
+        }
+
+        return $usedSlots;
+    }
+
+    /**
+     * PHASE 2: Count total U.2 slots available in configuration
+     * Includes: motherboard direct U.2 slots + NVMe adapter U.2 slots
+     *
+     * @param array $existingComponents
+     * @return int Total U.2 slots available
+     */
+    private function countTotalU2Slots($existingComponents) {
+        $totalSlots = 0;
+
+        // Count motherboard U.2 slots
+        if (!empty($existingComponents['motherboard']) && isset($existingComponents['motherboard']['component_uuid'])) {
+            $mbSpecs = $this->getMotherboardSpecs($existingComponents['motherboard']['component_uuid']);
+            if ($mbSpecs) {
+                $u2Slots = $mbSpecs['storage']['nvme']['u2_slots'] ?? [];
+                if (isset($u2Slots['count'])) {
+                    $totalSlots += $u2Slots['count'];
+                }
+            }
+        }
+
+        // Count NVMe adapter U.2 slots (some adapters support U.2)
+        $nvmeAdapters = $this->componentDataService->filterNvmeAdapters($existingComponents['pciecard'] ?? []);
+        foreach ($nvmeAdapters as $adapter) {
+            $u2Slots = $adapter['specs']['u2_slots'] ?? 0;
+            $quantity = $adapter['quantity'] ?? 1;
+            $totalSlots += ($u2Slots * $quantity);
+        }
+
+        return $totalSlots;
+    }
+
+    /**
+     * PHASE 2: Count U.2 slots currently used by existing storage
+     *
+     * @param array $existingComponents
+     * @return int Number of U.2 slots in use
+     */
+    private function countUsedU2Slots($existingComponents) {
+        $usedSlots = 0;
+
+        if (empty($existingComponents['storage']) || !is_array($existingComponents['storage'])) {
+            return 0;
+        }
+
+        foreach ($existingComponents['storage'] as $storage) {
+            $storageSpecs = $this->getStorageSpecs($storage['component_uuid']);
+            if (!$storageSpecs) {
+                continue;
+            }
+
+            $formFactor = strtolower($storageSpecs['form_factor'] ?? '');
+            $subtype = strtolower($storageSpecs['subtype'] ?? '');
+
+            // Check if this is U.2 or U.3 storage
+            if (strpos($formFactor, 'u.2') !== false || strpos($formFactor, 'u.3') !== false ||
+                strpos($subtype, 'u.2') !== false || strpos($subtype, 'u.3') !== false) {
+                $quantity = $storage['quantity'] ?? 1;
+                $usedSlots += $quantity;
+            }
+        }
+
+        return $usedSlots;
+    }
+
+    /**
+     * PHASE 2: Get detailed M.2/U.2 slot usage information
+     *
+     * @param array $existingComponents
+     * @return array Slot usage statistics
+     */
+    public function getNvmeSlotUsage($existingComponents) {
+        return [
+            'm2' => [
+                'total' => $this->countTotalM2Slots($existingComponents),
+                'used' => $this->countUsedM2Slots($existingComponents),
+                'available' => max(0, $this->countTotalM2Slots($existingComponents) - $this->countUsedM2Slots($existingComponents))
+            ],
+            'u2' => [
+                'total' => $this->countTotalU2Slots($existingComponents),
+                'used' => $this->countUsedU2Slots($existingComponents),
+                'available' => max(0, $this->countTotalU2Slots($existingComponents) - $this->countUsedU2Slots($existingComponents))
+            ]
+        ];
+    }
+
+    /**
+     * PHASE 2: Validate motherboard against existing M.2/U.2 storage
+     * Called when motherboard is added AFTER M.2/U.2 storage exists
+     *
+     * @param string $motherboardUuid Motherboard being added
+     * @param array $existingComponents Existing configuration
+     * @return array ['valid' => bool, 'errors' => array, 'warnings' => array]
+     */
+    public function validateMotherboardForNvmeStorage($motherboardUuid, $existingComponents) {
+        $errors = [];
+        $warnings = [];
+
+        $mbSpecs = $this->getMotherboardSpecs($motherboardUuid);
+        if (!$mbSpecs) {
+            return ['valid' => true, 'errors' => [], 'warnings' => []]; // Can't validate without specs
+        }
+
+        // Get motherboard slot counts
+        $storage = $mbSpecs['storage'] ?? [];
+        $m2Slots = $storage['nvme']['m2_slots'] ?? [];
+        $motherboardM2Slots = (!empty($m2Slots) && isset($m2Slots[0]['count'])) ? $m2Slots[0]['count'] : 0;
+        $u2Slots = $storage['nvme']['u2_slots'] ?? [];
+        $motherboardU2Slots = isset($u2Slots['count']) ? $u2Slots['count'] : 0;
+
+        // Count existing M.2 and U.2 storage
+        $existingM2Count = $this->countUsedM2Slots($existingComponents);
+        $existingU2Count = $this->countUsedU2Slots($existingComponents);
+
+        // Count slots provided by NVMe adapters
+        $nvmeAdapters = $this->componentDataService->filterNvmeAdapters($existingComponents['pciecard'] ?? []);
+        $adapterM2Slots = 0;
+        $adapterU2Slots = 0;
+        foreach ($nvmeAdapters as $adapter) {
+            $adapterM2Slots += ($adapter['specs']['m2_slots'] ?? 0) * ($adapter['quantity'] ?? 1);
+            $adapterU2Slots += ($adapter['specs']['u2_slots'] ?? 0) * ($adapter['quantity'] ?? 1);
+        }
+
+        // Validate M.2 storage
+        if ($existingM2Count > 0) {
+            // Storage that must be connected to motherboard (not adapters)
+            $m2RequiringMotherboard = max(0, $existingM2Count - $adapterM2Slots);
+
+            if ($m2RequiringMotherboard > $motherboardM2Slots) {
+                $errors[] = [
+                    'type' => 'm2_insufficient_slots',
+                    'message' => "Cannot add motherboard - insufficient M.2 slots for existing storage",
+                    'existing_m2_storage' => $existingM2Count,
+                    'adapter_m2_slots' => $adapterM2Slots,
+                    'motherboard_m2_slots' => $motherboardM2Slots,
+                    'm2_requiring_motherboard' => $m2RequiringMotherboard,
+                    'resolution' => "Select motherboard with at least $m2RequiringMotherboard M.2 slots OR add more NVMe adapters OR remove M.2 storage"
+                ];
+            } else if ($motherboardM2Slots === 0 && $adapterM2Slots < $existingM2Count) {
+                $warnings[] = [
+                    'type' => 'm2_no_motherboard_slots',
+                    'message' => "Motherboard has no M.2 slots - all M.2 storage relies on NVMe adapters",
+                    'existing_m2_storage' => $existingM2Count,
+                    'adapter_m2_slots' => $adapterM2Slots,
+                    'recommendation' => "Consider motherboard with M.2 support for better performance"
+                ];
+            }
+        }
+
+        // Validate U.2 storage
+        if ($existingU2Count > 0) {
+            // Storage that must be connected to motherboard (not adapters)
+            $u2RequiringMotherboard = max(0, $existingU2Count - $adapterU2Slots);
+
+            if ($u2RequiringMotherboard > $motherboardU2Slots) {
+                $errors[] = [
+                    'type' => 'u2_insufficient_slots',
+                    'message' => "Cannot add motherboard - insufficient U.2 slots for existing storage",
+                    'existing_u2_storage' => $existingU2Count,
+                    'adapter_u2_slots' => $adapterU2Slots,
+                    'motherboard_u2_slots' => $motherboardU2Slots,
+                    'u2_requiring_motherboard' => $u2RequiringMotherboard,
+                    'resolution' => "Select motherboard with at least $u2RequiringMotherboard U.2 slots OR add U.2-capable adapters OR remove U.2 storage"
+                ];
+            } else if ($motherboardU2Slots === 0 && $adapterU2Slots < $existingU2Count) {
+                $warnings[] = [
+                    'type' => 'u2_no_motherboard_slots',
+                    'message' => "Motherboard has no U.2 slots - all U.2 storage relies on adapters",
+                    'existing_u2_storage' => $existingU2Count,
+                    'adapter_u2_slots' => $adapterU2Slots,
+                    'recommendation' => "Consider motherboard with U.2 support"
+                ];
+            }
+        }
+
+        return [
+            'valid' => empty($errors),
+            'errors' => $errors,
+            'warnings' => $warnings
+        ];
     }
 }

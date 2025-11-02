@@ -47,11 +47,40 @@ class OnboardNICHandler {
 
             error_log("Found " . count($onboardNICs) . " onboard NIC(s) in motherboard specs");
 
+            // First, clean up any old/truncated onboard NICs for this motherboard
+            $cleanupStmt = $this->pdo->prepare("
+                DELETE FROM nicinventory
+                WHERE ParentComponentUUID = ?
+                AND SourceType = 'onboard'
+                AND ServerUUID = ?
+            ");
+            $cleanupStmt->execute([$motherboardUuid, $configUuid]);
+            $deletedCount = $cleanupStmt->rowCount();
+            if ($deletedCount > 0) {
+                error_log("Cleaned up $deletedCount old onboard NIC(s) before re-adding");
+            }
+
+            // Also clean up from server_configuration_components
+            $cleanupConfigStmt = $this->pdo->prepare("
+                DELETE FROM server_configuration_components
+                WHERE config_uuid = ?
+                AND component_type = 'nic'
+                AND component_uuid IN (
+                    SELECT UUID FROM nicinventory
+                    WHERE ParentComponentUUID = ?
+                    AND SourceType = 'onboard'
+                )
+            ");
+            $cleanupConfigStmt->execute([$configUuid, $motherboardUuid]);
+
             foreach ($onboardNICs as $index => $nicSpec) {
                 $nicIndex = $index + 1;
-                $syntheticUuid = "onboard-nic-{$motherboardUuid}-{$nicIndex}";
+                // Create shorter UUID that fits in varchar(36): onboard-MB_SHORT-N
+                // Format: onboard-{first_8_chars}-{nic_index} = max 18 chars
+                $mbShort = substr($motherboardUuid, 0, 8);
+                $syntheticUuid = "onboard-{$mbShort}-{$nicIndex}";
 
-                error_log("Processing onboard NIC #{$nicIndex}: $syntheticUuid");
+                error_log("Processing onboard NIC #{$nicIndex}: $syntheticUuid (full MB UUID: $motherboardUuid)");
 
                 // Create descriptive notes
                 $notes = sprintf(
@@ -62,11 +91,14 @@ class OnboardNICHandler {
                     $nicSpec['connector'] ?? 'Unknown Connector'
                 );
 
+                // Generate unique serial number for onboard NIC
+                $serialNumber = sprintf('ONBOARD-%s-%d', substr($motherboardUuid, 0, 8), $nicIndex);
+
                 // Insert into nicinventory with onboard tracking
                 $stmt = $this->pdo->prepare("
                     INSERT INTO nicinventory
                     (UUID, SourceType, ParentComponentUUID, OnboardNICIndex, Status, ServerUUID, Notes, SerialNumber, Flag, CreatedAt, UpdatedAt)
-                    VALUES (?, 'onboard', ?, ?, 2, ?, ?, 'ONBOARD', 'Onboard', NOW(), NOW())
+                    VALUES (?, 'onboard', ?, ?, 2, ?, ?, ?, 'Onboard', NOW(), NOW())
                 ");
 
                 $result = $stmt->execute([
@@ -74,7 +106,8 @@ class OnboardNICHandler {
                     $motherboardUuid,
                     $nicIndex,
                     $configUuid,
-                    $notes
+                    $notes,
+                    $serialNumber
                 ]);
 
                 if (!$result) {
@@ -171,7 +204,8 @@ class OnboardNICHandler {
                     ni.Status
                 FROM server_configuration_components scc
                 LEFT JOIN nicinventory ni ON scc.component_uuid = ni.UUID
-                WHERE scc.config_uuid = ? AND scc.component_type = 'nic'
+                WHERE scc.config_uuid = ?
+                AND scc.component_type = 'nic'
             ");
             $stmt->execute([$configUuid]);
             $nics = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -215,20 +249,53 @@ class OnboardNICHandler {
                 $nicConfigData['summary']['total_nics']++;
             }
 
-            // Update server_build_templates.nic_config
+            // First, verify the config exists
+            $checkStmt = $this->pdo->prepare("SELECT COUNT(*) FROM server_configurations WHERE config_uuid = ?");
+            $checkStmt->execute([$configUuid]);
+            $exists = $checkStmt->fetchColumn();
+
+            error_log("Config UUID exists in server_configurations: " . ($exists ? 'YES' : 'NO'));
+
+            if (!$exists) {
+                error_log("ERROR: config_uuid '$configUuid' not found in server_configurations table");
+                return false;
+            }
+
+            // Update server_configurations.nic_config
             $stmt = $this->pdo->prepare("
-                UPDATE server_build_templates
+                UPDATE server_configurations
                 SET nic_config = ?
                 WHERE config_uuid = ?
             ");
-            $result = $stmt->execute([json_encode($nicConfigData, JSON_PRETTY_PRINT), $configUuid]);
 
-            error_log("nic_config JSON updated: " . ($result ? 'success' : 'failed'));
+            $jsonString = json_encode($nicConfigData, JSON_PRETTY_PRINT);
+            error_log("Updating nic_config with JSON (length: " . strlen($jsonString) . "): " . substr($jsonString, 0, 200));
 
-            return $result;
+            try {
+                $result = $stmt->execute([$jsonString, $configUuid]);
+                $errorInfo = $stmt->errorInfo();
+
+                error_log("Execute result: " . ($result ? 'true' : 'false'));
+                error_log("Error info: " . json_encode($errorInfo));
+                error_log("Rows affected: " . $stmt->rowCount());
+
+                if (!$result) {
+                    error_log("UPDATE failed with PDO error code: " . $errorInfo[0]);
+                } else if ($stmt->rowCount() === 0) {
+                    error_log("WARNING: UPDATE succeeded but affected 0 rows");
+                } else {
+                    error_log("nic_config JSON updated successfully");
+                }
+
+                return $result;
+            } catch (PDOException $pdoEx) {
+                error_log("PDOException during UPDATE: " . $pdoEx->getMessage());
+                return false;
+            }
 
         } catch (Exception $e) {
             error_log("Error updating nic_config JSON: " . $e->getMessage());
+            error_log("Stack trace: " . $e->getTraceAsString());
             return false;
         }
     }

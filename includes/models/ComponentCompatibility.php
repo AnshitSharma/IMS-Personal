@@ -567,7 +567,7 @@ class ComponentCompatibility {
         try {
             $jsonContent = file_get_contents($filePath);
             $jsonData = json_decode($jsonContent, true);
-            
+
             if (!$jsonData) {
                 return [
                     'found' => false,
@@ -575,7 +575,33 @@ class ComponentCompatibility {
                     'data' => null
                 ];
             }
-            
+
+            // Handle chassis special structure: chassis_specifications -> manufacturers
+            if ($componentType === 'chassis' && isset($jsonData['chassis_specifications']['manufacturers'])) {
+                $jsonData = $jsonData['chassis_specifications']['manufacturers'];
+            }
+
+            // Handle caddy special structure: caddies array wrapper
+            if ($componentType === 'caddy' && isset($jsonData['caddies'])) {
+                // Caddy JSON has direct array of models, not brand/series hierarchy
+                foreach ($jsonData['caddies'] as $caddy) {
+                    $caddyUuid = $caddy['UUID'] ?? $caddy['uuid'] ?? '';
+                    if ($caddyUuid === $uuid) {
+                        return [
+                            'found' => true,
+                            'error' => null,
+                            'data' => $caddy
+                        ];
+                    }
+                }
+                // Not found in caddies array
+                return [
+                    'found' => false,
+                    'error' => "Component UUID $uuid not found in caddy JSON",
+                    'data' => null
+                ];
+            }
+
             // Search for component by UUID
             foreach ($jsonData as $brandData) {
                 // Handle different JSON structures
@@ -585,21 +611,43 @@ class ComponentCompatibility {
                 if (isset($brandData['models'])) {
                     $modelArray = $brandData['models'];
                 }
-                // NIC structure: series -> families -> port_configurations
+                // NIC structure: series -> models (NEW format)
                 elseif (isset($brandData['series'])) {
                     foreach ($brandData['series'] as $series) {
-                        if (isset($series['families'])) {
+                        // Check for direct models in series
+                        if (isset($series['models'])) {
+                            foreach ($series['models'] as $model) {
+                                $modelUuid = $model['UUID'] ?? $model['uuid'] ?? '';
+                                if ($modelUuid === $uuid) {
+                                    return [
+                                        'found' => true,
+                                        'error' => null,
+                                        'data' => $model
+                                    ];
+                                }
+                            }
+                        }
+                        // OLD NIC structure: series -> families -> port_configurations (for backward compatibility)
+                        elseif (isset($series['families'])) {
                             foreach ($series['families'] as $family) {
                                 if (isset($family['port_configurations'])) {
-                                    $modelArray = $family['port_configurations'];
-                                    break 2; // Exit both loops
+                                    foreach ($family['port_configurations'] as $model) {
+                                        $modelUuid = $model['UUID'] ?? $model['uuid'] ?? '';
+                                        if ($modelUuid === $uuid) {
+                                            return [
+                                                'found' => true,
+                                                'error' => null,
+                                                'data' => $model
+                                            ];
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
                 }
 
-                // Search through the model array
+                // Search through the model array (for standard structure)
                 if ($modelArray) {
                     foreach ($modelArray as $model) {
                         $modelUuid = $model['UUID'] ?? $model['uuid'] ?? '';
@@ -678,28 +726,84 @@ class ComponentCompatibility {
         
         // Find the specific component by UUID with detailed logging
         $foundComponents = 0;
+
+        // Special handling for caddy JSON structure: {"caddies": [...]}
+        if ($type === 'caddy' && isset($jsonData['caddies']) && is_array($jsonData['caddies'])) {
+            foreach ($jsonData['caddies'] as $caddy) {
+                $foundComponents++;
+                $caddyUuid = $caddy['UUID'] ?? $caddy['uuid'] ?? '';
+                if ($caddyUuid === $uuid) {
+                    error_log("DEBUG: Found caddy $uuid in caddies array");
+                    return $caddy;
+                }
+            }
+            error_log("DEBUG: Caddy $uuid not found in caddies array (searched $foundComponents caddies)");
+            return null;
+        }
+
         foreach ($jsonData as $brandData) {
             $modelArray = null;
+
+            // Chassis structure: manufacturers -> series -> models
+            if ($type === 'chassis' && isset($brandData['manufacturer'])) {
+                if (isset($brandData['series']) && is_array($brandData['series'])) {
+                    foreach ($brandData['series'] as $series) {
+                        if (isset($series['models']) && is_array($series['models'])) {
+                            foreach ($series['models'] as $model) {
+                                $foundComponents++;
+                                $modelUuid = $model['UUID'] ?? $model['uuid'] ?? '';
+                                if ($modelUuid === $uuid) {
+                                    $manufacturerName = $brandData['manufacturer'] ?? 'Unknown';
+                                    error_log("DEBUG: Found chassis $uuid in manufacturer $manufacturerName");
+                                    return $model;
+                                }
+                            }
+                        }
+                    }
+                }
+                continue; // Skip to next manufacturer
+            }
 
             // Standard structure: models array directly in brand
             if (isset($brandData['models']) && is_array($brandData['models'])) {
                 $modelArray = $brandData['models'];
             }
-            // NIC structure: series -> families -> port_configurations
-            elseif (isset($brandData['series'])) {
+            // NIC structure: brand -> series -> models (NOT families -> port_configurations)
+            elseif (isset($brandData['series']) && is_array($brandData['series'])) {
                 foreach ($brandData['series'] as $series) {
-                    if (isset($series['families'])) {
+                    // Check for direct models array in series
+                    if (isset($series['models']) && is_array($series['models'])) {
+                        foreach ($series['models'] as $model) {
+                            $foundComponents++;
+                            $modelUuid = $model['UUID'] ?? $model['uuid'] ?? '';
+                            if ($modelUuid === $uuid) {
+                                $brandName = $brandData['brand'] ?? 'Unknown';
+                                $seriesName = $series['name'] ?? 'Unknown';
+                                error_log("DEBUG: Found component $uuid in brand $brandName, series $seriesName");
+                                return $model;
+                            }
+                        }
+                    }
+                    // Fallback: families -> port_configurations (legacy structure)
+                    elseif (isset($series['families'])) {
                         foreach ($series['families'] as $family) {
                             if (isset($family['port_configurations'])) {
-                                $modelArray = $family['port_configurations'];
-                                break 2; // Exit both loops
+                                foreach ($family['port_configurations'] as $model) {
+                                    $foundComponents++;
+                                    $modelUuid = $model['UUID'] ?? $model['uuid'] ?? '';
+                                    if ($modelUuid === $uuid) {
+                                        $brandName = $brandData['brand'] ?? 'Unknown';
+                                        error_log("DEBUG: Found component $uuid in brand $brandName (port_configurations)");
+                                        return $model;
+                                    }
+                                }
                             }
                         }
                     }
                 }
             }
 
-            // Search through the model array
+            // Search through the model array (for standard structure)
             if ($modelArray) {
                 foreach ($modelArray as $model) {
                     $foundComponents++;
@@ -744,29 +848,47 @@ class ComponentCompatibility {
     }
     
     private function extractSupportedMemoryTypes($data, $componentType) {
+        $types = null;
+
         // For motherboards, check the memory object first
         if ($componentType === 'motherboard' && isset($data['memory']) && is_array($data['memory'])) {
             $memoryType = $data['memory']['type'] ?? null;
             if ($memoryType) {
                 // Return as array even if it's a single type
-                return is_array($memoryType) ? $memoryType : [$memoryType];
+                $types = is_array($memoryType) ? $memoryType : [$memoryType];
             }
         }
 
         // For other components or fallback
-        $memoryTypes = $data['memory_types'] ?? $data['supported_memory'] ?? null;
+        if (!$types) {
+            $memoryTypes = $data['memory_types'] ?? $data['supported_memory'] ?? null;
 
-        if (is_string($memoryTypes)) {
-            return explode(',', $memoryTypes);
-        } elseif (is_array($memoryTypes)) {
-            return $memoryTypes;
+            if (is_string($memoryTypes)) {
+                $types = explode(',', $memoryTypes);
+            } elseif (is_array($memoryTypes)) {
+                $types = $memoryTypes;
+            }
+        }
+
+        // Normalize all memory types to base DDR type (remove speed suffixes)
+        if ($types && is_array($types)) {
+            $normalizedTypes = [];
+            foreach ($types as $type) {
+                $normalized = $this->normalizeMemoryType(trim($type));
+                if ($normalized) {
+                    $normalizedTypes[] = $normalized;
+                }
+            }
+            return !empty($normalizedTypes) ? array_unique($normalizedTypes) : null;
         }
 
         return null;
     }
     
     private function extractMemoryType($data) {
-        return $data['type'] ?? $data['memory_type'] ?? null;
+        $type = $data['type'] ?? $data['memory_type'] ?? null;
+        // Normalize to base DDR type (DDR5, DDR4, etc.) without speed suffix
+        return $this->normalizeMemoryType($type);
     }
     
     private function extractMemorySpeed($data) {
@@ -826,7 +948,95 @@ class ComponentCompatibility {
 
         return $formFactor;
     }
-    
+
+    /**
+     * Normalize memory type to base DDR type (remove speed suffix)
+     * Examples: "DDR5-4800" → "DDR5", "DDR4-3200" → "DDR4", "DDR5" → "DDR5"
+     *
+     * @param string|null $memoryType The memory type to normalize
+     * @return string|null The normalized memory type
+     */
+    private function normalizeMemoryType($memoryType) {
+        if (!$memoryType) {
+            return null;
+        }
+
+        // Remove speed suffix (e.g., "-4800", "-3200")
+        $normalized = preg_replace('/-\d+$/', '', trim($memoryType));
+
+        // Uppercase for consistency (DDR5, DDR4, etc.)
+        return strtoupper($normalized);
+    }
+
+    /**
+     * Extract DDR generation number from memory type
+     * Examples: "DDR5" → 5, "DDR4" → 4, "DDR5-4800" → 5
+     *
+     * @param string|null $memoryType The memory type to analyze
+     * @return int The DDR generation number, or 0 if not detected
+     */
+    private function getMemoryGeneration($memoryType) {
+        if (!$memoryType) {
+            return 0;
+        }
+
+        // Normalize first to handle formats like "DDR5-4800"
+        $normalized = $this->normalizeMemoryType($memoryType);
+
+        // Extract generation number (DDR5 → 5, DDR4 → 4)
+        if (preg_match('/DDR(\d+)/', $normalized, $matches)) {
+            return (int)$matches[1];
+        }
+
+        return 0;
+    }
+
+    /**
+     * Check if CPU memory type is compatible with required memory type
+     * Implements backward compatibility logic (newer CPU can use older RAM with warning)
+     *
+     * Compatibility Rules:
+     * - Same generation (DDR5 + DDR5) = Compatible, no warning
+     * - Newer CPU generation (DDR5 CPU + DDR4 RAM) = Compatible with warning (backward compatible)
+     * - Older CPU generation (DDR4 CPU + DDR5 RAM) = Incompatible (cannot use newer RAM)
+     *
+     * @param string $cpuMemoryType The memory type supported by CPU
+     * @param string $requiredMemoryType The memory type required by installed RAM
+     * @return array ['compatible' => bool, 'warning' => string|null, 'reason' => string]
+     */
+    private function checkMemoryTypeCompatibility($cpuMemoryType, $requiredMemoryType) {
+        $cpuGen = $this->getMemoryGeneration($cpuMemoryType);
+        $requiredGen = $this->getMemoryGeneration($requiredMemoryType);
+
+        $cpuNormalized = $this->normalizeMemoryType($cpuMemoryType);
+        $requiredNormalized = $this->normalizeMemoryType($requiredMemoryType);
+
+        // Same generation - perfect match
+        if ($cpuGen === $requiredGen) {
+            return [
+                'compatible' => true,
+                'warning' => null,
+                'reason' => "Perfect match: CPU supports {$cpuNormalized}, RAM is {$requiredNormalized}"
+            ];
+        }
+
+        // CPU supports newer generation than installed RAM - backward compatible
+        if ($cpuGen > $requiredGen) {
+            return [
+                'compatible' => true,
+                'warning' => "CPU supports {$cpuNormalized} but {$requiredNormalized} RAM installed - RAM will run at {$requiredNormalized} speeds",
+                'reason' => "Backward compatible: CPU ({$cpuNormalized}) supports newer generation than RAM ({$requiredNormalized})"
+            ];
+        }
+
+        // CPU supports older generation than installed RAM - incompatible
+        return [
+            'compatible' => false,
+            'warning' => null,
+            'reason' => "CPU only supports {$cpuNormalized} but {$requiredNormalized} RAM is installed - incompatible"
+        ];
+    }
+
     private function extractECCSupport($data) {
         return $data['ecc_support'] ?? $data['ecc'] ?? false;
     }
@@ -3411,6 +3621,7 @@ class ComponentCompatibility {
 
             $ramMemoryType = $this->extractMemoryType($ramData);
             $ramFormFactor = $this->extractMemoryFormFactor($ramData);
+            $ramModuleType = $ramData['module_type'] ?? null; // UDIMM, RDIMM, LRDIMM
             $ramSpeed = $this->extractMemorySpeed($ramData);
 
             // Collect memory requirements from existing components
@@ -3441,7 +3652,7 @@ class ComponentCompatibility {
                     $result['details'] = array_merge($result['details'], $mbCompatResult['details']);
 
                 } elseif ($compType === 'ram') {
-                    $ramCompatResult = $this->analyzeExistingRAMForRAM($existingComp, $ramFormFactor);
+                    $ramCompatResult = $this->analyzeExistingRAMForRAM($existingComp, $ramFormFactor, $ramModuleType);
                     if (!$ramCompatResult['compatible']) {
                         $result['compatible'] = false;
                         $result['issues'] = array_merge($result['issues'], $ramCompatResult['issues']);
@@ -3907,6 +4118,9 @@ class ComponentCompatibility {
      */
     public function checkCPUDecentralizedCompatibility($cpuComponent, $existingComponents) {
         try {
+            $cpuUuid = $cpuComponent['uuid'];
+            error_log("=== CPU COMPATIBILITY CHECK START for UUID: $cpuUuid ===");
+
             $result = [
                 'compatible' => true,
                 'compatibility_score' => 1.0,
@@ -3918,21 +4132,28 @@ class ComponentCompatibility {
 
             // If no existing components, CPU is always compatible
             if (empty($existingComponents)) {
+                error_log("CPU $cpuUuid: No existing components - compatible");
                 $result['details'][] = 'No existing components - all CPUs compatible';
                 return $result;
             }
 
             // Get CPU specifications
-            $cpuData = $this->getComponentData('cpu', $cpuComponent['uuid']);
+            $cpuData = $this->getComponentData('cpu', $cpuUuid);
             if (!$cpuData) {
+                error_log("ERROR: CPU $cpuUuid - specifications not found in database or JSON");
                 $result['warnings'][] = 'CPU specifications not found - using basic compatibility';
                 $result['compatibility_score'] = 0.8;
+                $result['compatibility_summary'] = 'CPU specifications not found in database';
                 return $result;
             }
 
             $cpuSocket = $this->extractSocketType($cpuData, 'cpu');
             $cpuMemoryTypes = $this->extractSupportedMemoryTypes($cpuData, 'cpu');
             $cpuMaxMemorySpeed = $this->extractMaxMemorySpeed($cpuData, 'cpu');
+
+            error_log("CPU $cpuUuid extracted specs - Socket: " . ($cpuSocket ?? 'NULL') .
+                     ", Memory Types: " . json_encode($cpuMemoryTypes) .
+                     ", Max Memory Speed: " . ($cpuMaxMemorySpeed ?? 'NULL'));
 
             // Collect compatibility requirements from existing components
             $compatibilityRequirements = [
@@ -3974,12 +4195,19 @@ class ComponentCompatibility {
 
             // Apply CPU compatibility logic using collected requirements
             if ($result['compatible']) {
+                error_log("CPU $cpuUuid: Applying final compatibility rules with requirements: " . json_encode($compatibilityRequirements));
                 $finalCompatResult = $this->applyCPUCompatibilityRules($cpuData, $compatibilityRequirements);
                 $result = array_merge($result, $finalCompatResult);
+                error_log("CPU $cpuUuid: After applying rules - Compatible: " . ($result['compatible'] ? 'YES' : 'NO') .
+                         ", Issues: " . json_encode($result['issues']));
             }
 
             // Create concise compatibility summary for display
             $result['compatibility_summary'] = $this->createCPUCompatibilitySummary($cpuData, $compatibilityRequirements, $result);
+
+            error_log("=== CPU COMPATIBILITY CHECK END for UUID: $cpuUuid - Result: " .
+                     ($result['compatible'] ? 'COMPATIBLE' : 'INCOMPATIBLE') .
+                     ", Summary: " . $result['compatibility_summary'] . " ===");
 
             return $result;
 
@@ -4509,7 +4737,7 @@ class ComponentCompatibility {
     /**
      * Analyze existing RAM for form factor compatibility
      */
-    private function analyzeExistingRAMForRAM($existingRamComponent, $newRamFormFactor) {
+    private function analyzeExistingRAMForRAM($existingRamComponent, $newRamFormFactor, $newRamModuleType = null) {
         $existingRamData = $this->getComponentData('ram', $existingRamComponent['uuid']);
         $result = ['compatible' => true, 'issues' => [], 'details' => []];
 
@@ -4519,12 +4747,22 @@ class ComponentCompatibility {
         }
 
         $existingFormFactor = $this->extractMemoryFormFactor($existingRamData);
+        $existingModuleType = $existingRamData['module_type'] ?? null;
 
+        // Check form factor compatibility (DIMM vs SO-DIMM physical shape)
         if ($existingFormFactor && $newRamFormFactor && $existingFormFactor !== $newRamFormFactor) {
             $result['compatible'] = false;
             $result['issues'][] = "Form factor mismatch: new RAM ({$newRamFormFactor}) vs existing RAM ({$existingFormFactor})";
         } else if ($existingFormFactor) {
             $result['details'][] = "Form factor matches existing RAM: {$existingFormFactor}";
+        }
+
+        // Check module type compatibility (UDIMM vs RDIMM vs LRDIMM)
+        if ($existingModuleType && $newRamModuleType && $existingModuleType !== $newRamModuleType) {
+            $result['compatible'] = false;
+            $result['issues'][] = "Module type mismatch: new RAM ({$newRamModuleType}) vs existing RAM ({$existingModuleType}). UDIMM, RDIMM, and LRDIMM cannot be mixed.";
+        } else if ($existingModuleType && $newRamModuleType) {
+            $result['details'][] = "Module type matches existing RAM: {$existingModuleType}";
         }
 
         return $result;
@@ -4907,20 +5145,31 @@ class ComponentCompatibility {
      * Analyze existing motherboard for CPU compatibility requirements
      */
     private function analyzeExistingMotherboardForCPU($motherboardComponent, &$compatibilityRequirements) {
-        $motherboardData = $this->getComponentData('motherboard', $motherboardComponent['uuid']);
+        $motherboardUuid = $motherboardComponent['uuid'];
+        error_log("Analyzing motherboard $motherboardUuid for CPU requirements");
+
+        $motherboardData = $this->getComponentData('motherboard', $motherboardUuid);
         $result = ['compatible' => true, 'issues' => [], 'details' => []];
 
         if (!$motherboardData) {
+            error_log("WARNING: Motherboard $motherboardUuid data not found");
             $result['details'][] = 'Motherboard specifications not found - basic compatibility assumed';
             return $result;
         }
 
+        error_log("Motherboard $motherboardUuid data loaded, extracting socket type");
+
         // Extract motherboard socket type
         $socketType = $this->extractSocketType($motherboardData, 'motherboard');
+        error_log("Motherboard $motherboardUuid socket extracted: " . ($socketType ?? 'NULL'));
+
         if ($socketType) {
             $compatibilityRequirements['required_socket'] = $socketType;
             $compatibilityRequirements['sources'][] = "Motherboard socket: {$socketType}";
             $result['details'][] = "Motherboard requires socket: {$socketType}";
+            error_log("Set required_socket to: $socketType");
+        } else {
+            error_log("WARNING: Could not extract socket type from motherboard $motherboardUuid");
         }
 
         return $result;
@@ -4930,28 +5179,39 @@ class ComponentCompatibility {
      * Analyze existing RAM for CPU compatibility requirements
      */
     private function analyzeExistingRAMForCPU($ramComponent, &$compatibilityRequirements) {
-        $ramData = $this->getComponentData('ram', $ramComponent['uuid']);
+        $ramUuid = $ramComponent['uuid'];
+        error_log("Analyzing RAM $ramUuid for CPU requirements");
+
+        $ramData = $this->getComponentData('ram', $ramUuid);
         $result = ['compatible' => true, 'issues' => [], 'details' => []];
 
         if (!$ramData) {
+            error_log("WARNING: RAM $ramUuid data not found");
             $result['details'][] = 'RAM specifications not found - basic compatibility assumed';
             return $result;
         }
 
-        // Extract RAM specifications
+        // Extract RAM specifications (already normalized by extractMemoryType)
         $ramType = $this->extractMemoryType($ramData);
         $ramSpeed = $this->extractMemorySpeed($ramData);
 
+        error_log("RAM $ramUuid extracted specs - Type: " . ($ramType ?? 'NULL') . ", Speed: " . ($ramSpeed ?? 'NULL') . "MHz");
+
         if ($ramType) {
+            // RAM type is already normalized by extractMemoryType() to base DDR type (DDR5, DDR4, etc.)
             $compatibilityRequirements['memory_types_required'][] = $ramType;
             $compatibilityRequirements['sources'][] = "RAM type: {$ramType}";
             $result['details'][] = "CPU must support memory type: {$ramType}";
+            error_log("Added RAM type requirement: $ramType");
+        } else {
+            error_log("WARNING: Could not extract memory type from RAM $ramUuid");
         }
 
         if ($ramSpeed) {
             $compatibilityRequirements['max_memory_speed_required'] = max($compatibilityRequirements['max_memory_speed_required'], $ramSpeed);
             $compatibilityRequirements['sources'][] = "RAM speed: {$ramSpeed}MHz";
             $result['details'][] = "CPU must support memory speed: {$ramSpeed}MHz or higher";
+            error_log("Added RAM speed requirement: {$ramSpeed}MHz");
         }
 
         return $result;
@@ -5001,6 +5261,10 @@ class ComponentCompatibility {
         $cpuMemoryTypes = $this->extractSupportedMemoryTypes($cpuData, 'cpu');
         $cpuMaxMemorySpeed = $this->extractMaxMemorySpeed($cpuData, 'cpu');
 
+        error_log("applyCPUCompatibilityRules - CPU Socket: " . ($cpuSocket ?? 'NULL') .
+                 ", Memory Types: " . json_encode($cpuMemoryTypes) .
+                 ", Max Memory Speed: " . ($cpuMaxMemorySpeed ?? 'NULL'));
+
         // Check socket compatibility
         if ($compatibilityRequirements['required_socket']) {
             $requiredSocket = $compatibilityRequirements['required_socket'];
@@ -5009,38 +5273,90 @@ class ComponentCompatibility {
             $cpuSocketNormalized = strtolower(trim($cpuSocket ?? ''));
             $requiredSocketNormalized = strtolower(trim($requiredSocket ?? ''));
 
+            error_log("Socket comparison - CPU: '$cpuSocketNormalized' vs Required: '$requiredSocketNormalized' - Match: " .
+                     ($cpuSocketNormalized === $requiredSocketNormalized ? 'YES' : 'NO'));
+
             if ($cpuSocketNormalized !== $requiredSocketNormalized) {
                 $result['compatible'] = false;
                 $result['issues'][] = "CPU socket ({$cpuSocket}) does not match required socket ({$requiredSocket})";
+                error_log("SOCKET MISMATCH DETECTED!");
             } else {
                 $result['recommendations'][] = "CPU socket ({$cpuSocket}) matches motherboard socket";
+                error_log("Socket match confirmed");
             }
+        } else {
+            error_log("No socket requirement specified");
         }
 
-        // Check memory type compatibility
+        // Check memory type compatibility with smart backward compatibility logic
         if (!empty($compatibilityRequirements['memory_types_required'])) {
             $requiredTypes = array_unique($compatibilityRequirements['memory_types_required']);
+            error_log("Checking memory type compatibility - Required: " . json_encode($requiredTypes) .
+                     ", CPU supports: " . json_encode($cpuMemoryTypes));
 
             foreach ($requiredTypes as $requiredType) {
-                if ($cpuMemoryTypes && !in_array($requiredType, $cpuMemoryTypes)) {
+                // Normalize the required type
+                $normalizedRequired = $this->normalizeMemoryType($requiredType);
+                $compatible = false;
+                $compatWarning = null;
+                $compatReason = null;
+
+                if ($cpuMemoryTypes && is_array($cpuMemoryTypes)) {
+                    // Check each CPU-supported memory type
+                    foreach ($cpuMemoryTypes as $cpuType) {
+                        $compatCheck = $this->checkMemoryTypeCompatibility($cpuType, $normalizedRequired);
+
+                        if ($compatCheck['compatible']) {
+                            $compatible = true;
+
+                            // Store warning if backward compatibility scenario (DDR5 CPU + DDR4 RAM)
+                            if ($compatCheck['warning']) {
+                                $result['warnings'][] = $compatCheck['warning'];
+                                error_log("Memory type compatible with warning: " . $compatCheck['warning']);
+                            } else {
+                                error_log("Memory type perfect match: " . $compatCheck['reason']);
+                            }
+
+                            $result['recommendations'][] = "CPU supports required memory type: {$normalizedRequired}";
+                            break; // Found compatible type, no need to check others
+                        } else {
+                            // Store the incompatibility reason for potential use
+                            $compatReason = $compatCheck['reason'];
+                        }
+                    }
+                }
+
+                // If no compatible memory type found, mark as incompatible
+                if (!$compatible) {
                     $result['compatible'] = false;
-                    $result['issues'][] = "CPU does not support required memory type: {$requiredType} (supported: " . implode(', ', $cpuMemoryTypes) . ")";
-                } else {
-                    $result['recommendations'][] = "CPU supports required memory type: {$requiredType}";
+                    if ($compatReason) {
+                        $result['issues'][] = $compatReason;
+                        error_log("MEMORY TYPE INCOMPATIBLE: " . $compatReason);
+                    } else {
+                        $result['issues'][] = "CPU does not support required memory type: {$normalizedRequired} (CPU supports: " . implode(', ', $cpuMemoryTypes) . ")";
+                        error_log("MEMORY TYPE MISMATCH: CPU does not support $normalizedRequired");
+                    }
                 }
             }
+        } else {
+            error_log("No memory type requirements specified");
         }
 
         // Check memory speed compatibility
         if ($compatibilityRequirements['max_memory_speed_required'] > 0 && $cpuMaxMemorySpeed) {
             $requiredSpeed = $compatibilityRequirements['max_memory_speed_required'];
+            error_log("Checking memory speed - CPU max: {$cpuMaxMemorySpeed}MHz, Required: {$requiredSpeed}MHz");
 
             if ($cpuMaxMemorySpeed < $requiredSpeed) {
                 $result['compatible'] = false;
                 $result['issues'][] = "CPU maximum memory speed ({$cpuMaxMemorySpeed}MHz) is lower than required ({$requiredSpeed}MHz)";
+                error_log("MEMORY SPEED MISMATCH: CPU speed too low");
             } else {
                 $result['recommendations'][] = "CPU memory speed ({$cpuMaxMemorySpeed}MHz) supports existing RAM ({$requiredSpeed}MHz)";
+                error_log("Memory speed check passed");
             }
+        } else {
+            error_log("No memory speed requirements specified");
         }
 
         return $result;
@@ -5065,16 +5381,27 @@ class ComponentCompatibility {
                 return "Compatible - no constraints found";
             }
         }
-        // If incompatible
+        // If incompatible - provide detailed reason
         else {
+            // First check if we have specific issues in the result
+            if (!empty($compatibilityResult['issues'])) {
+                // Return the first (most important) issue
+                return $compatibilityResult['issues'][0];
+            }
+
+            // Fallback to socket-based messages
             if ($requiredSocket && $cpuSocket && $cpuSocketNormalized !== $requiredSocketNormalized) {
                 return "CPU socket ({$cpuSocket}) incompatible with motherboard socket ({$requiredSocket})";
             } elseif ($requiredSocket && !$cpuSocket) {
                 return "CPU socket unknown - motherboard requires {$requiredSocket}";
+            } elseif (!$requiredSocket && !$cpuSocket) {
+                return "Incompatible - CPU and motherboard socket specifications not found";
             } elseif (!$requiredSocket) {
-                return "Incompatible - requirements not determined";
+                return "Incompatible - motherboard socket requirements not determined";
             } else {
-                return "Incompatible - check specifications";
+                // This should rarely happen now - log for debugging
+                error_log("WARNING: CPU compatibility check failed but no specific issues found. CPU Socket: $cpuSocket, Required: $requiredSocket");
+                return "Incompatible - compatibility check failed (CPU: $cpuSocket, Required: $requiredSocket)";
             }
         }
     }
@@ -5377,6 +5704,18 @@ class ComponentCompatibility {
 
         if ($storageFormFactor) {
             $result['details'][] = "Existing storage form factor: {$storageFormFactor}";
+
+            // PHASE 1: Form Factor Locking for 2.5" and 3.5" storage
+            // Extract normalized form factor (2.5-inch or 3.5-inch)
+            $normalizedFF = $this->extractFormFactorSize($storageFormFactor);
+
+            if ($normalizedFF === '2.5-inch' || $normalizedFF === '3.5-inch') {
+                // If not already locked, set the lock to this storage's form factor
+                if (!isset($storageRequirements['form_factor_lock'])) {
+                    $storageRequirements['form_factor_lock'] = $normalizedFF;
+                    $result['details'][] = "FORM FACTOR LOCKED to {$normalizedFF} by existing storage";
+                }
+            }
         }
 
         return $result;
@@ -5635,13 +5974,42 @@ class ComponentCompatibility {
     /**
      * Validate storage that connects via chassis bays (SATA/SAS 2.5"/3.5")
      * STRICT RULE: Bay size MUST match storage size (no adapters)
+     * UPDATED: If NO chassis exists, allow all 2.5"/3.5" storage
+     * PHASE 1: Enforces form factor locking (2.5" vs 3.5")
      */
     private function validateChassisBayStorage($storageInterface, $storageFormFactor, $storageRequirements, $result) {
         // Extract storage size (2.5-inch or 3.5-inch)
         $storageSize = $this->extractFormFactorSize($storageFormFactor);
 
+        // PHASE 1: Check form factor lock FIRST (before chassis check)
+        // If existing storage locked the form factor, enforce it
+        $formFactorLock = $storageRequirements['form_factor_lock'] ?? null;
+        if ($formFactorLock && $formFactorLock !== $storageSize) {
+            $result['compatible'] = false;
+            $result['compatibility_score'] = 0.0;
+            $result['issues'][] = "Form factor locked to {$formFactorLock} by existing storage - cannot add {$storageSize} storage";
+            $result['recommendations'][] = "Choose {$formFactorLock} storage to match existing storage OR remove existing {$formFactorLock} storage";
+            return $result;
+        }
+
         // Get chassis bay types
         $chassisBayTypes = $storageRequirements['chassis_bay_types'] ?? [];
+
+        // NEW: If NO chassis exists (empty bay types), allow storage
+        // This enables component-order flexibility (storage before chassis)
+        if (empty($chassisBayTypes)) {
+            $result['compatible'] = true;
+            $result['compatibility_score'] = 1.0;
+            $result['details'][] = "No chassis in configuration - storage will be validated when chassis is added";
+            $result['warnings'][] = "Add chassis with {$storageSize} bays to complete configuration";
+
+            // If this is the first storage, it sets the form factor lock
+            if (!$formFactorLock) {
+                $result['details'][] = "This storage will lock form factor to {$storageSize} for future additions";
+            }
+
+            return $result;
+        }
 
         // STRICT MATCHING: Bay size MUST equal storage size
         $hasMatchingBay = in_array($storageSize, $chassisBayTypes);
@@ -5699,14 +6067,24 @@ class ComponentCompatibility {
     private function validateMotherboardM2Storage($storageInterface, $storageFormFactor, $storageRequirements, $result) {
         $m2Slots = $storageRequirements['m2_slots'] ?? [];
         $m2FormFactors = $storageRequirements['m2_form_factors'] ?? [];
+        $hasNvmeAdapters = !empty($storageRequirements['nvme_adapters'] ?? []);
 
-        // Check if M.2 slots exist on motherboard
+        // Check if M.2 slots exist on motherboard OR if NVMe adapters provide slots
         if (empty($m2Slots)) {
-            $result['compatible'] = false;
-            $result['compatibility_score'] = 0.0;
-            $result['issues'][] = "Motherboard does not have M.2 slots for this storage";
-            $result['recommendations'][] = "Choose SATA/SAS storage for chassis bays OR different motherboard";
+            // No motherboard M.2 slots - check for NVMe adapters
+            if ($hasNvmeAdapters) {
+                // NVMe adapters exist - they can provide M.2 slots
+                $result['compatible'] = true;
+                $result['compatibility_score'] = 1.0;
+                $result['details'][] = "M.2 storage will use NVMe adapter slots (no motherboard M.2 slots)";
+                return $result;
+            }
 
+            // No motherboard AND no adapters - allow storage (component-order flexibility)
+            $result['compatible'] = true;
+            $result['compatibility_score'] = 1.0;
+            $result['details'][] = "No motherboard in configuration - M.2 storage will be validated when motherboard or NVMe adapter is added";
+            $result['warnings'][] = "Add motherboard with M.2 slots OR NVMe adapter card to connect this storage";
             return $result;
         }
 

@@ -7,7 +7,11 @@
  * STORAGE COMPATIBILITY DISABLED - 2025-09-15 - Storage checks always return compatible
  */
 
-require_once __DIR__ . '/ComponentCompatibility.php';
+if (!class_exists('ComponentCompatibility')) {
+    require_once __DIR__ . '/ComponentCompatibility.php';
+}
+
+if (!class_exists('CompatibilityEngine')) {
 
 class CompatibilityEngine extends ComponentCompatibility {
 
@@ -698,6 +702,5 @@ class CompatibilityEngine extends ComponentCompatibility {
     }
 }
 
-// Create alias for backward compatibility
-class_alias('CompatibilityEngine', 'CompatibilityEngine');
+} // End of class_exists('CompatibilityEngine') check
 ?>

@@ -235,6 +235,10 @@ class FlexibleCompatibilityValidator {
      */
     private function getPCIeCardSpecs($componentType, $componentUuid) {
         // Get from JSON specifications (includes component_subtype for riser cards, HBA cards, etc.)
+        // For NICs, use the nic JSON, not pciecard JSON
+        if ($componentType === 'nic') {
+            return $this->componentDataService->findComponentByUuid('nic', $componentUuid);
+        }
         return $this->dataUtils->getPCIeCardByUUID($componentUuid);
     }
 
@@ -1056,6 +1060,7 @@ class FlexibleCompatibilityValidator {
 
         // Extract RAM specifications
         $ramType = $ramSpecs['memory_type'] ?? $ramSpecs['type'] ?? null;
+        $ramModuleType = $ramSpecs['module_type'] ?? null; // UDIMM, RDIMM, LRDIMM
         $ramFormFactor = $this->dataUtils->extractMemoryFormFactor($ramSpecs);
         $ramCapacity = $ramSpecs['capacity_gb'] ?? ($ramSpecs['capacity'] ?? 0);
         $ramFrequency = $ramSpecs['frequency_mhz'] ?? ($ramSpecs['frequency'] ?? 0);
@@ -1250,6 +1255,7 @@ class FlexibleCompatibilityValidator {
         // PEER CHECKS (RAM → Existing RAM)
         if (!empty($existing['ram'])) {
             $existingTypes = [];
+            $existingModuleTypes = [];
             $existingFormFactors = [];
             $existingECC = [];
             $existingFrequencies = [];
@@ -1258,6 +1264,7 @@ class FlexibleCompatibilityValidator {
                 $ramSpec = $this->getComponentSpecs('ram', $ram['component_uuid']);
                 if ($ramSpec) {
                     $existingTypes[] = $ramSpec['memory_type'] ?? $ramSpec['type'];
+                    $existingModuleTypes[] = $ramSpec['module_type'] ?? null;
                     $existingFormFactors[] = $ramSpec['form_factor'];
                     $existingECC[] = ($ramSpec['ecc'] ?? $ramSpec['is_ecc'] ?? false);
 
@@ -1270,7 +1277,7 @@ class FlexibleCompatibilityValidator {
                 }
             }
 
-            // Type mixing check
+            // Type mixing check (DDR4 vs DDR5)
             $existingTypes = array_filter(array_unique($existingTypes));
             if (!empty($existingTypes) && $ramType && !in_array($ramType, $existingTypes)) {
                 $errors[] = [
@@ -1281,13 +1288,30 @@ class FlexibleCompatibilityValidator {
                 ];
             }
 
-            // Form factor mixing check
+            // Module type mixing check (UDIMM vs RDIMM vs LRDIMM) - CRITICAL
+            // Same module types CAN work together (e.g., LRDIMM + LRDIMM), but different types CANNOT mix
+            $existingModuleTypes = array_filter(array_unique($existingModuleTypes));
+            if (!empty($existingModuleTypes) && $ramModuleType && !in_array($ramModuleType, $existingModuleTypes)) {
+                $errors[] = [
+                    'type' => 'ram_module_type_mixing',
+                    'severity' => 'critical',
+                    'message' => "Cannot mix $ramModuleType modules with existing " . implode('/', $existingModuleTypes) . " modules",
+                    'details' => [
+                        'new_ram_module_type' => $ramModuleType,
+                        'existing_module_types' => $existingModuleTypes,
+                        'explanation' => 'Different module types (UDIMM, RDIMM, LRDIMM) cannot be mixed. Same module types can work together (e.g., LRDIMM + LRDIMM is OK, but UDIMM + LRDIMM is NOT).'
+                    ],
+                    'resolution' => "Choose " . implode('/', $existingModuleTypes) . " RAM modules to match existing configuration"
+                ];
+            }
+
+            // Form factor mixing check (DIMM vs SO-DIMM physical form)
             $existingFormFactors = array_filter(array_unique($existingFormFactors));
             if (!empty($existingFormFactors) && $ramFormFactor && !in_array($ramFormFactor, $existingFormFactors)) {
                 $errors[] = [
                     'type' => 'ram_form_factor_mixing',
                     'severity' => 'critical',
-                    'message' => "Cannot mix $ramFormFactor RAM with existing " . implode('/', $existingFormFactors) . " RAM",
+                    'message' => "Cannot mix $ramFormFactor physical form factor with existing " . implode('/', $existingFormFactors) . " RAM",
                     'resolution' => "Choose " . implode('/', $existingFormFactors) . " RAM to match existing"
                 ];
             }
@@ -1361,6 +1385,7 @@ class FlexibleCompatibilityValidator {
             'message' => 'RAM specifications loaded',
             'specs' => [
                 'type' => $ramType,
+                'module_type' => $ramModuleType,
                 'form_factor' => $ramFormFactor,
                 'capacity' => $ramCapacity . 'GB',
                 'frequency' => $ramFrequency . 'MHz',
@@ -2450,5 +2475,3 @@ class FlexibleCompatibilityValidator {
         return false;
     }
 }
-?>
-

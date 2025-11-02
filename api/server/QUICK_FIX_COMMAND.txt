@@ -1,0 +1,60 @@
+=== Quick Fix for Onboard NICs ===
+
+Configuration UUID: 52cf78cd-746d-4599-aa99-490743ad7cff
+Motherboard UUID: 8c5f2b87-1e5b-4e8c-a1d2-0b1a5e3f4d6c
+
+Expected Result: 2 onboard NICs (Intel X710 2-port 10GbE)
+
+---------------------------------------------------------
+STEP 1: Login and get JWT token
+---------------------------------------------------------
+
+curl -X POST http://localhost/bdc_ims/api/api.php \
+  -d "action=auth-login" \
+  -d "username=admin" \
+  -d "password=your_password"
+
+# Save the access_token from the response as JWT_TOKEN
+
+---------------------------------------------------------
+STEP 2: Fix onboard NICs for the configuration
+---------------------------------------------------------
+
+curl -X POST http://localhost/bdc_ims/api/api.php \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN_HERE" \
+  -d "action=server-fix-onboard-nics" \
+  -d "config_uuid=52cf78cd-746d-4599-aa99-490743ad7cff"
+
+---------------------------------------------------------
+STEP 3: Verify the fix by getting the configuration
+---------------------------------------------------------
+
+curl -X POST http://localhost/bdc_ims/api/api.php \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN_HERE" \
+  -d "action=server-get-config" \
+  -d "config_uuid=52cf78cd-746d-4599-aa99-490743ad7cff"
+
+# Check the nic_summary field - should show:
+# "onboard_nics": 2
+
+---------------------------------------------------------
+ALTERNATIVE: Run PowerShell script (Windows)
+---------------------------------------------------------
+
+1. Update credentials in test_fix_onboard_nics.ps1
+2. Run: powershell -ExecutionPolicy Bypass -File test_fix_onboard_nics.ps1
+
+---------------------------------------------------------
+ALTERNATIVE: Run Bash script (Linux/Mac)
+---------------------------------------------------------
+
+1. Update credentials in test_fix_onboard_nics.sh
+2. chmod +x test_fix_onboard_nics.sh
+3. ./test_fix_onboard_nics.sh
+
+=== Files Created ===
+
+1. FIX_ONBOARD_NICS.md - Complete API documentation
+2. test_fix_onboard_nics.sh - Bash test script
+3. test_fix_onboard_nics.ps1 - PowerShell test script
+4. QUICK_FIX_COMMAND.txt - This file (quick reference)

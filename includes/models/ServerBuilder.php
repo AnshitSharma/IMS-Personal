@@ -322,6 +322,44 @@ class ServerBuilder {
                 ];
             }
 
+            // SPECIAL HANDLING: If removing a motherboard, also remove its onboard NICs
+            if ($componentType === 'motherboard') {
+                error_log("Removing motherboard $componentUuid - checking for onboard NICs to remove");
+
+                // Find all onboard NICs that belong to this motherboard
+                $onboardNicStmt = $this->pdo->prepare("
+                    SELECT UUID, SerialNumber
+                    FROM nicinventory
+                    WHERE ParentComponentUUID = ? AND SourceType = 'onboard'
+                ");
+                $onboardNicStmt->execute([$componentUuid]);
+                $onboardNics = $onboardNicStmt->fetchAll(PDO::FETCH_ASSOC);
+
+                foreach ($onboardNics as $onboardNic) {
+                    $onboardNicUuid = $onboardNic['UUID'];
+                    error_log("Found onboard NIC $onboardNicUuid for motherboard $componentUuid - removing from config and inventory");
+
+                    // Remove onboard NIC from server configuration components table
+                    $removeNicStmt = $this->pdo->prepare("
+                        DELETE FROM server_configuration_components
+                        WHERE config_uuid = ? AND component_type = 'nic' AND component_uuid = ?
+                    ");
+                    $removeNicStmt->execute([$configUuid, $onboardNicUuid]);
+
+                    // Update nic_configuration JSON column to remove this NIC
+                    $this->updateNicConfiguration($configUuid, $onboardNicUuid, 0, 'remove');
+
+                    // Delete onboard NIC from nicinventory table (it was auto-created with motherboard)
+                    $deleteNicStmt = $this->pdo->prepare("
+                        DELETE FROM nicinventory
+                        WHERE UUID = ? AND SourceType = 'onboard'
+                    ");
+                    $deleteNicStmt->execute([$onboardNicUuid]);
+
+                    error_log("Removed onboard NIC $onboardNicUuid from config, nic_configuration column, and deleted from inventory");
+                }
+            }
+
             // Update component status back to "Available" ONLY for real builds (not test builds)
             if (!$isTest) {
                 // Update component status back to "Available" and clear ServerUUID, installation date, and rack position
@@ -487,6 +525,9 @@ class ServerBuilder {
                     if ($action === 'add') {
                         $updateFields[] = "motherboard_uuid = ?";
                         $updateValues[] = $componentUuid;
+
+                        // Auto-create onboard NICs from motherboard JSON specs
+                        $this->createOnboardNICsFromMotherboard($configUuid, $componentUuid);
                     } elseif ($action === 'remove') {
                         $updateFields[] = "motherboard_uuid = NULL";
                     }
@@ -695,6 +736,171 @@ class ServerBuilder {
         }
     }
     
+    /**
+     * Create onboard NICs from motherboard JSON specifications
+     */
+    private function createOnboardNICsFromMotherboard($configUuid, $motherboardUuid) {
+        try {
+            error_log("========================================");
+            error_log("=== START createOnboardNICsFromMotherboard ===");
+            error_log("Config UUID: $configUuid");
+            error_log("Motherboard UUID: $motherboardUuid");
+            error_log("========================================");
+
+            // Load motherboard JSON specs using ComponentDataService
+            require_once __DIR__ . '/ComponentDataService.php';
+            $dataService = ComponentDataService::getInstance($this->pdo);
+
+            error_log("ComponentDataService instance created");
+            error_log("Calling findComponentByUuid for motherboard...");
+
+            $motherboardSpecs = $dataService->findComponentByUuid('motherboard', $motherboardUuid);
+
+            error_log("findComponentByUuid returned: " . ($motherboardSpecs ? 'DATA' : 'NULL'));
+
+            if (!$motherboardSpecs) {
+                error_log("ERROR: Could not load motherboard specs for UUID $motherboardUuid");
+                error_log("=== END createOnboardNICsFromMotherboard (NO SPECS) ===");
+                return;
+            }
+
+            error_log("Motherboard specs loaded successfully");
+            error_log("Motherboard data keys: " . implode(', ', array_keys($motherboardSpecs)));
+            error_log("Has 'networking' key: " . (isset($motherboardSpecs['networking']) ? 'YES' : 'NO'));
+
+            if (isset($motherboardSpecs['networking'])) {
+                error_log("Networking keys: " . implode(', ', array_keys($motherboardSpecs['networking'])));
+                error_log("Has 'onboard_nics' key: " . (isset($motherboardSpecs['networking']['onboard_nics']) ? 'YES' : 'NO'));
+            }
+
+            // Check if motherboard has onboard NICs
+            $onboardNics = $motherboardSpecs['networking']['onboard_nics'] ?? [];
+            error_log("onboard_nics array count: " . count($onboardNics));
+
+            if (empty($onboardNics)) {
+                error_log("WARNING: Motherboard $motherboardUuid has no onboard NICs in JSON specs");
+                error_log("=== END createOnboardNICsFromMotherboard (NO NICS) ===");
+                return;
+            }
+
+            error_log("Found " . count($onboardNics) . " onboard NIC(s) - proceeding with creation");
+
+            // Create each onboard NIC
+            foreach ($onboardNics as $index => $nicSpec) {
+                $onboardNicIndex = $index + 1;
+
+                error_log("--- Processing onboard NIC #$onboardNicIndex ---");
+                error_log("NIC Spec data: " . json_encode($nicSpec));
+
+                // Generate a unique UUID for this onboard NIC
+                $onboardNicUuid = "onboard-nic-" . substr($motherboardUuid, 0, 24) . "-{$onboardNicIndex}";
+
+                error_log("Generated UUID: $onboardNicUuid");
+
+                // Prepare data for insert
+                $serialNumber = "ONBOARD-NIC-{$motherboardUuid}-{$onboardNicIndex}";
+                $status = 2; // In use (since motherboard is already added to server)
+                $sourceType = 'onboard';
+                $controller = $nicSpec['controller'] ?? 'Unknown';
+                $ports = $nicSpec['ports'] ?? 1;
+                $speed = $nicSpec['speed'] ?? 'Unknown';
+                $connector = $nicSpec['connector'] ?? 'Unknown';
+                $location = "Onboard NIC #{$onboardNicIndex} from Motherboard";
+                $notes = "Auto-created onboard NIC from motherboard $motherboardUuid";
+
+                error_log("Insert data prepared - Controller: $controller, Ports: $ports, Speed: $speed");
+
+                // Insert into nicinventory table
+                try {
+                    error_log("Attempting INSERT into nicinventory...");
+                    $insertNicStmt = $this->pdo->prepare("
+                        INSERT INTO nicinventory
+                        (UUID, SerialNumber, Status, SourceType, ParentComponentUUID, OnboardIndex,
+                         Controller, Ports, Speed, Connector, Location, Notes, ServerUUID)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ");
+
+                    $insertNicStmt->execute([
+                        $onboardNicUuid,
+                        $serialNumber,
+                        $status,
+                        $sourceType,
+                        $motherboardUuid,
+                        $onboardNicIndex,
+                        $controller,
+                        $ports,
+                        $speed,
+                        $connector,
+                        $location,
+                        $notes,
+                        $configUuid
+                    ]);
+
+                    error_log("SUCCESS: Created onboard NIC $onboardNicUuid in nicinventory table");
+                } catch (Exception $nicInsertError) {
+                    error_log("ERROR inserting into nicinventory: " . $nicInsertError->getMessage());
+                    error_log("SQL Error Code: " . ($nicInsertError->getCode() ?? 'N/A'));
+                    throw $nicInsertError; // Re-throw to be caught by outer try-catch
+                }
+
+                // Add to server_configuration_components table
+                try {
+                    error_log("Attempting INSERT into server_configuration_components...");
+                    $insertConfigStmt = $this->pdo->prepare("
+                        INSERT INTO server_configuration_components
+                        (config_uuid, component_type, component_uuid, quantity, slot_position, notes, added_at)
+                        VALUES (?, ?, ?, ?, ?, ?, NOW())
+                    ");
+
+                    $insertConfigStmt->execute([
+                        $configUuid,
+                        'nic',
+                        $onboardNicUuid,
+                        1,
+                        null,
+                        "Onboard NIC #{$onboardNicIndex} - Auto-created"
+                    ]);
+
+                    error_log("SUCCESS: Added onboard NIC $onboardNicUuid to server_configuration_components");
+                } catch (Exception $configInsertError) {
+                    error_log("ERROR inserting into server_configuration_components: " . $configInsertError->getMessage());
+                    throw $configInsertError;
+                }
+
+                // Update nic_configuration JSON column
+                try {
+                    error_log("Attempting to update nic_configuration JSON column...");
+                    $this->updateNicConfiguration($configUuid, $onboardNicUuid, 1, 'add');
+                    error_log("SUCCESS: Updated nic_configuration column for onboard NIC $onboardNicUuid");
+                } catch (Exception $nicConfigError) {
+                    error_log("ERROR updating nic_configuration: " . $nicConfigError->getMessage());
+                    throw $nicConfigError;
+                }
+
+                error_log("--- Completed onboard NIC #$onboardNicIndex ---");
+            }
+
+            error_log("========================================");
+            error_log("Successfully created " . count($onboardNics) . " onboard NIC(s) for motherboard $motherboardUuid");
+            error_log("=== END createOnboardNICsFromMotherboard (SUCCESS) ===");
+            error_log("========================================");
+
+        } catch (Exception $e) {
+            error_log("========================================");
+            error_log("FATAL ERROR in createOnboardNICsFromMotherboard");
+            error_log("Motherboard UUID: $motherboardUuid");
+            error_log("Config UUID: $configUuid");
+            error_log("Error Message: " . $e->getMessage());
+            error_log("Error Code: " . $e->getCode());
+            error_log("Error File: " . $e->getFile() . " (Line " . $e->getLine() . ")");
+            error_log("Stack trace:");
+            error_log($e->getTraceAsString());
+            error_log("=== END createOnboardNICsFromMotherboard (FAILED) ===");
+            error_log("========================================");
+            // Don't throw - allow motherboard addition to succeed even if onboard NIC creation fails
+        }
+    }
+
     /**
      * Update configuration metrics (power, compatibility, validation)
      */
@@ -2245,15 +2451,15 @@ class ServerBuilder {
             // Check if total power is reasonable (not too high for typical motherboard)
             if ($totalPower > 1000) { // Very high power consumption
                 $score = 30.0;
-                $issues[] = "Critical: Very high power consumption (${totalPower}W) - may exceed typical PSU capacity and cause system instability";
+                $issues[] = "Critical: Very high power consumption ({$totalPower}W) - may exceed typical PSU capacity and cause system instability";
                 $issues[] = "Power breakdown: " . $this->formatPowerBreakdown($componentPowerBreakdown);
             } elseif ($totalPower > 750) {
                 $score = 60.0;
-                $issues[] = "Warning: High power consumption (${totalPower}W) - ensure adequate PSU capacity (recommended 850W+ PSU)";
+                $issues[] = "Warning: High power consumption ({$totalPower}W) - ensure adequate PSU capacity (recommended 850W+ PSU)";
                 $issues[] = "Power breakdown: " . $this->formatPowerBreakdown($componentPowerBreakdown);
             } elseif ($totalPower > 500) {
                 $score = 85.0;
-                $issues[] = "Note: Moderate power consumption (${totalPower}W) - ensure PSU capacity is at least 650W";
+                $issues[] = "Note: Moderate power consumption ({$totalPower}W) - ensure PSU capacity is at least 650W";
             }
             
         } catch (Exception $e) {
@@ -4321,6 +4527,3 @@ class ServerBuilder {
         return $formatted;
     }
 }
-
-?>
-

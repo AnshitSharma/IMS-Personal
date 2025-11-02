@@ -647,7 +647,7 @@ class DataExtractionUtilities {
      * Get NIC by UUID (wrapper for findComponentByUuid)
      */
     public function getNICByUUID($uuid) {
-        return $this->findComponentByUuid('pciecard', $uuid);
+        return $this->findComponentByUuid('nic', $uuid);
     }
 
     /**

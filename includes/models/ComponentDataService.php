@@ -63,7 +63,98 @@ class ComponentDataService {
     public function findComponentByUuid($componentType, $uuid, $databaseRecord = null) {
         $jsonData = $this->loadJsonData($componentType);
 
-        // First try direct UUID match in JSON
+        // Handle caddy JSON structure: {"caddies": [...]}
+        if ($componentType === 'caddy' && isset($jsonData['caddies'])) {
+            foreach ($jsonData['caddies'] as $caddy) {
+                $caddyUuid = $caddy['uuid'] ?? $caddy['UUID'] ?? null;
+                if ($caddyUuid === $uuid) {
+                    return array_merge($caddy, [
+                        'uuid' => $caddyUuid,
+                        'component_type' => 'caddy'
+                    ]);
+                }
+            }
+        }
+
+        // Handle chassis JSON structure: manufacturers -> series -> models
+        if ($componentType === 'chassis' && isset($jsonData['chassis_specifications']['manufacturers'])) {
+            foreach ($jsonData['chassis_specifications']['manufacturers'] as $manufacturer) {
+                if (isset($manufacturer['series'])) {
+                    foreach ($manufacturer['series'] as $series) {
+                        if (isset($series['models'])) {
+                            foreach ($series['models'] as $model) {
+                                $modelUuid = $this->getOrGenerateUuid($model, $componentType);
+                                if ($modelUuid === $uuid) {
+                                    return array_merge($model, [
+                                        'uuid' => $modelUuid,
+                                        'manufacturer' => $manufacturer['manufacturer'] ?? null,
+                                        'series' => $series['series_name'] ?? null
+                                    ]);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Handle NIC JSON structure: brand -> series -> models (NOT families)
+        if ($componentType === 'nic') {
+            foreach ($jsonData as $brand) {
+                if (isset($brand['series'])) {
+                    foreach ($brand['series'] as $series) {
+                        if (isset($series['models'])) {
+                            foreach ($series['models'] as $model) {
+                                $modelUuid = $this->getOrGenerateUuid($model, $componentType);
+                                if ($modelUuid === $uuid) {
+                                    return array_merge($model, [
+                                        'uuid' => $modelUuid,
+                                        'brand' => $brand['brand'] ?? null,
+                                        'series' => $series['name'] ?? null
+                                    ]);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Handle motherboard JSON structure: brand -> series -> family -> models
+        if ($componentType === 'motherboard') {
+            foreach ($jsonData as $brand) {
+                // Check if this has the series -> family -> models structure
+                if (isset($brand['series']) && is_string($brand['series']) && isset($brand['family']) && isset($brand['models'])) {
+                    foreach ($brand['models'] as $model) {
+                        $modelUuid = $this->getOrGenerateUuid($model, $componentType);
+                        if ($modelUuid === $uuid) {
+                            return array_merge($model, [
+                                'uuid' => $modelUuid,
+                                'brand' => $brand['brand'] ?? null,
+                                'series' => $brand['series'],
+                                'family' => $brand['family']
+                            ]);
+                        }
+                    }
+                }
+                // Fallback to direct models array
+                elseif (isset($brand['models'])) {
+                    foreach ($brand['models'] as $model) {
+                        $modelUuid = $this->getOrGenerateUuid($model, $componentType);
+                        if ($modelUuid === $uuid) {
+                            return array_merge($model, [
+                                'uuid' => $modelUuid,
+                                'brand' => $brand['brand'] ?? null,
+                                'series' => $brand['series'] ?? null,
+                                'family' => $brand['family'] ?? null
+                            ]);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Standard structure: brand -> models (for CPU, RAM, storage, etc.)
         foreach ($jsonData as $brand) {
             if (isset($brand['models'])) {
                 foreach ($brand['models'] as $model) {
@@ -122,6 +213,28 @@ class ComponentDataService {
                     }
                 }
                 error_log("UUID validation FAILED: $uuid not found in caddy JSON (searched " . count($jsonData['caddies']) . " items)");
+                return false;
+            }
+
+            // Handle chassis JSON structure: chassis_specifications -> manufacturers -> series -> models
+            if ($componentType === 'chassis' && isset($jsonData['chassis_specifications']['manufacturers'])) {
+                error_log("Processing chassis JSON structure");
+                foreach ($jsonData['chassis_specifications']['manufacturers'] as $manufacturer) {
+                    if (isset($manufacturer['series'])) {
+                        foreach ($manufacturer['series'] as $series) {
+                            if (isset($series['models'])) {
+                                foreach ($series['models'] as $model) {
+                                    $modelUuid = $this->getOrGenerateUuid($model, $componentType);
+                                    if ($modelUuid === $uuid) {
+                                        error_log("UUID validation SUCCESS: $uuid found in chassis JSON");
+                                        return true;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                error_log("UUID validation FAILED: $uuid not found in chassis JSON");
                 return false;
             }
 
@@ -771,24 +884,93 @@ class ComponentDataService {
             try {
                 // Load JSON data into cache
                 $this->loadJsonData($componentType);
-                
+
                 // Preload first few components of each type
                 $components = $this->getAllAvailableComponents($componentType);
                 $popularComponents = array_slice($components, 0, 50); // First 50 components
-                
+
                 foreach ($popularComponents as $component) {
                     $uuid = $component['uuid'] ?? null;
                     if ($uuid) {
                         $this->getComponentSpecifications($componentType, $uuid);
                     }
                 }
-                
+
                 $this->updateCacheStats('preload', $componentType);
-                
+
             } catch (Exception $e) {
                 error_log("Error preloading $componentType components: " . $e->getMessage());
             }
         }
+    }
+
+    /**
+     * Get caddy specifications by UUID
+     * Caddies have a special JSON structure: {"caddies": [...]}
+     *
+     * @param string $uuid Caddy UUID
+     * @return array|null Caddy specifications or null if not found
+     */
+    public function getCaddyByUuid($uuid) {
+        try {
+            $jsonData = $this->loadJsonData('caddy');
+
+            if (!isset($jsonData['caddies'])) {
+                error_log("getCaddyByUuid: Invalid caddy JSON structure - 'caddies' key not found");
+                return null;
+            }
+
+            foreach ($jsonData['caddies'] as $caddy) {
+                if (isset($caddy['uuid']) && $caddy['uuid'] === $uuid) {
+                    return $caddy;
+                }
+            }
+
+            return null;
+
+        } catch (Exception $e) {
+            error_log("getCaddyByUuid error: " . $e->getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Filter NVMe adapter cards from PCIe card list
+     *
+     * @param array $pcieCards Array of PCIe card records from existing components
+     * @return array Array of NVMe adapter specifications
+     */
+    public function filterNvmeAdapters($pcieCards) {
+        $nvmeAdapters = [];
+
+        if (empty($pcieCards) || !is_array($pcieCards)) {
+            return $nvmeAdapters;
+        }
+
+        foreach ($pcieCards as $card) {
+            $cardUuid = $card['component_uuid'] ?? null;
+            if (!$cardUuid) {
+                continue;
+            }
+
+            // Get card specifications from JSON
+            $cardSpecs = $this->findComponentByUuid('pciecard', $cardUuid);
+            if (!$cardSpecs) {
+                continue;
+            }
+
+            // Check if this is an NVMe adapter
+            $componentSubtype = $cardSpecs['component_subtype'] ?? '';
+            if ($componentSubtype === 'NVMe Adaptor') {
+                $nvmeAdapters[] = [
+                    'uuid' => $cardUuid,
+                    'specs' => $cardSpecs,
+                    'quantity' => $card['quantity'] ?? 1
+                ];
+            }
+        }
+
+        return $nvmeAdapters;
     }
 }
 
