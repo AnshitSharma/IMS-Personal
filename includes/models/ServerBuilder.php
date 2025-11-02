@@ -324,39 +324,17 @@ class ServerBuilder {
 
             // SPECIAL HANDLING: If removing a motherboard, also remove its onboard NICs
             if ($componentType === 'motherboard') {
-                error_log("Removing motherboard $componentUuid - checking for onboard NICs to remove");
+                error_log("Removing motherboard $componentUuid - delegating onboard NIC removal to OnboardNICHandler");
 
-                // Find all onboard NICs that belong to this motherboard
-                $onboardNicStmt = $this->pdo->prepare("
-                    SELECT UUID, SerialNumber
-                    FROM nicinventory
-                    WHERE ParentComponentUUID = ? AND SourceType = 'onboard'
-                ");
-                $onboardNicStmt->execute([$componentUuid]);
-                $onboardNics = $onboardNicStmt->fetchAll(PDO::FETCH_ASSOC);
+                // Use OnboardNICHandler for centralized onboard NIC management
+                require_once __DIR__ . '/OnboardNICHandler.php';
+                $nicHandler = new OnboardNICHandler($this->pdo);
+                $removeResult = $nicHandler->removeOnboardNICs($componentUuid, $configUuid);
 
-                foreach ($onboardNics as $onboardNic) {
-                    $onboardNicUuid = $onboardNic['UUID'];
-                    error_log("Found onboard NIC $onboardNicUuid for motherboard $componentUuid - removing from config and inventory");
-
-                    // Remove onboard NIC from server configuration components table
-                    $removeNicStmt = $this->pdo->prepare("
-                        DELETE FROM server_configuration_components
-                        WHERE config_uuid = ? AND component_type = 'nic' AND component_uuid = ?
-                    ");
-                    $removeNicStmt->execute([$configUuid, $onboardNicUuid]);
-
-                    // Update nic_configuration JSON column to remove this NIC
-                    $this->updateNicConfiguration($configUuid, $onboardNicUuid, 0, 'remove');
-
-                    // Delete onboard NIC from nicinventory table (it was auto-created with motherboard)
-                    $deleteNicStmt = $this->pdo->prepare("
-                        DELETE FROM nicinventory
-                        WHERE UUID = ? AND SourceType = 'onboard'
-                    ");
-                    $deleteNicStmt->execute([$onboardNicUuid]);
-
-                    error_log("Removed onboard NIC $onboardNicUuid from config, nic_configuration column, and deleted from inventory");
+                if ($removeResult['success']) {
+                    error_log("Successfully removed {$removeResult['removed_count']} onboard NIC(s) via OnboardNICHandler");
+                } else {
+                    error_log("Warning: OnboardNICHandler failed to remove onboard NICs: " . ($removeResult['error'] ?? 'Unknown error'));
                 }
             }
 
