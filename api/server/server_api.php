@@ -2382,6 +2382,12 @@ function calculatePCIeLaneUsage($components) {
             'total_x4' => 0,
             'used_x4' => 0
         ],
+        'riser_provided_pcie_slots' => [
+            'total_slots' => 0,
+            'used_slots' => 0,
+            'available_slots' => 0,
+            'risers' => []
+        ],
         'detailed_usage' => []
     ];
 
@@ -2481,7 +2487,33 @@ function calculatePCIeLaneUsage($components) {
                                 error_log("WARNING: Riser card $cardUuid has incorrect slot_position: '{$card['slot_position']}'. Should start with 'riser_'");
                             }
 
-                            // Skip riser cards - they're tracked separately in riser_slots section
+                            // Track riser card and its provided PCIe slots
+                            $pcieSlots = $cardSpecs['pcie_slots'] ?? 0;
+                            $slotType = $cardSpecs['slot_type'] ?? 'x16';
+
+                            // Normalize slot type
+                            if (preg_match('/x(\d+)/i', $slotType, $matches)) {
+                                $slotSize = 'x' . $matches[1];
+                            } else {
+                                $slotSize = 'x16';
+                            }
+
+                            $riserInfo = [
+                                'riser_uuid' => $cardUuid,
+                                'riser_model' => $cardSpecs['model'] ?? 'Unknown Riser',
+                                'riser_slot_position' => $card['slot_position'] ?? 'N/A',
+                                'pcie_slots_provided' => $pcieSlots,
+                                'slot_type' => $slotSize,
+                                'cards_in_riser_slots' => []
+                            ];
+
+                            // Count how many slots this riser provides
+                            $result['riser_provided_pcie_slots']['total_slots'] += $pcieSlots;
+
+                            // Add riser to tracking list
+                            $result['riser_provided_pcie_slots']['risers'][] = $riserInfo;
+
+                            // Skip further processing - riser cards are tracked separately
                             continue;
                         }
 
@@ -2526,7 +2558,57 @@ function calculatePCIeLaneUsage($components) {
             }
         }
 
+        // After processing all PCIe cards, check which cards are in riser-provided slots
+        // Loop through all non-riser PCIe cards, NICs, and HBA cards to find riser-slot assignments
+        $allPCIeComponents = [];
+
+        // Collect all PCIe components
+        if (isset($components['pciecard']) && !empty($components['pciecard'])) {
+            foreach ($components['pciecard'] as $card) {
+                $cardSpecs = $dataUtils->getPCIeCardByUUID($card['uuid'] ?? '');
+                if ($cardSpecs && ($cardSpecs['component_subtype'] ?? '') !== 'Riser Card') {
+                    $allPCIeComponents[] = $card;
+                }
+            }
+        }
+        if (isset($components['nic']) && !empty($components['nic'])) {
+            $allPCIeComponents = array_merge($allPCIeComponents, $components['nic']);
+        }
+        if (isset($components['hbacard']) && !empty($components['hbacard'])) {
+            $allPCIeComponents = array_merge($allPCIeComponents, $components['hbacard']);
+        }
+
+        // Check each component's slot_position to see if it's in a riser-provided slot
+        foreach ($allPCIeComponents as $component) {
+            $slotPosition = $component['slot_position'] ?? '';
+
+            // Check if slot_position indicates riser-provided slot
+            // Format: riser_{riser_uuid}_pcie_{slot_type}_slot_{n}
+            if (preg_match('/^riser_([^_]+(?:_[^_]+)*?)_pcie_/', $slotPosition, $matches)) {
+                $riserUuid = $matches[1];
+                $result['riser_provided_pcie_slots']['used_slots']++;
+
+                // Find the riser in our tracking list and add this card to it
+                foreach ($result['riser_provided_pcie_slots']['risers'] as &$riser) {
+                    if ($riser['riser_uuid'] === $riserUuid) {
+                        $riser['cards_in_riser_slots'][] = [
+                            'slot' => $slotPosition,
+                            'card_uuid' => $component['uuid'] ?? 'unknown',
+                            'card_type' => $component['component_type'] ?? 'unknown'
+                        ];
+                        break;
+                    }
+                }
+                unset($riser); // Break reference
+            }
+        }
+
         // Calculate available slots
+        $result['riser_provided_pcie_slots']['available_slots'] = max(0,
+            $result['riser_provided_pcie_slots']['total_slots'] -
+            $result['riser_provided_pcie_slots']['used_slots']
+        );
+
         $result['cpu_lanes']['available'] = max(0, $result['cpu_lanes']['total'] - $result['cpu_lanes']['used']);
         $result['m2_slots']['motherboard']['available'] = max(0, $result['m2_slots']['motherboard']['total'] - $result['m2_slots']['motherboard']['used']);
         $result['m2_slots']['expansion_cards']['available'] = max(0, $result['m2_slots']['expansion_cards']['total'] - $result['m2_slots']['expansion_cards']['used']);

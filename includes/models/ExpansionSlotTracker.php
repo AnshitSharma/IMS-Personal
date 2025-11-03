@@ -64,15 +64,31 @@ class ExpansionSlotTracker {
                 ];
             }
 
-            // Step 3: Get used PCIe slots from database
+            // Step 3: Get riser cards in this configuration and add their provided PCIe slots
+            $riserCards = $this->getRiserCardsInConfig($configUuid);
+            $mergedSlots = $totalSlots['slots'];
+
+            foreach ($riserCards as $riser) {
+                $riserProvidedSlots = $this->loadRiserCardProvidedPCIeSlots($riser['component_uuid']);
+
+                // Merge riser-provided slots into total slots by slot type
+                foreach ($riserProvidedSlots as $slotType => $slotIds) {
+                    if (!isset($mergedSlots[$slotType])) {
+                        $mergedSlots[$slotType] = [];
+                    }
+                    $mergedSlots[$slotType] = array_merge($mergedSlots[$slotType], $slotIds);
+                }
+            }
+
+            // Step 4: Get used PCIe slots from database
             $usedSlots = $this->getUsedPCIeSlots($configUuid);
 
-            // Step 4: Calculate available slots
-            $availableSlots = $this->calculateAvailableSlots($totalSlots['slots'], $usedSlots);
+            // Step 5: Calculate available slots
+            $availableSlots = $this->calculateAvailableSlots($mergedSlots, $usedSlots);
 
             return [
                 'success' => true,
-                'total_slots' => $totalSlots['slots'],
+                'total_slots' => $mergedSlots,
                 'used_slots' => $usedSlots,
                 'available_slots' => $availableSlots,
                 'motherboard_uuid' => $motherboard['component_uuid']
@@ -1038,6 +1054,100 @@ class ExpansionSlotTracker {
     private function isPCIeSlotCompatible($cardSize, $slotSize) {
         $compatibleSlots = $this->slotCompatibility[$cardSize] ?? [];
         return in_array($slotSize, $compatibleSlots);
+    }
+
+    /**
+     * Get all riser cards currently in configuration
+     * Riser cards are stored as 'pciecard' type with component_subtype = 'Riser Card'
+     *
+     * @param string $configUuid Server configuration UUID
+     * @return array Array of riser card components with their details
+     */
+    private function getRiserCardsInConfig($configUuid) {
+        try {
+            $stmt = $this->pdo->prepare("
+                SELECT component_uuid, slot_position
+                FROM server_configuration_components
+                WHERE config_uuid = ?
+                AND component_type = 'pciecard'
+                AND slot_position LIKE 'riser_%'
+            ");
+            $stmt->execute([$configUuid]);
+            $results = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            $riserCards = [];
+            foreach ($results as $row) {
+                // Verify this is actually a riser card by checking JSON specs
+                $specs = $this->componentDataService->getComponentSpecifications('pciecard', $row['component_uuid']);
+                if ($specs && isset($specs['component_subtype']) && $specs['component_subtype'] === 'Riser Card') {
+                    $riserCards[] = [
+                        'component_uuid' => $row['component_uuid'],
+                        'slot_position' => $row['slot_position'],
+                        'specs' => $specs
+                    ];
+                }
+            }
+
+            return $riserCards;
+
+        } catch (Exception $e) {
+            error_log("Error getting riser cards in config: " . $e->getMessage());
+            return [];
+        }
+    }
+
+    /**
+     * Load PCIe slots provided by a specific riser card
+     * Reads pcie_slots (count) and slot_type from riser card JSON specifications
+     *
+     * @param string $riserUuid Riser card UUID
+     * @return array PCIe slots provided by this riser, grouped by slot type
+     */
+    private function loadRiserCardProvidedPCIeSlots($riserUuid) {
+        try {
+            // Get riser card specifications from JSON
+            $riserSpecs = $this->componentDataService->getComponentSpecifications('pciecard', $riserUuid);
+
+            if (!$riserSpecs) {
+                error_log("Riser card specifications not found for UUID: $riserUuid");
+                return [];
+            }
+
+            // Verify this is a riser card
+            if (($riserSpecs['component_subtype'] ?? '') !== 'Riser Card') {
+                error_log("Component $riserUuid is not a riser card");
+                return [];
+            }
+
+            // Extract PCIe slots provided by this riser
+            $pcieSlots = $riserSpecs['pcie_slots'] ?? 0;
+            $slotType = $riserSpecs['slot_type'] ?? 'x16';
+
+            if ($pcieSlots <= 0) {
+                error_log("Riser card $riserUuid does not provide any PCIe slots");
+                return [];
+            }
+
+            // Normalize slot type (e.g., "x16" or "PCIe x16" → "x16")
+            if (preg_match('/x(\d+)/i', $slotType, $matches)) {
+                $slotSize = 'x' . $matches[1];
+            } else {
+                $slotSize = 'x16'; // Default fallback
+            }
+
+            // Generate slot IDs with riser UUID prefix
+            // Format: riser_{riser_uuid}_pcie_{slot_type}_slot_{n}
+            $slots = [$slotSize => []];
+            for ($i = 1; $i <= $pcieSlots; $i++) {
+                $slots[$slotSize][] = "riser_{$riserUuid}_pcie_{$slotSize}_slot_{$i}";
+            }
+
+            return $slots;
+
+        } catch (Exception $e) {
+            error_log("Error loading riser card provided PCIe slots: " . $e->getMessage());
+            return [];
+        }
     }
 }
 ?>

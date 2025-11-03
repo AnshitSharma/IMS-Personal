@@ -950,6 +950,47 @@ class ComponentCompatibility {
     }
 
     /**
+     * Extract supported RAM module types from motherboard specifications
+     * Module types: RDIMM (Registered), LRDIMM (Load-Reduced), UDIMM (Unbuffered)
+     *
+     * @param array $data Motherboard JSON data
+     * @return array|null Array of supported module types, or null if not specified
+     */
+    private function extractSupportedModuleTypes($data) {
+        // Check memory object for module_types array
+        if (isset($data['memory']) && is_array($data['memory'])) {
+            if (isset($data['memory']['module_types']) && is_array($data['memory']['module_types'])) {
+                return array_map('strtoupper', $data['memory']['module_types']);
+            }
+
+            // Check for single module_type string
+            if (isset($data['memory']['module_type'])) {
+                return [strtoupper($data['memory']['module_type'])];
+            }
+        }
+
+        // Check root level supported_module_types
+        if (isset($data['supported_module_types'])) {
+            if (is_array($data['supported_module_types'])) {
+                return array_map('strtoupper', $data['supported_module_types']);
+            }
+            return [strtoupper($data['supported_module_types'])];
+        }
+
+        // Check root level module_types
+        if (isset($data['module_types'])) {
+            if (is_array($data['module_types'])) {
+                return array_map('strtoupper', $data['module_types']);
+            }
+            return [strtoupper($data['module_types'])];
+        }
+
+        // No module type specification found - return null to indicate unknown support
+        // This allows for backward compatibility with older JSON specs
+        return null;
+    }
+
+    /**
      * Normalize memory type to base DDR type (remove speed suffix)
      * Examples: "DDR5-4800" → "DDR5", "DDR4-3200" → "DDR4", "DDR5" → "DDR5"
      *
@@ -4264,6 +4305,7 @@ class ComponentCompatibility {
                 'required_memory_types' => [],
                 'min_memory_speed_required' => 0,
                 'required_form_factors' => [],
+                'required_module_types' => [], // RDIMM, LRDIMM, UDIMM compatibility
                 'sources' => []
             ];
 
@@ -5445,6 +5487,7 @@ class ComponentCompatibility {
         $ramType = $this->extractMemoryType($ramData);
         $ramSpeed = $this->extractMemorySpeed($ramData);
         $ramFormFactor = $this->extractMemoryFormFactor($ramData);
+        $ramModuleType = $ramData['module_type'] ?? null; // RDIMM, LRDIMM, UDIMM
 
         if ($ramType) {
             $compatibilityRequirements['required_memory_types'][] = $ramType;
@@ -5462,6 +5505,14 @@ class ComponentCompatibility {
             $compatibilityRequirements['required_form_factors'][] = $ramFormFactor;
             $compatibilityRequirements['sources'][] = "RAM form factor: {$ramFormFactor}";
             $result['details'][] = "Motherboard must support form factor: {$ramFormFactor}";
+        }
+
+        // CRITICAL: Extract and track RAM module type (RDIMM/LRDIMM/UDIMM)
+        // This is essential for backward compatibility checking when searching for motherboards
+        if ($ramModuleType) {
+            $compatibilityRequirements['required_module_types'][] = strtoupper($ramModuleType);
+            $compatibilityRequirements['sources'][] = "RAM module type: {$ramModuleType}";
+            $result['details'][] = "Motherboard must support RAM module type: {$ramModuleType}";
         }
 
         return $result;
@@ -5539,6 +5590,32 @@ class ComponentCompatibility {
             }
         }
 
+        // CRITICAL: Check RAM module type compatibility (RDIMM, LRDIMM, UDIMM)
+        // This ensures backward compatibility when searching for motherboards
+        if (!empty($compatibilityRequirements['required_module_types'])) {
+            $requiredModuleTypes = array_unique($compatibilityRequirements['required_module_types']);
+            $motherboardModuleTypes = $this->extractSupportedModuleTypes($motherboardData);
+
+            // If motherboard doesn't specify module types, assume it supports all (backward compatibility)
+            // This allows older JSON specifications without module_type fields to remain compatible
+            if ($motherboardModuleTypes === null) {
+                $result['warnings'][] = "Motherboard module type support not specified - assuming compatible with " . implode('/', $requiredModuleTypes);
+                // Don't break - continue with other validations
+            } else {
+                // Motherboard has explicit module type support - validate it
+                foreach ($requiredModuleTypes as $requiredModuleType) {
+                    // Check if motherboard supports the required module type
+                    if (!in_array(strtoupper($requiredModuleType), array_map('strtoupper', $motherboardModuleTypes))) {
+                        $result['compatible'] = false;
+                        $result['issues'][] = "Motherboard memory incompatible with existing RAM";
+                        $result['details'][] = "Motherboard does not support {$requiredModuleType} modules (supported: " . implode(', ', $motherboardModuleTypes) . ")";
+                    } else {
+                        $result['recommendations'][] = "Motherboard supports required module type: {$requiredModuleType}";
+                    }
+                }
+            }
+        }
+
         return $result;
     }
 
@@ -5593,6 +5670,22 @@ class ComponentCompatibility {
                         return "Motherboard does not support " . implode('/', $unsupportedTypes) . " memory";
                     }
                 }
+
+                // Check if it's a module type issue
+                $requiredModuleTypes = $compatibilityRequirements['required_module_types'] ?? [];
+                if (!empty($requiredModuleTypes)) {
+                    $motherboardModuleTypes = $this->extractSupportedModuleTypes($motherboardData);
+                    if ($motherboardModuleTypes !== null) {
+                        $unsupportedModules = array_diff(
+                            array_map('strtoupper', $requiredModuleTypes),
+                            array_map('strtoupper', $motherboardModuleTypes)
+                        );
+                        if (!empty($unsupportedModules)) {
+                            return "Motherboard does not support " . implode('/', $unsupportedModules) . " RAM modules";
+                        }
+                    }
+                }
+
                 return "Motherboard memory incompatible with existing RAM";
             } elseif ($requiredCpuSocket && !$motherboardSocket) {
                 return "Motherboard socket unknown - CPU requires {$requiredCpuSocket}";
