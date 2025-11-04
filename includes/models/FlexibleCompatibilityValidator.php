@@ -1583,6 +1583,25 @@ class FlexibleCompatibilityValidator {
         $backplane = $chassisSpecs['backplane'] ?? [];
         $formFactorSupport = $chassisSpecs['form_factor_support'] ?? ['ATX'];
 
+        // FORM FACTOR CONSISTENCY CHECK (2.5"/3.5" only)
+        // Use StorageConnectionValidator to check against existing storage/caddies
+        $storageValidator = new StorageConnectionValidator($this->pdo);
+        $formFactorValidation = $storageValidator->validateChassisAgainstExistingConfig($chassisUuid, $existing);
+
+        if (!$formFactorValidation['valid']) {
+            foreach ($formFactorValidation['errors'] as $error) {
+                $errors[] = [
+                    'type' => $error['type'] ?? 'chassis_form_factor_mismatch',
+                    'severity' => 'critical',
+                    'message' => $error['message'] ?? 'Chassis incompatible with existing configuration',
+                    'chassis_bay_size' => $error['chassis_bay_size'] ?? null,
+                    'existing_storage_size' => $error['existing_storage_size'] ?? null,
+                    'existing_caddy_size' => $error['existing_caddy_size'] ?? null,
+                    'resolution' => $error['resolution'] ?? 'Remove incompatible components OR select compatible chassis'
+                ];
+            }
+        }
+
         // REVERSE CHECKS (Existing Storage → Chassis)
         if (!empty($existing['storage'])) {
             $storageCount = count($existing['storage']);
@@ -2368,82 +2387,175 @@ class FlexibleCompatibilityValidator {
 
     /**
      * Validate Caddy addition
+     *
+     * Form Factor Locking Rules (2.5"/3.5" only, M.2/U.2 exempt):
+     * 1. Chassis bay size (highest priority)
+     * 2. Existing caddy sizes
+     * 3. Existing storage sizes
      */
     private function validateCaddyAddition($configUuid, $caddyUuid, $existing) {
         $errors = [];
         $warnings = [];
         $info = [];
 
-        // Get caddy specs
-        $caddySpecs = $this->getComponentFromInventory('caddy', $caddyUuid);
-        if (!$caddySpecs) {
+        // Get caddy specs from JSON
+        $caddyJsonSpecs = $this->componentDataService->getCaddyByUuid($caddyUuid);
+        if (!$caddyJsonSpecs) {
             return [
                 'validation_status' => 'blocked',
                 'critical_errors' => [[
                     'type' => 'caddy_not_found',
-                    'message' => "Caddy $caddyUuid not found in inventory"
+                    'message' => "Caddy $caddyUuid not found in JSON specifications"
                 ]],
                 'warnings' => [],
                 'info_messages' => []
             ];
         }
 
-        // Extract caddy type (2.5-inch, 3.5-inch, M.2, etc.)
-        $caddyType = $caddySpecs['type'] ?? $caddySpecs['caddy_type'] ?? 'Unknown';
+        // Extract caddy size from JSON: compatibility.size field
+        $caddySize = $caddyJsonSpecs['compatibility']['size'] ?? ($caddyJsonSpecs['type'] ?? 'Unknown');
+        $normalizedCaddySize = $this->normalizeFormFactor($caddySize);
 
-        // Check if caddy matches existing storage
-        if (!empty($existing['storage'])) {
-            $matchingStorage = false;
-            foreach ($existing['storage'] as $storage) {
-                $storageSpecs = $this->getStorageSpecs($storage['component_uuid']);
-                if (!$storageSpecs) {
-                    $storageSpecs = $this->getComponentFromInventory('storage', $storage['component_uuid']);
-                }
+        // Only enforce form factor locking for 2.5" and 3.5" caddies
+        if ($normalizedCaddySize === '2.5-inch' || $normalizedCaddySize === '3.5-inch') {
 
-                if ($storageSpecs) {
-                    $storageFormFactor = $storageSpecs['form_factor'] ?? '3.5-inch';
+            // CHECK 1: Chassis bay size (highest priority)
+            if (!empty($existing['chassis']) && isset($existing['chassis']['component_uuid'])) {
+                $chassisSpecs = $this->getChassisSpecs($existing['chassis']['component_uuid']);
+                if ($chassisSpecs) {
+                    $bayConfig = $chassisSpecs['drive_bays']['bay_configuration'] ?? [];
+                    foreach ($bayConfig as $bay) {
+                        $bayType = $bay['bay_type'] ?? '';
+                        $normalizedBayType = $this->normalizeFormFactor($bayType);
 
-                    // Check if caddy matches storage form factor
-                    if ((strpos(strtolower($caddyType), '2.5') !== false && strpos($storageFormFactor, '2.5') !== false) ||
-                        (strpos(strtolower($caddyType), '3.5') !== false && strpos($storageFormFactor, '3.5') !== false)) {
-                        $matchingStorage = true;
-                        break;
+                        if ($normalizedBayType === '2.5-inch' || $normalizedBayType === '3.5-inch') {
+                            if ($normalizedBayType !== $normalizedCaddySize) {
+                                $errors[] = [
+                                    'type' => 'caddy_chassis_mismatch',
+                                    'message' => "Cannot add $normalizedCaddySize caddy - chassis has $normalizedBayType bays",
+                                    'caddy_size' => $normalizedCaddySize,
+                                    'chassis_bay_size' => $normalizedBayType,
+                                    'resolution' => "Remove chassis and add one with $normalizedCaddySize bays OR select $normalizedBayType caddy"
+                                ];
+                            } else {
+                                $info[] = [
+                                    'type' => 'caddy_chassis_compatible',
+                                    'message' => "Caddy ($normalizedCaddySize) matches chassis bay configuration"
+                                ];
+                            }
+                            break;
+                        }
                     }
                 }
             }
 
-            if (!$matchingStorage) {
-                $warnings[] = [
-                    'type' => 'caddy_no_matching_storage',
-                    'severity' => 'low',
-                    'message' => "$caddyType caddy added, but no matching storage in configuration",
-                    'recommendation' => 'Add compatible storage to utilize this caddy'
-                ];
+            // CHECK 2: Existing caddy sizes (form factor lock)
+            if (!empty($existing['caddy']) && is_array($existing['caddy'])) {
+                foreach ($existing['caddy'] as $existingCaddy) {
+                    $existingCaddySpecs = $this->componentDataService->getCaddyByUuid($existingCaddy['component_uuid']);
+                    if ($existingCaddySpecs) {
+                        $existingCaddySize = $existingCaddySpecs['compatibility']['size'] ?? ($existingCaddySpecs['type'] ?? '');
+                        $normalizedExistingSize = $this->normalizeFormFactor($existingCaddySize);
+
+                        if (($normalizedExistingSize === '2.5-inch' || $normalizedExistingSize === '3.5-inch')
+                            && $normalizedExistingSize !== $normalizedCaddySize) {
+                            $errors[] = [
+                                'type' => 'caddy_form_factor_mismatch',
+                                'message' => "Cannot add $normalizedCaddySize caddy - configuration locked to $normalizedExistingSize by existing caddy",
+                                'incoming_caddy_size' => $normalizedCaddySize,
+                                'existing_caddy_size' => $normalizedExistingSize,
+                                'existing_caddy_uuid' => $existingCaddy['component_uuid'],
+                                'resolution' => "Remove $normalizedExistingSize caddy OR select $normalizedExistingSize caddy"
+                            ];
+                            break;
+                        }
+                    }
+                }
+            }
+
+            // CHECK 3: Existing storage sizes (reverse compatibility)
+            if (!empty($existing['storage']) && is_array($existing['storage'])) {
+                foreach ($existing['storage'] as $storage) {
+                    $storageSpecs = $this->getStorageSpecs($storage['component_uuid']);
+                    if (!$storageSpecs) {
+                        $storageSpecs = $this->getComponentFromInventory('storage', $storage['component_uuid']);
+                    }
+
+                    if ($storageSpecs) {
+                        $storageFormFactor = $storageSpecs['form_factor'] ?? '';
+                        $normalizedStorageFF = $this->normalizeFormFactor($storageFormFactor);
+
+                        if (($normalizedStorageFF === '2.5-inch' || $normalizedStorageFF === '3.5-inch')
+                            && $normalizedStorageFF !== $normalizedCaddySize) {
+                            $errors[] = [
+                                'type' => 'caddy_storage_mismatch',
+                                'message' => "Cannot add $normalizedCaddySize caddy - configuration has $normalizedStorageFF storage",
+                                'caddy_size' => $normalizedCaddySize,
+                                'existing_storage_size' => $normalizedStorageFF,
+                                'resolution' => "Remove $normalizedStorageFF storage OR select $normalizedStorageFF caddy"
+                            ];
+                            break;
+                        }
+                    }
+                }
+            }
+
+            // If no errors, this caddy sets/confirms the form factor lock
+            if (empty($errors)) {
+                $hasLockingComponents = (!empty($existing['chassis']) || !empty($existing['caddy']) || !empty($existing['storage']));
+                if ($hasLockingComponents) {
+                    $info[] = [
+                        'type' => 'form_factor_confirmed',
+                        'message' => "Form factor ($normalizedCaddySize) confirmed - configuration remains locked"
+                    ];
+                } else {
+                    $info[] = [
+                        'type' => 'form_factor_lock_set',
+                        'message' => "Form factor locked to $normalizedCaddySize - future storage/caddies/chassis must match"
+                    ];
+                }
             }
         } else {
-            // No storage yet
+            // M.2, U.2, or other non-standard caddy - no form factor locking
             $info[] = [
                 'type' => 'caddy_added_proactively',
-                'message' => "$caddyType adapter added for future storage"
+                'message' => "$caddySize caddy added for future storage"
             ];
         }
 
-        // Add caddy info
+        // Add caddy specifications info
         $info[] = [
             'type' => 'caddy_specifications',
             'message' => 'Caddy specifications loaded',
             'specs' => [
-                'type' => $caddyType
+                'type' => $caddySize,
+                'normalized_size' => $normalizedCaddySize
             ]
         ];
 
-        // Caddies are passive adapters - always allow
+        // Return result
+        if (!empty($errors)) {
+            return [
+                'validation_status' => 'blocked',
+                'critical_errors' => $errors,
+                'warnings' => $warnings,
+                'info_messages' => $info
+            ];
+        }
+
         return [
             'validation_status' => empty($warnings) ? 'allowed' : 'allowed_with_warnings',
             'critical_errors' => [],
             'warnings' => $warnings,
             'info_messages' => $info
         ];
+    }
+
+    /**
+     * Normalize form factor for consistent comparison
+     */
+    private function normalizeFormFactor($formFactor) {
+        return strtolower(str_replace(['_', ' '], '-', $formFactor));
     }
 
     /**

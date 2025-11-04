@@ -445,7 +445,7 @@ class CompatibilityEngine extends ComponentCompatibility {
                 $bayType = $bayConfig['bay_type'] ?? '';
                 $bayCount = $bayConfig['count'] ?? 0;
 
-                // Form factor compatibility rules
+                // Form factor compatibility rules - STRICT MATCHING ONLY (no adapters)
                 if ($storageFormFactor === '2.5-inch' || $storageFormFactor === '2.5_inch') {
                     if ($bayType === '2.5_inch' || $bayType === '2.5-inch') {
                         $compatibleBays[] = [
@@ -455,14 +455,8 @@ class CompatibilityEngine extends ComponentCompatibility {
                             'direct_fit' => true
                         ];
                     } elseif ($bayType === '3.5_inch' || $bayType === '3.5-inch') {
-                        $compatibleBays[] = [
-                            'bay_type' => $bayType,
-                            'count' => $bayCount,
-                            'caddy_required' => true,
-                            'caddy_type' => '2.5 inch caddy',
-                            'direct_fit' => false
-                        ];
-                        $caddyRequired = true;
+                        // 2.5" drives DO NOT fit in 3.5" bays (strict matching required)
+                        $incompatible = true;
                     }
                 } elseif ($storageFormFactor === '3.5-inch' || $storageFormFactor === '3.5_inch') {
                     if ($bayType === '3.5_inch' || $bayType === '3.5-inch') {
@@ -473,10 +467,12 @@ class CompatibilityEngine extends ComponentCompatibility {
                             'direct_fit' => true
                         ];
                     } elseif ($bayType === '2.5_inch' || $bayType === '2.5-inch') {
+                        // 3.5" drives DO NOT fit in 2.5" bays
                         $incompatible = true;
                     }
-                } elseif ($storageFormFactor === 'M.2') {
-                    // M.2 requires special slots or adapters
+                } elseif ($storageFormFactor === 'M.2' || strpos($storageFormFactor, 'M.2') !== false) {
+                    // M.2 drives connect via PCIe/motherboard, not traditional drive bays
+                    // If chassis has M.2 bays, use them. Otherwise, bypass bay check.
                     if ($bayType === 'M.2') {
                         $compatibleBays[] = [
                             'bay_type' => $bayType,
@@ -484,18 +480,30 @@ class CompatibilityEngine extends ComponentCompatibility {
                             'caddy_required' => false,
                             'direct_fit' => true
                         ];
-                    } else {
-                        // M.2 in other bays requires adapter
+                    }
+                } elseif ($storageFormFactor === 'U.2' || strpos($storageFormFactor, 'U.2') !== false) {
+                    // U.2 drives connect via backplane/HBA, not traditional drive bays
+                    // Bypass bay compatibility check for U.2
+                    if ($bayType === 'U.2' || $bayType === '2.5_inch' || $bayType === '2.5-inch') {
                         $compatibleBays[] = [
                             'bay_type' => $bayType,
                             'count' => $bayCount,
-                            'caddy_required' => true,
-                            'caddy_type' => 'M.2 adapter',
-                            'direct_fit' => false
+                            'caddy_required' => false,
+                            'direct_fit' => true
                         ];
-                        $caddyRequired = true;
                     }
                 }
+            }
+
+            // M.2 and U.2 form factors bypass bay validation - they connect via PCIe/motherboard/HBA
+            if (strpos($storageFormFactor, 'M.2') !== false || strpos($storageFormFactor, 'U.2') !== false) {
+                return [
+                    'compatible' => true,
+                    'compatible_bays' => !empty($compatibleBays) ? $compatibleBays : [['bay_type' => 'direct_connection', 'count' => 99, 'caddy_required' => false]],
+                    'caddy_required' => false,
+                    'form_factor_match' => true,
+                    'bypass_reason' => "$storageFormFactor connects via PCIe/motherboard, not traditional drive bays"
+                ];
             }
 
             if (empty($compatibleBays) || $incompatible) {

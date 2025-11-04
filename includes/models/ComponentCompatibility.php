@@ -449,27 +449,40 @@ class ComponentCompatibility {
             $storageData = $this->getComponentData($storage['type'], $storage['uuid']);
             $caddyData = $this->getComponentData($caddy['type'], $caddy['uuid']);
 
-            // Form factor compatibility
+            // Get storage form factor
             $storageFormFactor = $this->extractStorageFormFactor($storageData);
+            $normalizedStorageFF = $this->normalizeFormFactorForComparison($storageFormFactor);
+
+            // CRITICAL: M.2 and U.2 storage do NOT use caddies
+            // They connect directly to motherboard M.2 slots or PCIe adapters
+            // Only 2.5" and 3.5" storage require caddy compatibility checks
+            if (strpos($normalizedStorageFF, 'm.2') !== false ||
+                strpos($normalizedStorageFF, 'm2') !== false ||
+                strpos($normalizedStorageFF, 'u.2') !== false ||
+                strpos($normalizedStorageFF, 'u.3') !== false) {
+                // M.2/U.2 storage - skip caddy check, always compatible
+                $result['warnings'][] = "M.2/U.2 storage does not require caddy - connects directly to motherboard/PCIe adapter";
+                return $result;
+            }
+
+            // Form factor compatibility for 2.5" and 3.5" storage only
             $caddySupportedFormFactors = $this->extractSupportedFormFactors($caddyData);
 
-            if ($storageFormFactor && $caddySupportedFormFactors && !in_array($storageFormFactor, $caddySupportedFormFactors)) {
-                $result['compatible'] = false;
-                $result['compatibility_score'] = 0.0;
-                $result['issues'][] = "Storage form factor ($storageFormFactor) not supported by caddy";
-                return $result;
+            if ($storageFormFactor && $caddySupportedFormFactors) {
+                $normalizedCaddyFFs = array_map([$this, 'normalizeFormFactorForComparison'], $caddySupportedFormFactors);
+
+                if (!in_array($normalizedStorageFF, $normalizedCaddyFFs)) {
+                    $result['compatible'] = false;
+                    $result['compatibility_score'] = 0.0;
+                    $result['issues'][] = "Storage form factor ($storageFormFactor) not supported by caddy";
+                    return $result;
+                }
             }
 
-            // Interface compatibility
-            $storageInterface = $this->extractStorageInterface($storageData);
-            $caddySupportedInterfaces = $this->extractSupportedInterfaces($caddyData);
-
-            if ($storageInterface && $caddySupportedInterfaces && !in_array($storageInterface, $caddySupportedInterfaces)) {
-                $result['compatible'] = false;
-                $result['compatibility_score'] = 0.0;
-                $result['issues'][] = "Storage interface ($storageInterface) not supported by caddy";
-                return $result;
-            }
+            // NOTE: Interface compatibility check REMOVED
+            // Caddies are passive physical mounting brackets - they don't have electrical interfaces.
+            // Interface compatibility (SATA/SAS/NVMe) is handled by chassis backplane/HBA/motherboard.
+            // The "interface" field in caddy JSON is metadata only, not a compatibility constraint.
 
         } catch (Exception $e) {
             error_log("Storage-Caddy compatibility check error: " . $e->getMessage());
@@ -957,35 +970,54 @@ class ComponentCompatibility {
      * @return array|null Array of supported module types, or null if not specified
      */
     private function extractSupportedModuleTypes($data) {
+        // DEBUG: Log extraction attempt
+        error_log("DEBUG [extractSupportedModuleTypes] Starting extraction");
+        error_log("DEBUG [extractSupportedModuleTypes] Has 'memory' key: " . (isset($data['memory']) ? 'YES' : 'NO'));
+
         // Check memory object for module_types array
         if (isset($data['memory']) && is_array($data['memory'])) {
+            error_log("DEBUG [extractSupportedModuleTypes] memory section keys: " . json_encode(array_keys($data['memory'])));
+
             if (isset($data['memory']['module_types']) && is_array($data['memory']['module_types'])) {
-                return array_map('strtoupper', $data['memory']['module_types']);
+                $result = array_map('strtoupper', $data['memory']['module_types']);
+                error_log("DEBUG [extractSupportedModuleTypes] Found module_types array: " . json_encode($result));
+                return $result;
             }
 
             // Check for single module_type string
             if (isset($data['memory']['module_type'])) {
-                return [strtoupper($data['memory']['module_type'])];
+                $result = [strtoupper($data['memory']['module_type'])];
+                error_log("DEBUG [extractSupportedModuleTypes] Found module_type string: " . json_encode($result));
+                return $result;
             }
         }
 
         // Check root level supported_module_types
         if (isset($data['supported_module_types'])) {
             if (is_array($data['supported_module_types'])) {
-                return array_map('strtoupper', $data['supported_module_types']);
+                $result = array_map('strtoupper', $data['supported_module_types']);
+                error_log("DEBUG [extractSupportedModuleTypes] Found root level supported_module_types array: " . json_encode($result));
+                return $result;
             }
-            return [strtoupper($data['supported_module_types'])];
+            $result = [strtoupper($data['supported_module_types'])];
+            error_log("DEBUG [extractSupportedModuleTypes] Found root level supported_module_types string: " . json_encode($result));
+            return $result;
         }
 
         // Check root level module_types
         if (isset($data['module_types'])) {
             if (is_array($data['module_types'])) {
-                return array_map('strtoupper', $data['module_types']);
+                $result = array_map('strtoupper', $data['module_types']);
+                error_log("DEBUG [extractSupportedModuleTypes] Found root level module_types array: " . json_encode($result));
+                return $result;
             }
-            return [strtoupper($data['module_types'])];
+            $result = [strtoupper($data['module_types'])];
+            error_log("DEBUG [extractSupportedModuleTypes] Found root level module_types string: " . json_encode($result));
+            return $result;
         }
 
         // No module type specification found - return null to indicate unknown support
+        error_log("DEBUG [extractSupportedModuleTypes] No module types found - returning NULL");
         // This allows for backward compatibility with older JSON specs
         return null;
     }
@@ -1165,15 +1197,22 @@ class ComponentCompatibility {
     }
     
     private function extractSupportedFormFactors($data) {
+        // Try standard fields first
         $formFactors = $data['supported_form_factors'] ?? $data['form_factors'] ?? null;
 
+        // For caddies, check compatibility.size field
+        if (!$formFactors && isset($data['compatibility']['size'])) {
+            $formFactors = $data['compatibility']['size'];
+        }
+
         if (is_string($formFactors)) {
-            return explode(',', $formFactors);
+            // Return as array with single element
+            return [trim($formFactors)];
         } elseif (is_array($formFactors)) {
             return $formFactors;
         }
 
-        return ['2.5"', '3.5"']; // Default assumption
+        return ['2.5-inch', '3.5-inch']; // Default assumption (updated format)
     }
 
     /**
@@ -2687,33 +2726,90 @@ class ComponentCompatibility {
      * Validate memory type compatibility across RAM, motherboard, and CPUs
      */
     public function validateMemoryTypeCompatibility($ramSpecs, $motherboardSpecs, $cpuSpecs) {
-        if (!$ramSpecs || !$motherboardSpecs) {
-            error_log("DEBUG: Memory type validation - Missing specs. RAM specs: " . (is_array($ramSpecs) ? 'present' : 'missing') . ", MB specs: " . (is_array($motherboardSpecs) ? 'present' : 'missing'));
+        if (!$ramSpecs) {
+            error_log("DEBUG: Memory type validation - Missing RAM specs");
             return [
                 'compatible' => false,
-                'message' => 'Missing component specifications for memory type validation',
+                'message' => 'Missing RAM specifications for memory type validation',
                 'supported_types' => []
             ];
         }
-        
+
         $ramMemoryType = $ramSpecs['memory_type'] ?? null;
-        $motherboardSupportedTypes = $motherboardSpecs['memory']['types'] ?? ['DDR4'];
-        
-        // Debug logging
-        error_log("DEBUG: Memory type validation - RAM type: '$ramMemoryType', MB supported types: " . json_encode($motherboardSupportedTypes));
-        error_log("DEBUG: Memory type validation - Full motherboard specs: " . json_encode($motherboardSpecs));
-        
+
         if (!$ramMemoryType) {
             return [
                 'compatible' => false,
                 'message' => 'RAM memory type not found in specifications',
-                'supported_types' => $motherboardSupportedTypes
+                'supported_types' => []
             ];
         }
-        
+
+        // Handle CPU-only validation (no motherboard)
+        if (empty($motherboardSpecs) && !empty($cpuSpecs)) {
+            error_log("DEBUG: Memory type validation - CPU-only mode (no motherboard)");
+
+            $allCPUsCompatible = true;
+            $incompatibleCPUs = [];
+            $cpuSupportedTypes = [];
+
+            foreach ($cpuSpecs as $cpuSpec) {
+                $cpuMemTypes = $cpuSpec['compatibility']['memory_types'] ?? ['DDR4'];
+
+                // Extract memory types from CPU specs (e.g., "DDR5-4800" -> "DDR5")
+                $extractedTypes = [];
+                foreach ($cpuMemTypes as $memType) {
+                    if (preg_match('/(DDR\d+)/', $memType, $matches)) {
+                        if (!in_array($matches[1], $extractedTypes)) {
+                            $extractedTypes[] = $matches[1];
+                        }
+                    } else {
+                        $extractedTypes[] = $memType;
+                    }
+                }
+
+                // Merge CPU supported types for reporting
+                $cpuSupportedTypes = array_unique(array_merge($cpuSupportedTypes, $extractedTypes));
+
+                if (!in_array($ramMemoryType, $extractedTypes)) {
+                    $allCPUsCompatible = false;
+                    $incompatibleCPUs[] = $cpuSpec['basic_info']['model'] ?? 'Unknown CPU';
+                }
+            }
+
+            if (!$allCPUsCompatible) {
+                return [
+                    'compatible' => false,
+                    'message' => "RAM memory type $ramMemoryType not supported by CPUs: " . implode(', ', $incompatibleCPUs),
+                    'supported_types' => $cpuSupportedTypes
+                ];
+            }
+
+            return [
+                'compatible' => true,
+                'message' => "Memory type $ramMemoryType is compatible with CPU(s)",
+                'supported_types' => $cpuSupportedTypes
+            ];
+        }
+
+        // Handle no motherboard and no CPU - allow any RAM
+        if (empty($motherboardSpecs) && empty($cpuSpecs)) {
+            return [
+                'compatible' => true,
+                'message' => "Memory type $ramMemoryType accepted (no constraints)",
+                'supported_types' => [$ramMemoryType]
+            ];
+        }
+
+        // Full validation with motherboard
+        $motherboardSupportedTypes = $motherboardSpecs['memory']['types'] ?? ['DDR4'];
+
+        // Debug logging
+        error_log("DEBUG: Memory type validation - RAM type: '$ramMemoryType', MB supported types: " . json_encode($motherboardSupportedTypes));
+
         // Check motherboard compatibility
         $motherboardCompatible = in_array($ramMemoryType, $motherboardSupportedTypes);
-        
+
         if (!$motherboardCompatible) {
             error_log("DEBUG: Memory type validation FAILED - RAM '$ramMemoryType' not in supported types: " . json_encode($motherboardSupportedTypes));
             return [
@@ -2722,15 +2818,15 @@ class ComponentCompatibility {
                 'supported_types' => $motherboardSupportedTypes
             ];
         }
-        
+
         // Check CPU compatibility if CPU specs provided
         if (!empty($cpuSpecs)) {
             $allCPUsCompatible = true;
             $incompatibleCPUs = [];
-            
+
             foreach ($cpuSpecs as $cpuSpec) {
                 $cpuSupportedTypes = $cpuSpec['compatibility']['memory_types'] ?? ['DDR4'];
-                
+
                 // Extract memory types from CPU specs (e.g., "DDR5-4800" -> "DDR5")
                 $extractedTypes = [];
                 foreach ($cpuSupportedTypes as $memType) {
@@ -2743,13 +2839,13 @@ class ComponentCompatibility {
                         $extractedTypes[] = $memType;
                     }
                 }
-                
+
                 if (!in_array($ramMemoryType, $extractedTypes)) {
                     $allCPUsCompatible = false;
                     $incompatibleCPUs[] = $cpuSpec['basic_info']['model'] ?? 'Unknown CPU';
                 }
             }
-            
+
             if (!$allCPUsCompatible) {
                 return [
                     'compatible' => false,
@@ -2758,7 +2854,7 @@ class ComponentCompatibility {
                 ];
             }
         }
-        
+
         return [
             'compatible' => true,
             'message' => "Memory type $ramMemoryType is compatible with all system components",
@@ -2770,20 +2866,19 @@ class ComponentCompatibility {
      * Analyze memory frequency compatibility and performance impact
      */
     public function analyzeMemoryFrequency($ramSpecs, $motherboardSpecs, $cpuSpecs) {
-        if (!$ramSpecs || !$motherboardSpecs) {
+        if (!$ramSpecs) {
             return [
                 'status' => 'error',
-                'message' => 'Missing component specifications for frequency analysis'
+                'message' => 'Missing RAM specifications for frequency analysis'
             ];
         }
-        
+
         $ramFrequency = $ramSpecs['frequency_mhz'] ?? 0;
-        $motherboardMaxFrequency = $motherboardSpecs['memory']['max_frequency_mhz'] ?? 3200;
-        
+
         // Find the lowest CPU max frequency if multiple CPUs
         $cpuMaxFrequency = null;
         $limitingCPU = null;
-        
+
         if (!empty($cpuSpecs)) {
             foreach ($cpuSpecs as $cpuSpec) {
                 // Extract max memory frequency from CPU memory types (e.g., DDR5-4800)
@@ -2799,16 +2894,58 @@ class ComponentCompatibility {
                 }
             }
         }
-        
+
+        // Handle CPU-only validation (no motherboard)
+        if (empty($motherboardSpecs) && $cpuMaxFrequency !== null) {
+            // Use CPU max frequency as system limit
+            if ($ramFrequency <= $cpuMaxFrequency) {
+                return [
+                    'status' => 'optimal',
+                    'ram_frequency' => $ramFrequency,
+                    'system_max_frequency' => $cpuMaxFrequency,
+                    'effective_frequency' => $ramFrequency,
+                    'limiting_component' => $limitingCPU,
+                    'message' => "RAM will operate at full rated speed of {$ramFrequency}MHz with CPU",
+                    'performance_impact' => null
+                ];
+            } else {
+                return [
+                    'status' => 'limited',
+                    'ram_frequency' => $ramFrequency,
+                    'system_max_frequency' => $cpuMaxFrequency,
+                    'effective_frequency' => $cpuMaxFrequency,
+                    'limiting_component' => $limitingCPU,
+                    'message' => "RAM will operate at {$cpuMaxFrequency}MHz (limited by CPU) instead of rated {$ramFrequency}MHz",
+                    'performance_impact' => "Performance limited by $limitingCPU"
+                ];
+            }
+        }
+
+        // Handle no motherboard and no CPU - accept any frequency
+        if (empty($motherboardSpecs) && empty($cpuSpecs)) {
+            return [
+                'status' => 'optimal',
+                'ram_frequency' => $ramFrequency,
+                'system_max_frequency' => $ramFrequency,
+                'effective_frequency' => $ramFrequency,
+                'limiting_component' => null,
+                'message' => "RAM frequency {$ramFrequency}MHz accepted (no constraints)",
+                'performance_impact' => null
+            ];
+        }
+
+        // Full validation with motherboard
+        $motherboardMaxFrequency = $motherboardSpecs['memory']['max_frequency_mhz'] ?? 3200;
+
         // Calculate system maximum frequency (lowest component limit)
         $systemMaxFrequency = $motherboardMaxFrequency;
         $limitingComponent = 'motherboard';
-        
+
         if ($cpuMaxFrequency !== null && $cpuMaxFrequency < $systemMaxFrequency) {
             $systemMaxFrequency = $cpuMaxFrequency;
             $limitingComponent = $limitingCPU;
         }
-        
+
         // Determine status and effective frequency
         if ($ramFrequency <= $systemMaxFrequency) {
             $status = 'optimal';
@@ -2819,13 +2956,13 @@ class ComponentCompatibility {
             $effectiveFrequency = $systemMaxFrequency;
             $message = "RAM will operate at {$systemMaxFrequency}MHz (limited by $limitingComponent) instead of rated {$ramFrequency}MHz";
         }
-        
+
         // Check for suboptimal frequency (significantly below system max)
         if ($ramFrequency < ($systemMaxFrequency * 0.8)) {
             $status = 'suboptimal';
             $message = "RAM frequency may impact performance - consider higher frequency memory";
         }
-        
+
         return [
             'status' => $status,
             'ram_frequency' => $ramFrequency,
@@ -2880,16 +3017,60 @@ class ComponentCompatibility {
      * Validate ECC compatibility across components
      */
     public function validateECCCompatibility($ramSpecs, $motherboardSpecs, $cpuSpecs) {
-        if (!$ramSpecs || !$motherboardSpecs) {
+        if (!$ramSpecs) {
             return [
                 'compatible' => true,
-                'message' => 'Missing specifications for ECC validation'
+                'message' => 'Missing RAM specifications for ECC validation'
             ];
         }
-        
+
         $ramHasECC = $ramSpecs['ecc_support'] ?? false;
+
+        // Handle CPU-only validation (no motherboard)
+        if (empty($motherboardSpecs) && !empty($cpuSpecs)) {
+            // Check CPU ECC support
+            $cpuSupportsECC = true;
+            foreach ($cpuSpecs as $cpuSpec) {
+                $cpuECC = $cpuSpec['features']['ecc_support'] ?? true;
+                if (!$cpuECC) {
+                    $cpuSupportsECC = false;
+                    break;
+                }
+            }
+
+            if ($ramHasECC && !$cpuSupportsECC) {
+                return [
+                    'compatible' => true,
+                    'message' => 'ECC RAM selected but CPU does not support ECC',
+                    'warning' => 'ECC functionality may be disabled by CPU - verify motherboard supports ECC when added'
+                ];
+            }
+
+            if (!$ramHasECC && $cpuSupportsECC) {
+                return [
+                    'compatible' => true,
+                    'message' => 'Non-ECC RAM selected with ECC-capable CPU',
+                    'recommendation' => 'Consider ECC memory for enhanced reliability with this CPU'
+                ];
+            }
+
+            return [
+                'compatible' => true,
+                'message' => $ramHasECC ? 'ECC RAM compatible with CPU' : 'Non-ECC RAM selected'
+            ];
+        }
+
+        // Handle no motherboard and no CPU
+        if (empty($motherboardSpecs) && empty($cpuSpecs)) {
+            return [
+                'compatible' => true,
+                'message' => $ramHasECC ? 'ECC RAM selected (no constraints)' : 'Non-ECC RAM selected (no constraints)'
+            ];
+        }
+
+        // Full validation with motherboard
         $motherboardSupportsECC = $motherboardSpecs['memory']['ecc_support'] ?? false;
-        
+
         // Check CPU ECC support
         $cpuSupportsECC = true; // Default assumption
         if (!empty($cpuSpecs)) {
@@ -2901,9 +3082,9 @@ class ComponentCompatibility {
                 }
             }
         }
-        
+
         $systemSupportsECC = $motherboardSupportsECC && $cpuSupportsECC;
-        
+
         // Determine compatibility and warnings
         if ($ramHasECC && !$systemSupportsECC) {
             return [
@@ -2912,7 +3093,7 @@ class ComponentCompatibility {
                 'warning' => 'ECC functionality disabled - system does not support ECC'
             ];
         }
-        
+
         if (!$ramHasECC && $systemSupportsECC) {
             return [
                 'compatible' => true,
@@ -2920,14 +3101,14 @@ class ComponentCompatibility {
                 'recommendation' => 'Consider ECC memory for enhanced reliability'
             ];
         }
-        
+
         if ($ramHasECC && $systemSupportsECC) {
             return [
                 'compatible' => true,
                 'message' => 'ECC memory fully supported and enabled'
             ];
         }
-        
+
         return [
             'compatible' => true,
             'message' => 'Standard non-ECC memory configuration'
@@ -4577,8 +4758,69 @@ class ComponentCompatibility {
                 }
             }
 
-            // Calculate required bay capacity from storage
+            // STEP 1: Extract ALL storage form factors (including M.2/U.2)
             if (!empty($existingStorageComponents)) {
+                $storageFormFactors = [];
+                $formFactorIncompatibilities = [];
+
+                foreach ($existingStorageComponents as $storage) {
+                    $formFactor = $this->extractStorageFormFactorFromSpecs($storage['data']);
+                    if ($formFactor !== 'unknown') {
+                        $storageFormFactors[] = $formFactor;
+                    }
+                }
+
+                // STEP 2: Validate form factor compatibility with chassis bays (STRICT MATCHING)
+                foreach ($storageFormFactors as $formFactor) {
+                    // M.2 and U.2 bypass traditional bay validation
+                    if ($formFactor === 'M.2' || strpos($formFactor, 'M.2') !== false ||
+                        $formFactor === 'U.2' || strpos($formFactor, 'U.2') !== false) {
+                        $result['details'][] = "Storage form factor {$formFactor} bypasses bay validation (connects via PCIe/motherboard)";
+                        continue;
+                    }
+
+                    // For traditional form factors (2.5" and 3.5"), validate STRICT bay compatibility
+                    $chassisBayConfig = $chassisSpecs['drive_bays']['bay_configuration'] ?? [];
+                    $hasMatchingBay = false;
+
+                    foreach ($chassisBayConfig as $bay) {
+                        $bayType = $bay['bay_type'] ?? '';
+
+                        // STRICT matching only - no adapters allowed
+                        if ($formFactor === '2.5_inch' && ($bayType === '2.5_inch' || $bayType === '2.5-inch')) {
+                            $hasMatchingBay = true;
+                            break;
+                        } elseif ($formFactor === '3.5_inch' && ($bayType === '3.5_inch' || $bayType === '3.5-inch')) {
+                            $hasMatchingBay = true;
+                            break;
+                        }
+                    }
+
+                    if (!$hasMatchingBay) {
+                        $formFactorIncompatibilities[] = $formFactor;
+                        $result['compatible'] = false;
+                        $result['issues'][] = "Storage form factor {$formFactor} requires {$formFactor} chassis bays (strict matching)";
+                    } else {
+                        $result['details'][] = "Storage form factor {$formFactor} compatible with chassis bays";
+                    }
+                }
+
+                // If form factor incompatibilities found, return early
+                if (!empty($formFactorIncompatibilities)) {
+                    $result['compatibility_summary'] = "INCOMPATIBLE: Storage form factors not supported by chassis";
+                    $result['compatibility_score'] = 0;
+                    $result['score_breakdown'] = [
+                        'base_score' => 100,
+                        'penalty_applied' => -100,
+                        'reason' => 'Storage form factors incompatible with chassis bays',
+                        'incompatible_form_factors' => $formFactorIncompatibilities,
+                        'final_score' => 0,
+                        'validation_status' => 'FAILED'
+                    ];
+                    return $result;
+                }
+
+                // STEP 3: Calculate required bay capacity from storage (excludes M.2/U.2)
                 $requiredBays = $this->calculateRequiredBays($existingStorageComponents);
 
                 if (!empty($requiredBays)) {
@@ -5489,6 +5731,12 @@ class ComponentCompatibility {
         $ramFormFactor = $this->extractMemoryFormFactor($ramData);
         $ramModuleType = $ramData['module_type'] ?? null; // RDIMM, LRDIMM, UDIMM
 
+        // DEBUG: Log RAM data extraction
+        error_log("DEBUG [analyzeExistingRAMForMotherboard] RAM UUID: {$ramComponent['uuid']}");
+        error_log("DEBUG [analyzeExistingRAMForMotherboard] RAM Data Keys: " . json_encode(array_keys($ramData)));
+        error_log("DEBUG [analyzeExistingRAMForMotherboard] Extracted ramModuleType: " . ($ramModuleType ?? 'NULL'));
+        error_log("DEBUG [analyzeExistingRAMForMotherboard] Full RAM Data: " . json_encode($ramData));
+
         if ($ramType) {
             $compatibilityRequirements['required_memory_types'][] = $ramType;
             $compatibilityRequirements['sources'][] = "RAM type: {$ramType}";
@@ -5513,6 +5761,11 @@ class ComponentCompatibility {
             $compatibilityRequirements['required_module_types'][] = strtoupper($ramModuleType);
             $compatibilityRequirements['sources'][] = "RAM module type: {$ramModuleType}";
             $result['details'][] = "Motherboard must support RAM module type: {$ramModuleType}";
+
+            // DEBUG: Log module type requirement
+            error_log("DEBUG [analyzeExistingRAMForMotherboard] Added required_module_type: " . strtoupper($ramModuleType));
+        } else {
+            error_log("DEBUG [analyzeExistingRAMForMotherboard] WARNING: No module_type found in RAM data!");
         }
 
         return $result;
@@ -5596,24 +5849,42 @@ class ComponentCompatibility {
             $requiredModuleTypes = array_unique($compatibilityRequirements['required_module_types']);
             $motherboardModuleTypes = $this->extractSupportedModuleTypes($motherboardData);
 
+            // DEBUG: Log module type comparison
+            error_log("DEBUG [applyMotherboardCompatibilityRules] Required module types: " . json_encode($requiredModuleTypes));
+            error_log("DEBUG [applyMotherboardCompatibilityRules] Motherboard module types: " . json_encode($motherboardModuleTypes));
+            error_log("DEBUG [applyMotherboardCompatibilityRules] Motherboard data memory section: " . json_encode($motherboardData['memory'] ?? 'NOT FOUND'));
+
             // If motherboard doesn't specify module types, assume it supports all (backward compatibility)
             // This allows older JSON specifications without module_type fields to remain compatible
             if ($motherboardModuleTypes === null) {
                 $result['warnings'][] = "Motherboard module type support not specified - assuming compatible with " . implode('/', $requiredModuleTypes);
+                error_log("DEBUG [applyMotherboardCompatibilityRules] Motherboard module types NULL - assuming compatible");
                 // Don't break - continue with other validations
             } else {
                 // Motherboard has explicit module type support - validate it
                 foreach ($requiredModuleTypes as $requiredModuleType) {
+                    $requiredModuleTypeUpper = strtoupper($requiredModuleType);
+                    $motherboardModuleTypesUpper = array_map('strtoupper', $motherboardModuleTypes);
+
+                    // DEBUG: Log individual check
+                    error_log("DEBUG [applyMotherboardCompatibilityRules] Checking if '$requiredModuleTypeUpper' is in [" . implode(', ', $motherboardModuleTypesUpper) . "]");
+
                     // Check if motherboard supports the required module type
-                    if (!in_array(strtoupper($requiredModuleType), array_map('strtoupper', $motherboardModuleTypes))) {
+                    if (!in_array($requiredModuleTypeUpper, $motherboardModuleTypesUpper)) {
                         $result['compatible'] = false;
                         $result['issues'][] = "Motherboard memory incompatible with existing RAM";
                         $result['details'][] = "Motherboard does not support {$requiredModuleType} modules (supported: " . implode(', ', $motherboardModuleTypes) . ")";
+
+                        error_log("DEBUG [applyMotherboardCompatibilityRules] INCOMPATIBLE: '$requiredModuleTypeUpper' NOT FOUND in motherboard support");
                     } else {
                         $result['recommendations'][] = "Motherboard supports required module type: {$requiredModuleType}";
+
+                        error_log("DEBUG [applyMotherboardCompatibilityRules] COMPATIBLE: '$requiredModuleTypeUpper' FOUND in motherboard support");
                     }
                 }
             }
+        } else {
+            error_log("DEBUG [applyMotherboardCompatibilityRules] No required_module_types in compatibility requirements");
         }
 
         return $result;
@@ -6360,7 +6631,7 @@ class ComponentCompatibility {
             $availableCount = $chassisBays[$formFactor] ?? 0;
 
             if ($availableCount >= $requiredCount) {
-                // Perfect match
+                // Perfect match - strict form factor already validated above
                 $spare = $availableCount - $requiredCount;
                 if ($spare >= 2) {
                     $result['recommendations'][] = "Chassis has {$availableCount} x {$formFactor} bays, {$spare} spare for expansion";
@@ -6368,24 +6639,10 @@ class ComponentCompatibility {
                     $result['recommendations'][] = "Chassis has adequate {$availableCount} x {$formFactor} bays for {$requiredCount} drives";
                 }
             } else {
-                // Check if we can use adapter solutions (2.5" in 3.5" bays)
-                if ($formFactor === '2.5_inch' && isset($chassisBays['3.5_inch'])) {
-                    $available35 = $chassisBays['3.5_inch'];
-                    $shortage = $requiredCount - $availableCount;
-
-                    if ($available35 >= $shortage) {
-                        $result['compatibility_score'] = min($result['compatibility_score'], 0.85);
-                        $result['recommendations'][] = "Can use 3.5\" bays with adapters for {$shortage} x 2.5\" drives";
-                    } else {
-                        $result['compatible'] = false;
-                        $result['compatibility_score'] = 0.0;
-                        $result['issues'][] = "Insufficient bays: need {$requiredCount} x {$formFactor}, chassis has {$availableCount}";
-                    }
-                } else {
-                    $result['compatible'] = false;
-                    $result['compatibility_score'] = 0.0;
-                    $result['issues'][] = "Insufficient {$formFactor} bays: need {$requiredCount}, chassis has {$availableCount}";
-                }
+                // Insufficient bays of the required form factor (strict matching - no adapters)
+                $result['compatible'] = false;
+                $result['compatibility_score'] = 0.0;
+                $result['issues'][] = "Insufficient {$formFactor} bays: need {$requiredCount}, chassis has {$availableCount}";
             }
         }
 
@@ -6871,6 +7128,27 @@ class ComponentCompatibility {
 
         // Default to 3.0 if not specified
         return 3.0;
+    }
+
+    /**
+     * Normalize form factor for comparison
+     * Handles variations: "3.5-inch", "3.5\"", "3.5 inch", "3.5inch" → "3.5-inch"
+     */
+    private function normalizeFormFactorForComparison($formFactor) {
+        if (empty($formFactor)) {
+            return '';
+        }
+
+        // Convert to lowercase and remove extra spaces
+        $normalized = strtolower(trim($formFactor));
+
+        // Replace variations of inch notation
+        $normalized = str_replace(['"', ' inch', 'inch', '_'], ['', '-inch', '-inch', '-'], $normalized);
+
+        // Ensure consistent format: "2.5-inch" or "3.5-inch"
+        $normalized = preg_replace('/(\d+\.?\d*)\s*-?\s*inch/', '$1-inch', $normalized);
+
+        return $normalized;
     }
 }
 ?>

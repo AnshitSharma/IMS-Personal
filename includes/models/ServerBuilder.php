@@ -1563,23 +1563,89 @@ class ServerBuilder {
                     'details' => ['error' => $ramValidation['error']]
                 ];
             }
-            
+
             $ramSpecs = $ramValidation['specifications'];
-            
+
             // Get system component specifications for compatibility checking
             $motherboardResult = $this->getMotherboardSpecsFromConfig($configUuid);
             $cpuResult = $this->getCPUSpecsFromConfig($configUuid);
-            
-            if (!$motherboardResult['found']) {
+
+            $hasMB = $motherboardResult['found'];
+            $hasCPU = $cpuResult['found'];
+
+            // FLEXIBLE VALIDATION LOGIC:
+            // 1. No MB and No CPU -> Allow all RAM (no compatibility checks needed)
+            // 2. CPU exists but No MB -> Check CPU-RAM compatibility only
+            // 3. MB exists -> Check MB-RAM (and CPU-RAM if CPU present) compatibility
+
+            if (!$hasMB && !$hasCPU) {
+                // Scenario 1: No motherboard, no CPU - allow any RAM
                 return [
-                    'success' => false,
-                    'message' => 'No motherboard found in configuration - add motherboard first'
+                    'success' => true,
+                    'message' => 'RAM validated successfully (no compatibility constraints)',
+                    'warnings' => ['No motherboard or CPU in configuration - compatibility will be validated when they are added'],
+                    'compatibility_details' => [
+                        'validation_mode' => 'no_constraints',
+                        'note' => 'RAM can be added without compatibility checks until motherboard or CPU is added'
+                    ]
                 ];
             }
-            
-            $motherboardSpecs = $motherboardResult['specifications'];
-            $cpuSpecs = $cpuResult['found'] ? $cpuResult['specifications'] : [];
-            
+
+            $motherboardSpecs = $hasMB ? $motherboardResult['specifications'] : [];
+            $cpuSpecs = $hasCPU ? $cpuResult['specifications'] : [];
+            $warnings = [];
+
+            if ($hasCPU && !$hasMB) {
+                // Scenario 2: CPU exists but no motherboard - validate CPU-RAM compatibility only
+
+                // Check memory type compatibility with CPU
+                $typeCheck = $compatibility->validateMemoryTypeCompatibility($ramSpecs, [], $cpuSpecs);
+                if (!$typeCheck['compatible']) {
+                    return [
+                        'success' => false,
+                        'message' => $typeCheck['message'],
+                        'details' => ['supported_types' => $typeCheck['supported_types']]
+                    ];
+                }
+
+                // ECC compatibility with CPU
+                $eccCheck = $compatibility->validateECCCompatibility($ramSpecs, [], $cpuSpecs);
+                if (isset($eccCheck['warning'])) {
+                    $warnings[] = $eccCheck['warning'];
+                }
+                if (isset($eccCheck['recommendation'])) {
+                    $warnings[] = $eccCheck['recommendation'];
+                }
+
+                // Frequency analysis with CPU only
+                $frequencyAnalysis = $compatibility->analyzeMemoryFrequency($ramSpecs, [], $cpuSpecs);
+                if ($frequencyAnalysis['status'] === 'error') {
+                    $warnings[] = $frequencyAnalysis['message'];
+                } else {
+                    if ($frequencyAnalysis['status'] === 'limited') {
+                        $warnings[] = $frequencyAnalysis['message'];
+                    } elseif ($frequencyAnalysis['status'] === 'suboptimal') {
+                        $warnings[] = $frequencyAnalysis['message'];
+                    }
+                }
+
+                $warnings[] = 'No motherboard in configuration - full validation will occur when motherboard is added';
+
+                return [
+                    'success' => true,
+                    'message' => 'RAM compatible with CPU',
+                    'warnings' => $warnings,
+                    'compatibility_details' => [
+                        'validation_mode' => 'cpu_only',
+                        'memory_type' => $typeCheck,
+                        'frequency_analysis' => $frequencyAnalysis,
+                        'ecc_support' => $eccCheck
+                    ]
+                ];
+            }
+
+            // Scenario 3: Motherboard exists - perform full validation
+
             // Task 2: Memory type compatibility - DDR4/DDR5 matching
             $typeCheck = $compatibility->validateMemoryTypeCompatibility($ramSpecs, $motherboardSpecs, $cpuSpecs);
             if (!$typeCheck['compatible']) {
@@ -1589,7 +1655,7 @@ class ServerBuilder {
                     'details' => ['supported_types' => $typeCheck['supported_types']]
                 ];
             }
-            
+
             // Task 5: Memory slot limit validation
             $slotCheck = $compatibility->validateMemorySlotAvailability($configUuid, $motherboardSpecs);
             if (!$slotCheck['can_add']) {
@@ -1602,7 +1668,7 @@ class ServerBuilder {
                     ]
                 ];
             }
-            
+
             // Task 4: Form factor validation - DIMM/SO-DIMM compatibility
             $formFactorCheck = $compatibility->validateMemoryFormFactor($ramSpecs, $motherboardSpecs);
             if (!$formFactorCheck['compatible']) {
@@ -1611,18 +1677,17 @@ class ServerBuilder {
                     'message' => $formFactorCheck['message']
                 ];
             }
-            
+
             // Task 4: ECC compatibility validation
             $eccCheck = $compatibility->validateECCCompatibility($ramSpecs, $motherboardSpecs, $cpuSpecs);
             // Note: ECC compatibility issues are warnings, not blocking errors
-            $warnings = [];
             if (isset($eccCheck['warning'])) {
                 $warnings[] = $eccCheck['warning'];
             }
             if (isset($eccCheck['recommendation'])) {
                 $warnings[] = $eccCheck['recommendation'];
             }
-            
+
             // Task 3: Advanced frequency analysis - complex performance logic
             $frequencyAnalysis = $compatibility->analyzeMemoryFrequency($ramSpecs, $motherboardSpecs, $cpuSpecs);
             if ($frequencyAnalysis['status'] === 'error') {
@@ -1635,12 +1700,13 @@ class ServerBuilder {
                     $warnings[] = $frequencyAnalysis['message'];
                 }
             }
-            
+
             return [
                 'success' => true,
                 'message' => 'RAM compatibility validation passed',
                 'warnings' => $warnings,
                 'compatibility_details' => [
+                    'validation_mode' => 'full',
                     'memory_type' => $typeCheck,
                     'frequency_analysis' => $frequencyAnalysis,
                     'form_factor' => $formFactorCheck,
@@ -1648,7 +1714,7 @@ class ServerBuilder {
                     'slot_availability' => $slotCheck
                 ]
             ];
-            
+
         } catch (Exception $e) {
             error_log("Error validating RAM addition: " . $e->getMessage());
             return [

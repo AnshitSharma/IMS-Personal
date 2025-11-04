@@ -651,6 +651,13 @@ class DataExtractionUtilities {
     }
 
     /**
+     * Get Caddy by UUID (wrapper for findComponentByUuid)
+     */
+    public function getCaddyByUUID($uuid) {
+        return $this->findComponentByUuid('caddy', $uuid);
+    }
+
+    /**
      * Clear JSON cache
      */
     public function clearCache() {

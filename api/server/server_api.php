@@ -2775,8 +2775,8 @@ function getConfigurationWarnings($components) {
             ];
         }
 
-        // Check for missing critical components
-        $criticalComponents = ['cpu', 'motherboard', 'ram'];
+        // Check for missing critical components (CPU, Motherboard, RAM, Chassis)
+        $criticalComponents = ['cpu', 'motherboard', 'ram', 'chassis'];
         foreach ($criticalComponents as $type) {
             if (empty($components[$type])) {
                 $warnings[] = [
@@ -2786,6 +2786,129 @@ function getConfigurationWarnings($components) {
                     'recommendation' => "Add " . ucfirst($type) . " to complete server configuration"
                 ];
             }
+        }
+
+        // Check caddy-storage compatibility and count matching
+        if (!empty($components['storage'])) {
+            $storageByFormFactor = [
+                '2.5' => [],
+                '3.5' => []
+            ];
+            $caddyByFormFactor = [
+                '2.5' => [],
+                '3.5' => []
+            ];
+
+            // Count storage devices by form factor (2.5" and 3.5" only)
+            foreach ($components['storage'] as $storage) {
+                $storageUuid = $storage['uuid'] ?? null;
+                if ($storageUuid) {
+                    $storageSpecs = $dataUtils->getStorageByUUID($storageUuid);
+                    if ($storageSpecs) {
+                        $formFactor = strtolower($storageSpecs['form_factor'] ?? '');
+                        // Only check for 2.5" and 3.5" drives (not M.2 or other form factors)
+                        if (strpos($formFactor, '2.5') !== false) {
+                            $storageByFormFactor['2.5'][] = $storageUuid;
+                        } elseif (strpos($formFactor, '3.5') !== false) {
+                            $storageByFormFactor['3.5'][] = $storageUuid;
+                        }
+                    }
+                }
+            }
+
+            // Count caddies by form factor
+            if (!empty($components['caddy'])) {
+                foreach ($components['caddy'] as $caddy) {
+                    $caddyUuid = $caddy['uuid'] ?? null;
+                    if ($caddyUuid) {
+                        $caddySpecs = $dataUtils->getCaddyByUUID($caddyUuid);
+                        if ($caddySpecs) {
+                            $formFactor = strtolower($caddySpecs['form_factor'] ?? '');
+                            if (strpos($formFactor, '2.5') !== false) {
+                                $caddyByFormFactor['2.5'][] = $caddyUuid;
+                            } elseif (strpos($formFactor, '3.5') !== false) {
+                                $caddyByFormFactor['3.5'][] = $caddyUuid;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Check 2.5" storage vs caddy count
+            $storage25Count = count($storageByFormFactor['2.5']);
+            $caddy25Count = count($caddyByFormFactor['2.5']);
+
+            if ($storage25Count > 0 && $caddy25Count < $storage25Count) {
+                $missing = $storage25Count - $caddy25Count;
+                $warnings[] = [
+                    'type' => 'caddy_shortage',
+                    'severity' => 'high',
+                    'message' => "Insufficient 2.5\" caddies: {$storage25Count} 2.5\" storage device(s) require {$storage25Count} caddies, but only {$caddy25Count} available",
+                    'recommendation' => "Add {$missing} 2.5\" caddy/caddies to match storage devices"
+                ];
+            } elseif ($storage25Count > 0 && $caddy25Count > $storage25Count) {
+                $excess = $caddy25Count - $storage25Count;
+                $warnings[] = [
+                    'type' => 'caddy_excess',
+                    'severity' => 'info',
+                    'message' => "Excess 2.5\" caddies: {$excess} extra 2.5\" caddy/caddies not currently needed",
+                    'recommendation' => "You have {$caddy25Count} 2.5\" caddies for {$storage25Count} 2.5\" storage device(s)"
+                ];
+            }
+
+            // Check 3.5" storage vs caddy count
+            $storage35Count = count($storageByFormFactor['3.5']);
+            $caddy35Count = count($caddyByFormFactor['3.5']);
+
+            if ($storage35Count > 0 && $caddy35Count < $storage35Count) {
+                $missing = $storage35Count - $caddy35Count;
+                $warnings[] = [
+                    'type' => 'caddy_shortage',
+                    'severity' => 'high',
+                    'message' => "Insufficient 3.5\" caddies: {$storage35Count} 3.5\" storage device(s) require {$storage35Count} caddies, but only {$caddy35Count} available",
+                    'recommendation' => "Add {$missing} 3.5\" caddy/caddies to match storage devices"
+                ];
+            } elseif ($storage35Count > 0 && $caddy35Count > $storage35Count) {
+                $excess = $caddy35Count - $storage35Count;
+                $warnings[] = [
+                    'type' => 'caddy_excess',
+                    'severity' => 'info',
+                    'message' => "Excess 3.5\" caddies: {$excess} extra 3.5\" caddy/caddies not currently needed",
+                    'recommendation' => "You have {$caddy35Count} 3.5\" caddies for {$storage35Count} 3.5\" storage device(s)"
+                ];
+            }
+        }
+
+        // Check for missing NIC - only warn if no onboard NICs are present
+        if (empty($components['nic']) && isset($components['motherboard']) && !empty($components['motherboard'])) {
+            // Check if motherboard has onboard NICs
+            $hasOnboardNICs = false;
+            $mbUuid = $components['motherboard'][0]['uuid'] ?? null;
+
+            if ($mbUuid) {
+                $mbSpecs = $dataUtils->getMotherboardByUUID($mbUuid);
+                if ($mbSpecs && isset($mbSpecs['networking']['onboard_nics']) && !empty($mbSpecs['networking']['onboard_nics'])) {
+                    $hasOnboardNICs = true;
+                }
+            }
+
+            // Only warn if no onboard NICs are available
+            if (!$hasOnboardNICs) {
+                $warnings[] = [
+                    'type' => 'missing_nic',
+                    'severity' => 'high',
+                    'message' => "No NIC component found in configuration",
+                    'recommendation' => "Add a NIC component for network connectivity"
+                ];
+            }
+        } elseif (empty($components['nic']) && empty($components['motherboard'])) {
+            // No motherboard and no NIC - warn about NIC
+            $warnings[] = [
+                'type' => 'missing_nic',
+                'severity' => 'high',
+                'message' => "No NIC component found in configuration",
+                'recommendation' => "Add a NIC component for network connectivity"
+            ];
         }
 
     } catch (Exception $e) {
