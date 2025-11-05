@@ -217,6 +217,21 @@ class StorageConnectionValidator {
      * Reads: chassis.backplane.supports_* from JSON
      */
     private function checkChassisBackplaneCapability($storageInterface, $storageFormFactor, $existing, $storageSpecs) {
+        // ONLY M.2 form factor drives bypass chassis - they use motherboard M.2 slots or PCIe adapters
+        // 2.5" and 3.5" drives ALWAYS use chassis bays, regardless of interface (SATA/SAS/NVMe/U.3)
+        // U.2/U.3 form factor (not 2.5") use motherboard U.2 ports
+        $normalizedFormFactor = strtolower($storageFormFactor);
+
+        // ONLY bypass chassis for M.2 form factor
+        if (strpos($normalizedFormFactor, 'm.2') !== false) {
+            return ['available' => false, 'reason' => 'm2_bypass_chassis'];
+        }
+
+        // U.2/U.3 as form_factor (not subtype) also bypass chassis - they use motherboard U.2 ports
+        if (strpos($normalizedFormFactor, 'u.2') !== false || strpos($normalizedFormFactor, 'u.3') !== false) {
+            return ['available' => false, 'reason' => 'u2_u3_bypass_chassis'];
+        }
+
         if (!$existing['chassis'] || !isset($existing['chassis']['component_uuid'])) {
             return ['available' => false, 'reason' => 'no_chassis'];
         }
@@ -319,7 +334,8 @@ class StorageConnectionValidator {
         }
 
         // PHASE 2: M.2 Slot Check with usage tracking
-        if (strpos(strtolower($storageFormFactor), 'm.2') !== false || strpos(strtolower($storageSubtype), 'm.2') !== false) {
+        // ONLY check form_factor, NOT subtype - subtype indicates protocol, form_factor indicates physical connection
+        if (strpos(strtolower($storageFormFactor), 'm.2') !== false) {
             $m2Slots = $storage['nvme']['m2_slots'] ?? [];
             $totalM2Slots = (!empty($m2Slots) && isset($m2Slots[0]['count'])) ? $m2Slots[0]['count'] : 0;
             $usedM2Slots = $this->countUsedM2Slots($existing);
@@ -350,8 +366,9 @@ class StorageConnectionValidator {
         }
 
         // PHASE 2: U.2 Slot Check with usage tracking
-        if (strpos(strtolower($storageFormFactor), 'u.2') !== false || strpos(strtolower($storageFormFactor), 'u.3') !== false ||
-            strpos(strtolower($storageSubtype), 'u.2') !== false || strpos(strtolower($storageSubtype), 'u.3') !== false) {
+        // ONLY check if form_factor explicitly says "U.2" or "U.3"
+        // Do NOT check subtype - "2.5-inch" drives with U.3 protocol use chassis bays, not motherboard U.2 ports!
+        if (strpos(strtolower($storageFormFactor), 'u.2') !== false || strpos(strtolower($storageFormFactor), 'u.3') !== false) {
             $u2Slots = $storage['nvme']['u2_slots'] ?? [];
             $totalU2Slots = isset($u2Slots['count']) ? $u2Slots['count'] : 0;
             $usedU2Slots = $this->countUsedU2Slots($existing);

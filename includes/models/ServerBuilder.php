@@ -394,9 +394,10 @@ class ServerBuilder {
             
             // Get components with serial numbers from inventory tables using JOINs (with collation fix)
             $stmt = $this->pdo->prepare("
-                SELECT 
+                SELECT
                     scc.*,
-                    COALESCE(cpu.SerialNumber, mb.SerialNumber, ram.SerialNumber, storage.SerialNumber, nic.SerialNumber, caddy.SerialNumber, 'Not Found') as serial_number
+                    COALESCE(cpu.SerialNumber, mb.SerialNumber, ram.SerialNumber, storage.SerialNumber, nic.SerialNumber, caddy.SerialNumber, 'Not Found') as serial_number,
+                    nic.SourceType as nic_source_type
                 FROM server_configuration_components scc
                 LEFT JOIN cpuinventory cpu ON scc.component_type = 'cpu' AND scc.component_uuid COLLATE utf8mb4_general_ci = cpu.UUID COLLATE utf8mb4_general_ci
                 LEFT JOIN motherboardinventory mb ON scc.component_type = 'motherboard' AND scc.component_uuid COLLATE utf8mb4_general_ci = mb.UUID COLLATE utf8mb4_general_ci
@@ -432,6 +433,13 @@ class ServerBuilder {
                     'slot_position' => $component['slot_position'] ?? null,
                     'added_at' => $component['added_at']
                 ];
+
+                // Add source_type for NICs (onboard vs component)
+                if ($type === 'nic' && !empty($component['nic_source_type'])) {
+                    $simplifiedComponent['source_type'] = $component['nic_source_type'];
+                } elseif ($type === 'nic') {
+                    $simplifiedComponent['source_type'] = 'component'; // Default to component if not specified
+                }
                 
                 $componentDetails[$type][] = $simplifiedComponent;
                 $componentCounts[$type] += $component['quantity'];

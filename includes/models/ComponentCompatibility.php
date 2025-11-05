@@ -381,17 +381,33 @@ class ComponentCompatibility {
             }
 
             // PCIe Bandwidth Validation for NVMe storage
+            // SKIP for M.2/U.2/U.3 FORM FACTOR - they use dedicated motherboard slots or chassis bays
+            // 2.5"/3.5" drives with NVMe interface use chassis bays, NOT PCIe expansion slots
             if ($this->isNVMeStorage($storageSpecs)) {
-                $bandwidthResult = $this->checkPCIeBandwidthCompatibility($storageSpecs, $motherboardSpecs);
-                if (!$bandwidthResult['compatible']) {
-                    $result['compatibility_score'] = min($result['compatibility_score'], $bandwidthResult['score']);
-                    if ($bandwidthResult['score'] < 0.5) {
-                        $result['compatible'] = false;
-                        $result['issues'][] = $bandwidthResult['message'];
-                    } else {
-                        $result['warnings'][] = $bandwidthResult['message'];
+                $formFactor = strtolower($storageSpecs['form_factor'] ?? '');
+
+                // ONLY check form_factor, NOT subtype
+                // Form factor determines physical connection, not protocol
+                $isM2FormFactor = (strpos($formFactor, 'm.2') !== false || strpos($formFactor, 'm2') !== false);
+                $isU2U3FormFactor = (strpos($formFactor, 'u.2') !== false || strpos($formFactor, 'u.3') !== false);
+                $is25or35Inch = (strpos($formFactor, '2.5') !== false || strpos($formFactor, '3.5') !== false);
+
+                // Skip PCIe bandwidth check for:
+                // - M.2 form factor (uses motherboard M.2 slots or M.2 adapters)
+                // - U.2/U.3 form factor (uses motherboard U.2 ports)
+                // - 2.5"/3.5" form factor (uses chassis bays, even if NVMe protocol)
+                if (!$isM2FormFactor && !$isU2U3FormFactor && !$is25or35Inch) {
+                    $bandwidthResult = $this->checkPCIeBandwidthCompatibility($storageSpecs, $motherboardSpecs);
+                    if (!$bandwidthResult['compatible']) {
+                        $result['compatibility_score'] = min($result['compatibility_score'], $bandwidthResult['score']);
+                        if ($bandwidthResult['score'] < 0.5) {
+                            $result['compatible'] = false;
+                            $result['issues'][] = $bandwidthResult['message'];
+                        } else {
+                            $result['warnings'][] = $bandwidthResult['message'];
+                        }
+                        $result['recommendations'][] = $bandwidthResult['recommendation'];
                     }
-                    $result['recommendations'][] = $bandwidthResult['recommendation'];
                 }
             }
 
@@ -793,7 +809,18 @@ class ComponentCompatibility {
                                 $brandName = $brandData['brand'] ?? 'Unknown';
                                 $seriesName = $series['name'] ?? 'Unknown';
                                 error_log("DEBUG: Found component $uuid in brand $brandName, series $seriesName");
-                                return $model;
+
+                                // IMPORTANT: Merge parent-level fields (like component_subtype) into model data
+                                // This ensures fields like 'component_subtype' from the brand level are available
+                                $enrichedModel = $model;
+                                if (isset($brandData['component_subtype'])) {
+                                    $enrichedModel['component_subtype'] = $brandData['component_subtype'];
+                                }
+                                if (isset($brandData['brand'])) {
+                                    $enrichedModel['brand'] = $brandData['brand'];
+                                }
+
+                                return $enrichedModel;
                             }
                         }
                     }
@@ -824,7 +851,18 @@ class ComponentCompatibility {
                     if ($modelUuid === $uuid) {
                         $brandName = $brandData['brand'] ?? 'Unknown';
                         error_log("DEBUG: Found component $uuid in brand $brandName");
-                        return $model;
+
+                        // IMPORTANT: Merge parent-level fields (like component_subtype) into model data
+                        // This ensures fields like 'component_subtype' from the brand level are available
+                        $enrichedModel = $model;
+                        if (isset($brandData['component_subtype'])) {
+                            $enrichedModel['component_subtype'] = $brandData['component_subtype'];
+                        }
+                        if (isset($brandData['brand'])) {
+                            $enrichedModel['brand'] = $brandData['brand'];
+                        }
+
+                        return $enrichedModel;
                     }
                 }
             }
@@ -3408,12 +3446,13 @@ class ComponentCompatibility {
 
     /**
      * Check storage interface compatibility with motherboard
+     * JSON-DRIVEN: No hardcoded compatibility rules - uses protocol/generation normalization
      */
     private function checkStorageInterfaceCompatibility($storageSpecs, $motherboardSpecs) {
         $storageInterface = $storageSpecs['interface_type'];
         $mbInterfaces = $motherboardSpecs['storage_interfaces'];
 
-        // Direct interface match (highest score)
+        // Direct interface match (exact string - highest score)
         if (in_array($storageInterface, $mbInterfaces)) {
             return [
                 'compatible' => true,
@@ -3423,31 +3462,48 @@ class ComponentCompatibility {
             ];
         }
 
-        // Check for compatible alternatives
-        $compatibilityMatrix = [
-            'SATA III' => ['SATA', 'SATA II'],
-            'SATA' => ['SATA III', 'SATA II'],
-            'PCIe NVMe 4.0' => ['PCIe NVMe', 'NVMe', 'PCIe NVMe 3.0'],
-            'PCIe NVMe' => ['NVMe', 'PCIe NVMe 4.0', 'PCIe NVMe 3.0'],
-            'NVMe' => ['PCIe NVMe', 'PCIe NVMe 4.0', 'PCIe NVMe 3.0'],
-            'SAS' => [], // SAS requires dedicated controller
-        ];
+        // Normalize storage interface and compare with normalized motherboard interfaces
+        $normalizedStorageInterface = $this->normalizeStorageInterface($storageInterface);
 
-        if (isset($compatibilityMatrix[$storageInterface])) {
-            foreach ($compatibilityMatrix[$storageInterface] as $altInterface) {
-                if (in_array($altInterface, $mbInterfaces)) {
+        foreach ($mbInterfaces as $mbInterface) {
+            $normalizedMbInterface = $this->normalizeStorageInterface($mbInterface);
+
+            // Check if normalized interfaces match (protocol and generation)
+            if ($normalizedStorageInterface['protocol'] === $normalizedMbInterface['protocol']) {
+                // Same protocol - check generation compatibility
+                if ($normalizedStorageInterface['generation'] === $normalizedMbInterface['generation']) {
+                    // Perfect match
+                    return [
+                        'compatible' => true,
+                        'score' => 0.95,
+                        'message' => "Interface compatible: $storageInterface matches $mbInterface",
+                        'recommendation' => 'Native interface support provides optimal performance'
+                    ];
+                } elseif ($normalizedStorageInterface['generation'] !== null &&
+                          $normalizedMbInterface['generation'] !== null &&
+                          $normalizedStorageInterface['generation'] <= $normalizedMbInterface['generation']) {
+                    // Backward compatible (storage gen <= motherboard gen)
+                    return [
+                        'compatible' => true,
+                        'score' => 0.90,
+                        'message' => "Interface compatible: $storageInterface works with $mbInterface (backward compatible)",
+                        'recommendation' => 'Backward compatible - full functionality supported'
+                    ];
+                } elseif ($normalizedStorageInterface['generation'] === null ||
+                          $normalizedMbInterface['generation'] === null) {
+                    // One has no generation specified - assume compatible
                     return [
                         'compatible' => true,
                         'score' => 0.85,
-                        'message' => "Compatible interface: $storageInterface works with $altInterface",
-                        'recommendation' => 'Interface compatible with potential performance differences'
+                        'message' => "Interface compatible: $storageInterface works with $mbInterface",
+                        'recommendation' => 'Compatible with potential performance differences'
                     ];
                 }
             }
         }
 
         // Check if NVMe can work via PCIe slot
-        if (strpos($storageInterface, 'NVMe') !== false || strpos($storageInterface, 'PCIe') !== false) {
+        if ($normalizedStorageInterface['protocol'] === 'nvme') {
             if (!empty($motherboardSpecs['pcie_slots'])) {
                 return [
                     'compatible' => true,
@@ -3464,6 +3520,56 @@ class ComponentCompatibility {
             'score' => 0.25,
             'message' => "Storage requires $storageInterface but motherboard only supports: " . implode(', ', $mbInterfaces),
             'recommendation' => 'Use storage device with compatible interface or upgrade motherboard'
+        ];
+    }
+
+    /**
+     * Normalize storage interface string to extract protocol and generation
+     * This allows flexible matching regardless of word order or formatting
+     *
+     * Examples:
+     *   "NVMe PCIe 4.0" -> ['protocol' => 'nvme', 'generation' => 4.0]
+     *   "PCIe NVMe 4.0" -> ['protocol' => 'nvme', 'generation' => 4.0]
+     *   "SATA III" -> ['protocol' => 'sata', 'generation' => 3]
+     *   "SAS3" -> ['protocol' => 'sas', 'generation' => 3]
+     */
+    private function normalizeStorageInterface($interface) {
+        $interface = strtolower(trim($interface));
+
+        // Detect protocol
+        $protocol = null;
+        if (strpos($interface, 'nvme') !== false) {
+            $protocol = 'nvme';
+        } elseif (strpos($interface, 'sata') !== false) {
+            $protocol = 'sata';
+        } elseif (strpos($interface, 'sas') !== false) {
+            $protocol = 'sas';
+        } elseif (strpos($interface, 'u.2') !== false || strpos($interface, 'u.3') !== false) {
+            $protocol = 'nvme'; // U.2/U.3 are NVMe protocols
+        }
+
+        // Extract generation number
+        $generation = null;
+
+        // Match patterns like: "4.0", "3.0", "5.0", "III", "3", etc.
+        if (preg_match('/(\d+)\.(\d+)/', $interface, $matches)) {
+            // PCIe generations: 3.0, 4.0, 5.0
+            $generation = (float)($matches[1] . '.' . $matches[2]);
+        } elseif (preg_match('/(\d+)/', $interface, $matches)) {
+            // Simple number: SATA3, SAS3, etc.
+            $generation = (int)$matches[1];
+        } elseif (strpos($interface, 'iii') !== false || strpos($interface, 'sata iii') !== false) {
+            // SATA III = SATA3
+            $generation = 3;
+        } elseif (strpos($interface, 'ii') !== false) {
+            // SATA II = SATA2
+            $generation = 2;
+        }
+
+        return [
+            'protocol' => $protocol,
+            'generation' => $generation,
+            'original' => $interface
         ];
     }
 
@@ -3953,6 +4059,110 @@ class ComponentCompatibility {
             $cardSlotSize = $this->extractPCIeSlotSize($pcieCardData);
             $cardSubtype = $pcieCardData['component_subtype'] ?? 'PCIe Card';
 
+            error_log("DEBUG ComponentCompatibility: UUID=" . $pcieCardComponent['uuid'] . ", component_subtype='" . $cardSubtype . "', cardSlotSize=" . $cardSlotSize);
+
+            // SPECIAL HANDLING FOR RISER CARDS
+            // Riser cards use riser slots, not PCIe slots
+            $isRiserCard = ($cardSubtype === 'Riser Card');
+
+            error_log("DEBUG ComponentCompatibility: isRiserCard=" . ($isRiserCard ? 'TRUE' : 'FALSE'));
+
+            if ($isRiserCard) {
+                error_log("DEBUG ComponentCompatibility: Entering riser card handling block");
+                // Use ExpansionSlotTracker to check riser slot availability
+                require_once __DIR__ . '/ExpansionSlotTracker.php';
+                $slotTracker = new ExpansionSlotTracker($this->pdo);
+
+                // Find config_uuid from existing components (need it for ExpansionSlotTracker)
+                $configUuid = null;
+                foreach ($existingComponents as $existingComp) {
+                    if ($existingComp['type'] === 'motherboard') {
+                        // Query to find config_uuid from this motherboard
+                        $stmt = $this->pdo->prepare("
+                            SELECT config_uuid
+                            FROM server_configuration_components
+                            WHERE component_uuid = ? AND component_type = 'motherboard'
+                            LIMIT 1
+                        ");
+                        $stmt->execute([$existingComp['uuid']]);
+                        $configRow = $stmt->fetch(PDO::FETCH_ASSOC);
+                        if ($configRow) {
+                            $configUuid = $configRow['config_uuid'];
+                            break;
+                        }
+                    }
+                }
+
+                if ($configUuid) {
+                    // Check riser slot availability
+                    $riserAvailability = $slotTracker->getRiserSlotAvailability($configUuid);
+
+                    if (!$riserAvailability['success']) {
+                        $result['compatible'] = false;
+                        $result['compatibility_score'] = 0.0;
+                        $result['issues'][] = "Motherboard does not support riser cards";
+                        $result['compatibility_summary'] = 'Incompatible - Motherboard does not have riser slots';
+                        return $result;
+                    }
+
+                    // Count total available riser slots across all types
+                    $totalRiserSlots = 0;
+                    $availableRiserSlots = 0;
+                    foreach ($riserAvailability['total_slots'] as $slotType => $slots) {
+                        $totalRiserSlots += count($slots);
+                    }
+                    foreach ($riserAvailability['available_slots'] as $slotType => $slots) {
+                        $availableRiserSlots += count($slots);
+                    }
+
+                    if ($availableRiserSlots === 0) {
+                        $result['compatible'] = false;
+                        $result['compatibility_score'] = 0.0;
+                        $result['issues'][] = "All riser slots occupied (0/{$totalRiserSlots} available)";
+                        $result['compatibility_summary'] = "Incompatible - All {$totalRiserSlots} riser slots occupied";
+                        return $result;
+                    }
+
+                    // Check if riser fits by size
+                    $riserSlotType = 'x' . $cardSlotSize;
+                    $canFitRiser = $slotTracker->canFitRiserBySize($configUuid, $riserSlotType);
+
+                    if (!$canFitRiser) {
+                        // Build available slot type list
+                        $availableSlotTypes = [];
+                        foreach ($riserAvailability['available_slots'] as $slotType => $slots) {
+                            if (!empty($slots)) {
+                                $availableSlotTypes[] = "{$slotType} (" . count($slots) . " available)";
+                            }
+                        }
+
+                        $result['compatible'] = false;
+                        $result['compatibility_score'] = 0.0;
+                        $result['issues'][] = "Riser card requires {$riserSlotType} slot, but no compatible slots available";
+                        $result['details'][] = "Available riser slot types: " . (empty($availableSlotTypes) ? "None" : implode(', ', $availableSlotTypes));
+                        $result['compatibility_summary'] = "Incompatible - Requires {$riserSlotType} riser slot";
+                        return $result;
+                    }
+
+                    // Riser card is compatible!
+                    $result['compatible'] = true;
+                    $result['compatibility_score'] = 1.0;
+                    $result['details'][] = "Riser card compatible - {$availableRiserSlots} of {$totalRiserSlots} riser slots available";
+                    $result['compatibility_summary'] = "Compatible - Riser slot available ({$availableRiserSlots}/{$totalRiserSlots} free)";
+                    return $result;
+
+                } else {
+                    // No motherboard yet - riser will be compatible once motherboard is added
+                    $result['compatible'] = true;
+                    $result['compatibility_score'] = 1.0;
+                    $result['details'][] = 'No motherboard in configuration - riser card will be validated when motherboard is added';
+                    $result['warnings'][] = 'Add motherboard with riser slot support first';
+                    $result['compatibility_summary'] = 'Compatible - requires motherboard with riser slots';
+                    return $result;
+                }
+            }
+
+            // REGULAR PCIe CARD/NIC HANDLING (NOT RISER CARDS)
             // Track slot availability and motherboard constraints
             $slotAvailability = [
                 'total_slots' => 0,
@@ -4134,15 +4344,19 @@ class ComponentCompatibility {
                     return $result;
                 }
 
-                // Check if slots are available
-                $availableSlots = $slotAvailability['total_slots'] - $slotAvailability['used_slots'];
+                // Check if slots are available (INCLUDING riser-provided slots)
+                $totalAvailableSlots = $slotAvailability['total_slots'] + $slotAvailability['riser_added_slots'];
+                $usedSlots = $slotAvailability['used_slots'];
+                $availableSlots = $totalAvailableSlots - $usedSlots;
+
+                error_log("DEBUG HBA slot check: total_slots={$slotAvailability['total_slots']}, riser_added={$slotAvailability['riser_added_slots']}, used={$usedSlots}, available={$availableSlots}");
 
                 if ($availableSlots <= 0) {
                     $result['compatible'] = false;
                     $result['compatibility_score'] = 0.0;
                     $result['issues'][] = 'No available PCIe slots on motherboard for HBA card';
-                    $result['recommendations'][] = 'Remove existing PCIe cards or choose motherboard with more slots';
-                    $result['compatibility_summary'] = 'Incompatible - No available PCIe slots';
+                    $result['recommendations'][] = 'Remove existing PCIe cards or add riser card to expand slots';
+                    $result['compatibility_summary'] = "Incompatible - All PCIe slots occupied ({$usedSlots}/{$totalAvailableSlots} used)";
                     return $result;
                 }
 
@@ -4193,9 +4407,12 @@ class ComponentCompatibility {
             if (!empty($incompatibleInterfaces)) {
                 $result['compatible'] = false;
                 $result['compatibility_score'] = 0.0;
-                $result['issues'][] = "HBA protocol '{$hbaProtocol}' incompatible with storage interfaces: " . implode(', ', $incompatibleInterfaces);
+                $incompatibleList = implode(', ', $incompatibleInterfaces);
+                $result['issues'][] = "HBA protocol '{$hbaProtocol}' incompatible with storage interfaces: {$incompatibleList}";
                 $result['recommendations'][] = 'Use HBA card with matching protocol or choose tri-mode HBA (SAS/SATA/NVMe)';
-                $result['compatibility_summary'] = 'Incompatible - Protocol mismatch';
+
+                // Create detailed compatibility summary explaining the mismatch
+                $result['compatibility_summary'] = "Incompatible - HBA protocol '{$hbaProtocol}' does not support storage interface(s): {$incompatibleList}. Storage requires compatible HBA.";
                 return $result;
             }
 
@@ -4219,16 +4436,20 @@ class ComponentCompatibility {
                 return $result;
             }
 
-            // Check PCIe slot availability (if motherboard exists)
+            // Check PCIe slot availability (if motherboard exists) - INCLUDING riser-provided slots
             if ($hasMotherboard) {
-                $availableSlots = $slotAvailability['total_slots'] - $slotAvailability['used_slots'];
+                $totalAvailableSlots = $slotAvailability['total_slots'] + $slotAvailability['riser_added_slots'];
+                $usedSlots = $slotAvailability['used_slots'];
+                $availableSlots = $totalAvailableSlots - $usedSlots;
+
+                error_log("DEBUG HBA slot check (with storage): total_slots={$slotAvailability['total_slots']}, riser_added={$slotAvailability['riser_added_slots']}, used={$usedSlots}, available={$availableSlots}");
 
                 if ($availableSlots <= 0) {
                     $result['compatible'] = false;
                     $result['compatibility_score'] = 0.0;
                     $result['issues'][] = 'No available PCIe slots on motherboard for HBA card';
-                    $result['recommendations'][] = 'Remove existing PCIe cards or choose motherboard with more slots';
-                    $result['compatibility_summary'] = 'Incompatible - No available PCIe slots';
+                    $result['recommendations'][] = 'Remove existing PCIe cards or add riser card to expand slots';
+                    $result['compatibility_summary'] = "Incompatible - All PCIe slots occupied ({$usedSlots}/{$totalAvailableSlots} used)";
                     return $result;
                 }
 
@@ -4309,29 +4530,60 @@ class ComponentCompatibility {
      * Check if available PCIe slots can accommodate the required slot size
      */
     private function checkPCIeSlotSizeCompatibility($requiredSlotSize, $slotAvailability) {
+        // Normalize requiredSlotSize to string format "x8", "x16", etc.
+        // Input might be integer (8) or string ("x8" or "8")
+        if (is_numeric($requiredSlotSize)) {
+            $requiredSlotSize = 'x' . $requiredSlotSize;
+        } elseif (strpos($requiredSlotSize, 'x') !== 0) {
+            $requiredSlotSize = 'x' . $requiredSlotSize;
+        }
+
+        // Calculate net available slots (total slots - used slots)
+        $totalSlots = $slotAvailability['total_slots'] + $slotAvailability['riser_added_slots'];
+        $usedSlots = $slotAvailability['used_slots'];
+        $netAvailable = $totalSlots - $usedSlots;
+
+        error_log("DEBUG checkPCIeSlotSizeCompatibility: required={$requiredSlotSize}, total={$totalSlots}, used={$usedSlots}, netAvailable={$netAvailable}, available_by_size=" . json_encode($slotAvailability['available_by_size']));
+
+        // If no slots available at all, return false
+        if ($netAvailable <= 0) {
+            error_log("DEBUG: No net available slots (netAvailable={$netAvailable}) - returning false");
+            return false;
+        }
+
+        // Check if there are any slots of the required size or larger
+        // available_by_size shows total slots provided (motherboard + riser)
+        // We need to check: (1) slot type exists, AND (2) at least 1 slot is available (netAvailable > 0)
+        // netAvailable is already verified > 0 above, so now just check slot type exists
+
         // x16 slots can accommodate x16, x8, x4, x1 cards
         if ($slotAvailability['available_by_size']['x16'] > 0) {
+            error_log("DEBUG: Found x16 slot type AND netAvailable={$netAvailable} > 0 - returning true");
             return true;
         }
 
         // x8 slots can accommodate x8, x4, x1 cards
         if (in_array($requiredSlotSize, ['x8', 'x4', 'x1']) &&
             $slotAvailability['available_by_size']['x8'] > 0) {
+            error_log("DEBUG: Found x8 slot type for required {$requiredSlotSize} AND netAvailable={$netAvailable} > 0 - returning true");
             return true;
         }
 
         // x4 slots can accommodate x4, x1 cards
         if (in_array($requiredSlotSize, ['x4', 'x1']) &&
             $slotAvailability['available_by_size']['x4'] > 0) {
+            error_log("DEBUG: Found x4 slot type for required {$requiredSlotSize} AND netAvailable={$netAvailable} > 0 - returning true");
             return true;
         }
 
         // x1 slots can accommodate x1 cards only
         if ($requiredSlotSize === 'x1' &&
             $slotAvailability['available_by_size']['x1'] > 0) {
+            error_log("DEBUG: Found x1 slot type AND netAvailable={$netAvailable} > 0 - returning true");
             return true;
         }
 
+        error_log("DEBUG: No compatible slot type found for required {$requiredSlotSize} (available types: x1={$slotAvailability['available_by_size']['x1']}, x4={$slotAvailability['available_by_size']['x4']}, x8={$slotAvailability['available_by_size']['x8']}, x16={$slotAvailability['available_by_size']['x16']}) - returning false");
         return false;
     }
 
@@ -5176,6 +5428,7 @@ class ComponentCompatibility {
      * Analyze existing PCIe card (track slot usage)
      */
     private function analyzeExistingPCIeCardForPCIe($pcieCardComponent, &$slotAvailability) {
+        error_log("DEBUG analyzeExistingPCIeCardForPCIe: UUID=" . $pcieCardComponent['uuid']);
         $pcieData = $this->getComponentData('pciecard', $pcieCardComponent['uuid']);
         $result = ['compatible' => true, 'issues' => [], 'details' => []];
 
@@ -5183,27 +5436,35 @@ class ComponentCompatibility {
             // Unknown card, assume 1 slot
             $slotAvailability['used_slots'] += 1;
             $result['details'][] = 'Existing PCIe card (specs unknown) - uses 1 slot';
+            error_log("DEBUG: PCIe card specs not found - counted as 1 used slot");
             return $result;
         }
+
+        error_log("DEBUG: PCIe card data loaded: " . json_encode(['model' => $pcieData['model'] ?? 'Unknown', 'subtype' => $pcieData['subtype'] ?? 'Unknown']));
 
         // Check if it's a riser card
         if ($this->isPCIeRiserCard($pcieData)) {
             $providedSlots = $this->extractRiserCardSlots($pcieData);
             $slotAvailability['has_riser_card'] = true;
-            $slotAvailability['used_slots'] += 1; // Riser itself uses 1 slot from motherboard
 
-            // Net slots: riser provides X slots but uses 1, so net = (X - 1)
-            // For example: 1-slot riser = 0 net, 2-slot riser = +1 net
-            $netSlotsAdded = $providedSlots - 1;
-            $slotAvailability['riser_added_slots'] += $netSlotsAdded;
+            // IMPORTANT: Riser cards use RISER SLOTS on the motherboard, NOT PCIe slots
+            // They PROVIDE PCIe slots without consuming any motherboard PCIe slots
+            // So we DO NOT increment used_slots here
+            // Instead, we add the provided slots directly to riser_added_slots
 
-            if ($netSlotsAdded > 0) {
-                $result['details'][] = "Riser card installed - uses 1 slot, provides {$providedSlots} slots (net: +{$netSlotsAdded} slots)";
-            } else if ($netSlotsAdded == 0) {
-                $result['details'][] = "Riser card installed - uses 1 slot, provides {$providedSlots} slot (net: 0, orientation change only)";
-            } else {
-                $result['details'][] = "Riser card installed - uses 1 slot, provides {$providedSlots} slots (net: {$netSlotsAdded} slots)";
+            $slotAvailability['riser_added_slots'] += $providedSlots;
+
+            // Also update available_by_size to track which slot sizes the riser provides
+            $riserSlotType = $this->extractPCIeSlotSize($pcieData);
+            $riserSlotTypeKey = 'x' . $riserSlotType;
+            if (!isset($slotAvailability['available_by_size'][$riserSlotTypeKey])) {
+                $slotAvailability['available_by_size'][$riserSlotTypeKey] = 0;
             }
+            $slotAvailability['available_by_size'][$riserSlotTypeKey] += $providedSlots;
+
+            $result['details'][] = "Riser card installed - provides {$providedSlots} PCIe {$riserSlotTypeKey} slot(s) (uses motherboard riser slot, not PCIe slot)";
+            error_log("DEBUG: RISER CARD DETECTED - provides {$providedSlots} PCIe {$riserSlotTypeKey} slots. Total riser_added_slots now: " . $slotAvailability['riser_added_slots']);
+            error_log("DEBUG: available_by_size after riser: " . json_encode($slotAvailability['available_by_size']));
         } else {
             // Regular PCIe card
             $cardSlotSize = $this->extractPCIeSlotSize($pcieData);
@@ -5211,6 +5472,7 @@ class ComponentCompatibility {
 
             $cardModel = $pcieData['model'] ?? 'PCIe Card';
             $result['details'][] = "Existing card: {$cardModel} (uses x{$cardSlotSize} slot)";
+            error_log("DEBUG: Regular PCIe card - uses 1 slot. Total used_slots now: " . $slotAvailability['used_slots']);
         }
 
         return $result;

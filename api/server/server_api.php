@@ -1001,6 +1001,19 @@ function handleAddComponent($serverBuilder, $user) {
                 }
             }
 
+            // UPDATE NIC CONFIG when component NIC is added
+            if ($componentType === 'nic') {
+                try {
+                    require_once __DIR__ . '/../../includes/models/OnboardNICHandler.php';
+                    $nicHandler = new OnboardNICHandler($pdo);
+                    $nicHandler->updateNICConfigJSON($configUuid);
+                    error_log("Updated NIC configuration JSON after adding component NIC $componentUuid");
+                } catch (Exception $nicError) {
+                    error_log("Error updating NIC config: " . $nicError->getMessage());
+                    // Don't fail the NIC addition if config update fails
+                }
+            }
+
             send_json_response(1, 1, 200, "Component added successfully", $responseData);
         } else {
             // Error response with recommendations
@@ -1122,8 +1135,20 @@ function handleRemoveComponent($serverBuilder, $user) {
         }
         
         $result = $serverBuilder->removeComponent($configUuid, $componentType, $componentUuid);
-        
+
         if ($result['success']) {
+            // UPDATE NIC CONFIG when component NIC is removed
+            if ($componentType === 'nic') {
+                try {
+                    require_once __DIR__ . '/../../includes/models/OnboardNICHandler.php';
+                    $nicHandler = new OnboardNICHandler($pdo);
+                    $nicHandler->updateNICConfigJSON($configUuid);
+                    error_log("Updated NIC configuration JSON after removing component NIC $componentUuid");
+                } catch (Exception $nicError) {
+                    error_log("Error updating NIC config: " . $nicError->getMessage());
+                }
+            }
+
             send_json_response(1, 1, 200, "Component removed successfully", [
                 'component_removed' => [
                     'type' => $componentType,
@@ -1225,12 +1250,18 @@ function handleGetConfiguration($serverBuilder, $user) {
 
                         // Check if these NICs exist in database
                         $checkOnboardStmt = $pdo->prepare("
-                            SELECT COUNT(*) FROM nicinventory
-                            WHERE ParentComponentUUID = ? AND SourceType = 'onboard' AND ServerUUID = ?
+                            SELECT UUID, ServerUUID, Status FROM nicinventory
+                            WHERE ParentComponentUUID = ? AND SourceType = 'onboard'
                         ");
-                        $checkOnboardStmt->execute([$motherboardUuid, $configUuid]);
-                        $actualOnboardCount = $checkOnboardStmt->fetchColumn();
+                        $checkOnboardStmt->execute([$motherboardUuid]);
+                        $allOnboardNICs = $checkOnboardStmt->fetchAll(PDO::FETCH_ASSOC);
 
+                        $motherboardDebug['all_onboard_nics_in_db'] = $allOnboardNICs;
+                        $motherboardDebug['onboard_nics_matching_config'] = array_filter($allOnboardNICs, function($nic) use ($configUuid) {
+                            return $nic['ServerUUID'] === $configUuid;
+                        });
+
+                        $actualOnboardCount = count($motherboardDebug['onboard_nics_matching_config']);
                         $motherboardDebug['actual_onboard_nics_in_db'] = (int)$actualOnboardCount;
                         $motherboardDebug['onboard_nics_missing'] = $motherboardDebug['expected_onboard_nics_count'] - (int)$actualOnboardCount;
 
@@ -1270,59 +1301,55 @@ function handleGetConfiguration($serverBuilder, $user) {
                 }
             }
 
-            // If no nic_config JSON, check if there are any NICs in server_configuration_components
-            if (!$nicConfiguration) {
-                $checkNicsStmt = $pdo->prepare("
-                    SELECT COUNT(*) FROM server_configuration_components
-                    WHERE config_uuid = ? AND component_type = 'nic'
-                ");
-                $checkNicsStmt->execute([$configUuid]);
-                $nicCount = $checkNicsStmt->fetchColumn();
+            // Check if nic_config needs to be updated (missing or mismatched with actual NICs)
+            $checkNicsStmt = $pdo->prepare("
+                SELECT COUNT(*) FROM server_configuration_components
+                WHERE config_uuid = ? AND component_type = 'nic'
+            ");
+            $checkNicsStmt->execute([$configUuid]);
+            $actualNicCount = $checkNicsStmt->fetchColumn();
+            $nicDebug['nics_in_components_table'] = (int)$actualNicCount;
 
-                $nicDebug['nics_in_components_table'] = (int)$nicCount;
+            // Get the count from existing nic_config JSON
+            $configuredNicCount = isset($nicConfiguration['summary']['total_nics']) ?
+                (int)$nicConfiguration['summary']['total_nics'] : 0;
+            $nicDebug['nics_in_json_config'] = $configuredNicCount;
 
-                // Check nicinventory directly
-                $checkNicInventoryStmt = $pdo->prepare("
-                    SELECT UUID, SourceType, ParentComponentUUID, OnboardNICIndex, SerialNumber
-                    FROM nicinventory
-                    WHERE ServerUUID = ?
-                ");
-                $checkNicInventoryStmt->execute([$configUuid]);
-                $nicsInInventory = $checkNicInventoryStmt->fetchAll(PDO::FETCH_ASSOC);
-                $nicDebug['nics_in_inventory'] = count($nicsInInventory);
-                $nicDebug['inventory_details'] = $nicsInInventory;
+            // Update if: 1) no config exists, OR 2) mismatch between actual NICs and configured NICs
+            $needsUpdate = !$nicConfiguration || ($actualNicCount !== $configuredNicCount);
+            $nicDebug['needs_update'] = $needsUpdate;
+            $nicDebug['update_reason'] = !$nicConfiguration ? 'No config exists' :
+                ($actualNicCount !== $configuredNicCount ? "Mismatch: $actualNicCount actual vs $configuredNicCount configured" : 'No update needed');
 
-                // Build nic_config JSON if there are NICs (onboard or component)
-                if ($nicCount > 0) {
-                    $nicDebug['attempting_update'] = true;
-                    require_once __DIR__ . '/../../includes/models/OnboardNICHandler.php';
-                    $nicHandler = new OnboardNICHandler($pdo);
-                    $updateResult = $nicHandler->updateNICConfigJSON($configUuid);
-                    $nicDebug['update_result'] = $updateResult;
+            if ($needsUpdate && $actualNicCount > 0) {
+                $nicDebug['attempting_update'] = true;
+                require_once __DIR__ . '/../../includes/models/OnboardNICHandler.php';
+                $nicHandler = new OnboardNICHandler($pdo);
+                $updateResult = $nicHandler->updateNICConfigJSON($configUuid);
+                $nicDebug['update_result'] = $updateResult;
 
-                    // Fetch again after update
-                    $stmt->execute([$configUuid]);
-                    $nicConfigJson = $stmt->fetchColumn();
-                    $nicDebug['nic_config_after_update_length'] = strlen($nicConfigJson ?? '');
+                // Fetch again after update
+                $stmt->execute([$configUuid]);
+                $nicConfigJson = $stmt->fetchColumn();
+                $nicDebug['nic_config_after_update_length'] = strlen($nicConfigJson ?? '');
 
-                    if ($nicConfigJson) {
-                        $nicConfiguration = json_decode($nicConfigJson, true);
-                        $nicDebug['config_after_update'] = $nicConfiguration;
-                        $nicDebug['json_decode_success'] = !is_null($nicConfiguration);
-                        if ($nicConfiguration && isset($nicConfiguration['summary'])) {
-                            $nicSummary = $nicConfiguration['summary'];
-                            $nicDebug['summary_updated'] = true;
-                        } else {
-                            $nicDebug['summary_updated'] = false;
-                            $nicDebug['summary_missing_reason'] = is_null($nicConfiguration) ? 'JSON decode failed' : 'Summary key not found';
-                        }
+                if ($nicConfigJson) {
+                    $nicConfiguration = json_decode($nicConfigJson, true);
+                    $nicDebug['config_after_update'] = $nicConfiguration;
+                    $nicDebug['json_decode_success'] = !is_null($nicConfiguration);
+                    if ($nicConfiguration && isset($nicConfiguration['summary'])) {
+                        $nicSummary = $nicConfiguration['summary'];
+                        $nicDebug['summary_updated'] = true;
                     } else {
-                        $nicDebug['nic_config_still_null'] = true;
+                        $nicDebug['summary_updated'] = false;
+                        $nicDebug['summary_missing_reason'] = is_null($nicConfiguration) ? 'JSON decode failed' : 'Summary key not found';
                     }
                 } else {
-                    $nicDebug['attempting_update'] = false;
-                    $nicDebug['reason'] = 'No NICs found in server_configuration_components';
+                    $nicDebug['nic_config_still_null'] = true;
                 }
+            } else {
+                $nicDebug['attempting_update'] = false;
+                $nicDebug['reason'] = $actualNicCount === 0 ? 'No NICs found in server_configuration_components' : 'Config is up to date';
             }
         } catch (Exception $nicError) {
             $nicDebug['error'] = $nicError->getMessage();
@@ -1905,9 +1932,11 @@ function handleGetCompatible($serverBuilder, $user) {
                         }
                     } elseif ($componentType === 'pciecard') {
                         // Use specialized PCIe card compatibility checking
+                        error_log("DEBUG: Checking PCIe card compatibility for UUID: " . $component['UUID']);
                         $pcieCompatResult = $compatibility->checkPCIeDecentralizedCompatibility(
                             ['uuid' => $component['UUID']], $existingComponentsData
                         );
+                        error_log("DEBUG: PCIe compatibility result for " . $component['UUID'] . ": " . json_encode($pcieCompatResult));
                         $isCompatible = $pcieCompatResult['compatible'];
                         $compatibilityScore = $pcieCompatResult['compatibility_score'];
                         // Use concise compatibility summary instead of verbose details
@@ -1932,6 +1961,18 @@ function handleGetCompatible($serverBuilder, $user) {
                         $compatibilityScore = $hbaCompatResult['compatibility_score'];
                         // Use concise compatibility summary instead of verbose details
                         $compatibilityReasons = [$hbaCompatResult['compatibility_summary'] ?? 'Compatibility check completed'];
+
+                        // Add debug info for first 3 HBA cards (to see different scenarios)
+                        if (!isset($debugInfo['hba_compat_samples'])) {
+                            $debugInfo['hba_compat_samples'] = [];
+                        }
+                        if (count($debugInfo['hba_compat_samples']) < 3) {
+                            $debugInfo['hba_compat_samples'][] = [
+                                'uuid' => $component['UUID'],
+                                'serial' => $component['SerialNumber'],
+                                'result' => $hbaCompatResult
+                            ];
+                        }
                     } else {
                         // Check compatibility with each existing component for other types
                         foreach ($existingComponentsData as $existingComp) {
@@ -2562,7 +2603,7 @@ function calculatePCIeLaneUsage($components) {
         // Loop through all non-riser PCIe cards, NICs, and HBA cards to find riser-slot assignments
         $allPCIeComponents = [];
 
-        // Collect all PCIe components
+        // Collect all PCIe components (EXCLUDING onboard NICs)
         if (isset($components['pciecard']) && !empty($components['pciecard'])) {
             foreach ($components['pciecard'] as $card) {
                 $cardSpecs = $dataUtils->getPCIeCardByUUID($card['uuid'] ?? '');
@@ -2572,13 +2613,22 @@ function calculatePCIeLaneUsage($components) {
             }
         }
         if (isset($components['nic']) && !empty($components['nic'])) {
-            $allPCIeComponents = array_merge($allPCIeComponents, $components['nic']);
+            foreach ($components['nic'] as $nic) {
+                // CRITICAL: Skip onboard NICs - they don't use PCIe/riser slots
+                $sourceType = $nic['source_type'] ?? '';
+                if ($sourceType !== 'onboard') {
+                    $allPCIeComponents[] = $nic;
+                }
+            }
         }
         if (isset($components['hbacard']) && !empty($components['hbacard'])) {
             $allPCIeComponents = array_merge($allPCIeComponents, $components['hbacard']);
         }
 
         // Check each component's slot_position to see if it's in a riser-provided slot
+        $componentsWithExplicitSlots = [];
+        $componentsWithoutSlots = [];
+
         foreach ($allPCIeComponents as $component) {
             $slotPosition = $component['slot_position'] ?? '';
 
@@ -2594,12 +2644,73 @@ function calculatePCIeLaneUsage($components) {
                         $riser['cards_in_riser_slots'][] = [
                             'slot' => $slotPosition,
                             'card_uuid' => $component['uuid'] ?? 'unknown',
-                            'card_type' => $component['component_type'] ?? 'unknown'
+                            'card_type' => $component['component_type'] ?? 'unknown',
+                            'serial_number' => $component['serial_number'] ?? 'N/A'
                         ];
                         break;
                     }
                 }
                 unset($riser); // Break reference
+                $componentsWithExplicitSlots[] = $component;
+            } else if (empty($slotPosition) || !preg_match('/^(pcie_x\d+_slot_|riser_)/', $slotPosition)) {
+                // Component has no slot assignment OR has generic slot (like "slot 1")
+                // Both cases might be using riser slot implicitly
+                $componentsWithoutSlots[] = $component;
+            }
+        }
+
+        // SMART DETECTION: If motherboard has 0 direct PCIe slots and risers exist,
+        // components without explicit slot assignments MUST be using riser-provided slots
+        $motherboardDirectPCIeSlots = $result['expansion_slots']['total_x16'] +
+                                       $result['expansion_slots']['total_x8'] +
+                                       $result['expansion_slots']['total_x4'];
+
+        if ($motherboardDirectPCIeSlots === 0 &&
+            !empty($result['riser_provided_pcie_slots']['risers']) &&
+            !empty($componentsWithoutSlots)) {
+
+            error_log("SMART DETECTION: Motherboard has 0 direct PCIe slots but has " . count($componentsWithoutSlots) . " PCIe components without slot assignment");
+
+            // These components MUST be using riser-provided slots
+            // Assign them to risers respecting physical slot limits
+            $risers = &$result['riser_provided_pcie_slots']['risers'];
+
+            foreach ($componentsWithoutSlots as $component) {
+                $assigned = false;
+
+                // Try to find a riser with available slots
+                foreach ($risers as &$riser) {
+                    $currentCardsInRiser = count($riser['cards_in_riser_slots']);
+                    $maxSlotsInRiser = $riser['pcie_slots_provided'];
+
+                    // Check if riser has available slots
+                    if ($currentCardsInRiser < $maxSlotsInRiser) {
+                        $result['riser_provided_pcie_slots']['used_slots']++;
+
+                        $slotPositionValue = $component['slot_position'] ?? '';
+                        $displaySlot = empty($slotPositionValue) ?
+                            'auto-detected (no explicit slot assignment)' :
+                            "auto-detected (generic slot: $slotPositionValue)";
+
+                        $riser['cards_in_riser_slots'][] = [
+                            'slot' => $displaySlot,
+                            'card_uuid' => $component['uuid'] ?? 'unknown',
+                            'card_type' => $component['component_type'] ?? 'unknown',
+                            'serial_number' => $component['serial_number'] ?? 'N/A',
+                            'note' => 'Motherboard has 0 direct PCIe slots - component must be using riser-provided slot'
+                        ];
+
+                        error_log("AUTO-ASSIGNED component {$component['uuid']} ({$component['component_type']}) to riser {$riser['riser_uuid']} (slot " . ($currentCardsInRiser + 1) . "/{$maxSlotsInRiser})");
+                        $assigned = true;
+                        break;
+                    }
+                }
+                unset($riser); // Break reference
+
+                // If component couldn't be assigned, log error
+                if (!$assigned) {
+                    error_log("ERROR: Component {$component['uuid']} ({$component['component_type']}) cannot be assigned - all riser slots full!");
+                }
             }
         }
 

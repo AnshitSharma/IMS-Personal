@@ -1959,14 +1959,15 @@ class FlexibleCompatibilityValidator {
 
         // STEP 4: Check PCIe slot availability if motherboard exists
         if ($existing['motherboard']) {
-            require_once __DIR__ . '/PCIeSlotTracker.php';
-            $slotTracker = new PCIeSlotTracker($this->pdo);
+            require_once __DIR__ . '/ExpansionSlotTracker.php';
+            $slotTracker = new ExpansionSlotTracker($this->pdo);
 
             // Extract PCIe slot requirements from HBA interface (e.g., "PCIe 3.0 x8")
             // extractPCIeSlotSize returns integer (8, 16, etc.)
             $requiredSlotSizeInt = $this->extractPCIeSlotSize($hbaSpecs);
             $requiredSlotSizeStr = 'x' . $requiredSlotSizeInt;
 
+            // Use ExpansionSlotTracker which includes riser-provided slots
             $slotAvailability = $slotTracker->getSlotAvailability($configUuid);
 
             if (!$slotAvailability['success']) {
@@ -1976,7 +1977,14 @@ class FlexibleCompatibilityValidator {
                 ];
             } else {
                 $availableSlots = $slotAvailability['available_slots'];
+                $totalSlots = $slotAvailability['total_slots'];
                 $hasCompatibleSlot = false;
+
+                // Debug: Log slot availability for troubleshooting
+                error_log("HBA Validation Debug - Config: $configUuid, HBA: $cardUuid ($hbaModel)");
+                error_log("Required slot size: $requiredSlotSizeStr");
+                error_log("Total slots (MB + Riser): " . json_encode($totalSlots));
+                error_log("Available slots: " . json_encode($availableSlots));
 
                 // Check if any compatible slot size is available
                 // available_slots structure: ['x8' => [...], 'x16' => [...]]
@@ -1984,23 +1992,37 @@ class FlexibleCompatibilityValidator {
                 // x16 cards need x16 slots
                 if ($requiredSlotSizeInt == 8) {
                     $hasCompatibleSlot = (!empty($availableSlots['x8']) || !empty($availableSlots['x16']));
+                    if ($hasCompatibleSlot) {
+                        $slotSource = !empty($availableSlots['x8']) ? 'x8 slot' : 'x16 slot';
+                        $info[] = "Compatible $slotSource available for HBA card (includes motherboard and riser-provided slots)";
+                    }
                 } elseif ($requiredSlotSizeInt == 16) {
                     $hasCompatibleSlot = !empty($availableSlots['x16']);
+                    if ($hasCompatibleSlot) {
+                        $info[] = "Compatible x16 slot available for HBA card (includes motherboard and riser-provided slots)";
+                    }
                 } elseif ($requiredSlotSizeInt == 4) {
                     $hasCompatibleSlot = (!empty($availableSlots['x4']) || !empty($availableSlots['x8']) || !empty($availableSlots['x16']));
+                    if ($hasCompatibleSlot) {
+                        $slotSource = !empty($availableSlots['x4']) ? 'x4' : (!empty($availableSlots['x8']) ? 'x8' : 'x16');
+                        $info[] = "Compatible $slotSource slot available for HBA card (includes motherboard and riser-provided slots)";
+                    }
                 } elseif ($requiredSlotSizeInt == 1) {
                     $hasCompatibleSlot = (!empty($availableSlots['x1']) || !empty($availableSlots['x4']) || !empty($availableSlots['x8']) || !empty($availableSlots['x16']));
+                    if ($hasCompatibleSlot) {
+                        $slotSource = !empty($availableSlots['x1']) ? 'x1' : (!empty($availableSlots['x4']) ? 'x4' : (!empty($availableSlots['x8']) ? 'x8' : 'x16'));
+                        $info[] = "Compatible $slotSource slot available for HBA card (includes motherboard and riser-provided slots)";
+                    }
                 }
 
                 if (!$hasCompatibleSlot) {
+                    error_log("HBA incompatible - No available $requiredSlotSizeStr slot found");
                     $errors[] = [
                         'type' => 'no_pcie_slot_available',
                         'severity' => 'critical',
-                        'message' => "No available PCIe $requiredSlotSizeStr or larger slots for HBA card",
-                        'resolution' => "Remove existing PCIe cards OR choose motherboard with more PCIe slots"
+                        'message' => "No available PCIe $requiredSlotSizeStr or larger slots for HBA card (checked motherboard + riser slots)",
+                        'resolution' => "Remove existing PCIe cards OR add riser card OR choose motherboard with more PCIe slots"
                     ];
-                } else {
-                    $info[] = "Compatible PCIe slot available for HBA card";
                 }
             }
         } else {

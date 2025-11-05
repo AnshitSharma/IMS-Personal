@@ -21,6 +21,7 @@
         "chipset": "Intel C741",
         "memory": {
           "type": "DDR5",
+          "module_types": ["RDIMM", "LRDIMM"],
           "max_capacity_TB": 8,
           "slots": 32,
           "channels": 8,
@@ -301,6 +302,7 @@
         "chipset": "Intel C741",
         "memory": {
           "type": "DDR5",
+          "module_types": ["RDIMM", "LRDIMM"],
           "max_capacity_TB": 8,
           "slots": 32,
           "channels": 8,
@@ -418,6 +420,7 @@
         "chipset": "Intel C741",
         "memory": {
           "type": "DDR5",
+          "module_types": ["RDIMM", "LRDIMM"],
           "max_capacity_TB": 8,
           "slots": 32,
           "channels": 8,
@@ -570,6 +573,7 @@
         "chipset": "AMD SP5 Integrated",
         "memory": {
           "type": "DDR5",
+          "module_types": ["RDIMM", "LRDIMM"],
           "max_capacity_TB": 6,
           "slots": 24,
           "channels": 12,
@@ -840,6 +844,7 @@
         "chipset": "Intel C741",
         "memory": {
           "type": "DDR5",
+          "module_types": ["RDIMM", "LRDIMM"],
           "max_capacity_TB": 8,
           "slots": 32,
           "channels": 8,
@@ -982,6 +987,7 @@
         "chipset": "AMD SP5 Integrated",
         "memory": {
           "type": "DDR5",
+          "module_types": ["RDIMM", "LRDIMM"],
           "max_capacity_TB": 6,
           "slots": 24,
           "channels": 12,
